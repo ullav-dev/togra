@@ -9,6 +9,7 @@ import {
   deleteJob,
   updateJob,
   listWorkflows,
+  listTasks,
   createWorkflow,
   updateWorkflow,
   deleteWorkflow,
@@ -19,7 +20,7 @@ import {
 } from "@/lib/awe-api";
 import MarkdownEditor from "@/components/MarkdownEditor";
 import { useRouter } from "@/i18n/navigation";
-import type { ProjectWithJobs, Job, Workflow } from "@/lib/types";
+import type { ProjectWithJobs, Job, Workflow, Task, TeamMember } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import VisibilityToggle from "@/components/VisibilityToggle";
@@ -43,6 +44,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [confirmDeleteSprintId, setConfirmDeleteSprintId] = useState<string | null>(null);
   const [sprintRefreshMap, setSprintRefreshMap] = useState<Record<string, number>>({});
   const [pmName, setPmName] = useState<string | null>(null);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   const backlogJob = project?.jobs.find((j) => j.job_type === "backlog") ?? null;
   const sprints = (project?.jobs ?? [])
@@ -57,16 +59,20 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       const [stories, tmpl] = await Promise.all([
         bl ? listWorkflows(token, { job_id: bl.id }) : Promise.resolve([]),
         listWorkflows(token),
-        proj.team_id && proj.project_manager_id
+        proj.team_id
           ? getTeam(token, proj.team_id).then((team) => {
-              const member = team.members.find((m) => m.user.id === proj.project_manager_id);
-              if (member) {
-                const { first_name, last_name, username } = member.user;
-                setPmName(
-                  first_name || last_name
-                    ? [first_name, last_name].filter(Boolean).join(" ")
-                    : username
-                );
+              const active = team.members.filter((m) => m.status === "active");
+              setTeamMembers(active);
+              if (proj.project_manager_id) {
+                const member = active.find((m) => m.user.id === proj.project_manager_id);
+                if (member) {
+                  const { first_name, last_name, username } = member.user;
+                  setPmName(
+                    first_name || last_name
+                      ? [first_name, last_name].filter(Boolean).join(" ")
+                      : username
+                  );
+                }
               }
             }).catch(() => {})
           : Promise.resolve(),
@@ -220,6 +226,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           sprints={sprints}
           backlogJob={backlogJob}
           token={token!}
+          teamMembers={teamMembers}
           loadSprintStories={loadSprintStories}
           onSprintCreated={onSprintCreated}
           onSprintDeleted={(sprintId) => setConfirmDeleteSprintId(sprintId)}
@@ -499,6 +506,7 @@ function SprintsPanel({
   sprints,
   backlogJob,
   token,
+  teamMembers,
   loadSprintStories,
   onSprintCreated,
   onSprintDeleted,
@@ -510,6 +518,7 @@ function SprintsPanel({
   sprints: Job[];
   backlogJob: Job | null;
   token: string;
+  teamMembers: TeamMember[];
   loadSprintStories: (sprintId: string) => Promise<Workflow[]>;
   onSprintCreated: (sprint: Job) => void;
   onSprintDeleted: (sprintId: string) => void;
@@ -547,6 +556,7 @@ function SprintsPanel({
               projectId={projectId}
               backlogJobId={backlogJob?.id ?? null}
               token={token}
+              teamMembers={teamMembers}
               loadStories={loadSprintStories}
               refreshToken={sprintRefreshMap[sprint.id] ?? 0}
               onDelete={() => onSprintDeleted(sprint.id)}
@@ -575,6 +585,7 @@ function SprintCard({
   projectId,
   backlogJobId,
   token,
+  teamMembers,
   loadStories,
   refreshToken,
   onDelete,
@@ -586,6 +597,7 @@ function SprintCard({
   projectId: string;
   backlogJobId: string | null;
   token: string;
+  teamMembers: TeamMember[];
   loadStories: (sprintId: string) => Promise<Workflow[]>;
   refreshToken: number;
   onDelete: () => void;
@@ -726,6 +738,7 @@ function SprintCard({
           ) : (
             stories.map((story) => (
               <SprintStoryRow key={story.id} story={story} projectId={projectId}
+                token={token} teamMembers={teamMembers}
                 onMoveToBacklog={backlogJobId ? () => onMoveToBacklog(story.id) : undefined} />
             ))
           )}
@@ -823,12 +836,30 @@ function EditSprintModal({
 function SprintStoryRow({
   story,
   projectId,
+  token,
+  teamMembers,
   onMoveToBacklog,
 }: {
   story: Workflow;
   projectId: string;
+  token: string;
+  teamMembers: TeamMember[];
   onMoveToBacklog?: () => void;
 }) {
+  const [assignees, setAssignees] = useState<TeamMember[]>([]);
+
+  useEffect(() => {
+    if (!token || teamMembers.length === 0) return;
+    listTasks(token, story.id).then((tasks) => {
+      const ids = [...new Set(tasks.map((t: Task) => t.assigned_to).filter(Boolean))];
+      setAssignees(
+        ids
+          .map((id) => teamMembers.find((m) => m.user.id === id))
+          .filter((m): m is TeamMember => m !== undefined)
+      );
+    }).catch(() => {});
+  }, [token, story.id, teamMembers]);
+
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 group">
       <Link
@@ -838,6 +869,7 @@ function SprintStoryRow({
         {story.name}
       </Link>
       <div className="flex items-center gap-2 shrink-0">
+        {assignees.length > 0 && <AssigneeAvatars members={assignees} />}
         {story.story_points != null && (
           <span className="text-xs bg-violet-100 text-violet-700 font-semibold px-1.5 py-0.5 rounded-full">
             {story.story_points}
@@ -1110,6 +1142,55 @@ function CreateSprintModal({
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+// ── Assignee Avatars ──────────────────────────────────────────────────────────
+
+function MemberAvatar({ member }: { member: TeamMember }) {
+  const [broken, setBroken] = useState(false);
+  const initials = (
+    `${member.user.first_name?.charAt(0) ?? ""}${member.user.last_name?.charAt(0) ?? ""}`
+  ).toUpperCase() || member.user.username.charAt(0).toUpperCase();
+  const label = `${member.user.first_name ?? ""} ${member.user.last_name ?? ""}`.trim() || member.user.username;
+
+  if (member.user.avatar_url && !broken) {
+    return (
+      <img
+        src={member.user.avatar_url}
+        alt={initials}
+        title={label}
+        className="w-5 h-5 rounded-full object-cover"
+        onError={() => setBroken(true)}
+      />
+    );
+  }
+  return (
+    <span
+      title={label}
+      className="w-5 h-5 rounded-full bg-violet-100 text-violet-700 text-[9px] font-semibold flex items-center justify-center select-none"
+    >
+      {initials}
+    </span>
+  );
+}
+
+function AssigneeAvatars({ members }: { members: TeamMember[] }) {
+  const visible = members.slice(0, 4);
+  const extra = members.length - visible.length;
+  return (
+    <div className="flex items-center">
+      {visible.map((m, i) => (
+        <div key={m.user.id} className={`${i > 0 ? "-ml-1.5" : ""} ring-2 ring-white rounded-full`}>
+          <MemberAvatar member={m} />
+        </div>
+      ))}
+      {extra > 0 && (
+        <div className="-ml-1.5 w-5 h-5 rounded-full bg-slate-200 ring-2 ring-white flex items-center justify-center">
+          <span className="text-[9px] font-semibold text-slate-600">+{extra}</span>
+        </div>
+      )}
     </div>
   );
 }

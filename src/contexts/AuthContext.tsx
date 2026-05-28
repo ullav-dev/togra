@@ -12,6 +12,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<LoginResponse>;
   logout: () => void;
   setSession: (session: { token: string; user: AuthUser; roles: string[] }) => void;
+  updateUser: (user: AuthUser) => void;
 }
 
 const AuthContext = createContext<AuthState>({
@@ -22,6 +23,7 @@ const AuthContext = createContext<AuthState>({
   login: async () => { throw new Error("AuthProvider not mounted"); },
   logout: () => {},
   setSession: () => {},
+  updateUser: () => {},
 });
 
 const STORAGE_KEY = "togra_auth";
@@ -99,6 +101,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
   }, []);
 
+  const updateUser = useCallback((updated: AuthUser) => {
+    setUser(updated);
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const stored = JSON.parse(raw);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...stored, user: updated }));
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
   const resetIdleTimer = useCallback(() => {
     if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
     if (warnTimerRef.current) clearTimeout(warnTimerRef.current);
@@ -133,7 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [setSession]);
 
   return (
-    <AuthContext.Provider value={{ user, token, roles, isLoading, login, logout, setSession }}>
+    <AuthContext.Provider value={{ user, token, roles, isLoading, login, logout, setSession, updateUser }}>
       {children}
       {idleWarning && (
         <IdleWarningModal

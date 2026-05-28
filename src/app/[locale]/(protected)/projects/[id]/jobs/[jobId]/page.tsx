@@ -3,9 +3,9 @@
 import { useState, useEffect, useRef, use } from "react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { getJob, listWorkflows, updateWorkflow, listTasks } from "@/lib/awe-api";
+import { getJob, listWorkflows, updateWorkflow, listTasks, getTeam } from "@/lib/awe-api";
 import { getProject } from "@/lib/togra-api";
-import type { Job, Workflow, Task, Project, Status } from "@/lib/types";
+import type { Job, Workflow, Task, Project, Status, TeamMember } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 
 const STORY_COLUMNS: { status: Status; label: string; bg: string; border: string; header: string; overBorder: string }[] = [
@@ -27,6 +27,7 @@ export default function SprintBoardPage({
   const [project, setProject] = useState<Project | null>(null);
   const [job, setJob] = useState<Job | null>(null);
   const [stories, setStories] = useState<Workflow[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
@@ -36,10 +37,15 @@ export default function SprintBoardPage({
       getProject(token, projectId),
       getJob(token, jobId),
       listWorkflows(token, { job_id: jobId }),
-    ]).then(([proj, j, wfs]) => {
+    ]).then(async ([proj, j, wfs]) => {
       setProject(proj);
       setJob(j);
       setStories(wfs);
+      const teamId = j.team_id ?? proj.team_id ?? null;
+      if (teamId) {
+        const team = await getTeam(token, teamId).catch(() => null);
+        if (team) setTeamMembers(team.members.filter((m) => m.status === "active"));
+      }
     }).finally(() => setLoading(false));
   }, [token, projectId, jobId]);
 
@@ -101,6 +107,7 @@ export default function SprintBoardPage({
                 column={col}
                 stories={colStories}
                 projectId={projectId}
+                teamMembers={teamMembers}
                 draggingId={draggingId}
                 onDragStart={setDraggingId}
                 onDragEnd={() => setDraggingId(null)}
@@ -121,6 +128,7 @@ function StoryColumn({
   column,
   stories,
   projectId,
+  teamMembers,
   draggingId,
   onDragStart,
   onDragEnd,
@@ -130,6 +138,7 @@ function StoryColumn({
   column: (typeof STORY_COLUMNS)[number];
   stories: Workflow[];
   projectId: string;
+  teamMembers: TeamMember[];
   draggingId: string | null;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
@@ -174,6 +183,7 @@ function StoryColumn({
             key={story.id}
             story={story}
             projectId={projectId}
+            teamMembers={teamMembers}
             isDragging={draggingId === story.id}
             isDraggingActive={draggingId !== null}
             allStatuses={STORY_COLUMNS.map((c) => c.status)}
@@ -197,6 +207,7 @@ function StoryColumn({
 function StoryCard({
   story,
   projectId,
+  teamMembers,
   isDragging,
   isDraggingActive,
   allStatuses,
@@ -206,6 +217,7 @@ function StoryCard({
 }: {
   story: Workflow;
   projectId: string;
+  teamMembers: TeamMember[];
   isDragging: boolean;
   isDraggingActive: boolean;
   allStatuses: Status[];
@@ -215,16 +227,23 @@ function StoryCard({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [taskProgress, setTaskProgress] = useState<{ done: number; total: number } | null>(null);
+  const [assignees, setAssignees] = useState<TeamMember[]>([]);
   const { token } = useAuth();
 
-  // Load task progress once on first render
+  // Load task progress and derive unique assignees once on first render
   useEffect(() => {
     if (!token) return;
     listTasks(token, story.id).then((tasks) => {
       const done = tasks.filter((t: Task) => t.status === "Complete").length;
       setTaskProgress({ done, total: tasks.length });
+      const assignedIds = [...new Set(tasks.map((t: Task) => t.assigned_to).filter(Boolean))];
+      setAssignees(
+        assignedIds
+          .map((id) => teamMembers.find((m) => m.user.id === id))
+          .filter((m): m is TeamMember => m !== undefined)
+      );
     }).catch(() => {});
-  }, [story.id, token]);
+  }, [story.id, token, teamMembers]);
 
   function handleDragStart(e: React.DragEvent) {
     e.dataTransfer.setData("storyId", story.id);
@@ -276,18 +295,70 @@ function StoryCard({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 mt-2 ml-5">
-        {story.story_points != null && (
-          <span className="text-xs bg-violet-100 text-violet-700 font-semibold px-1.5 py-0.5 rounded-full">
-            {story.story_points} pts
-          </span>
-        )}
-        {taskProgress !== null && taskProgress.total > 0 && (
-          <span className="text-xs text-slate-400">
-            {taskProgress.done}/{taskProgress.total} tasks
-          </span>
-        )}
+      <div className="flex items-center justify-between mt-2 ml-5">
+        <div className="flex items-center gap-2">
+          {story.story_points != null && (
+            <span className="text-xs bg-violet-100 text-violet-700 font-semibold px-1.5 py-0.5 rounded-full">
+              {story.story_points} pts
+            </span>
+          )}
+          {taskProgress !== null && taskProgress.total > 0 && (
+            <span className="text-xs text-slate-400">
+              {taskProgress.done}/{taskProgress.total} tasks
+            </span>
+          )}
+        </div>
+        {assignees.length > 0 && <AssigneeAvatars members={assignees} />}
       </div>
+    </div>
+  );
+}
+
+// ── Assignee Avatars ──────────────────────────────────────────────────────────
+
+function MemberAvatar({ member }: { member: TeamMember }) {
+  const [broken, setBroken] = useState(false);
+  const initials = (
+    `${member.user.first_name?.charAt(0) ?? ""}${member.user.last_name?.charAt(0) ?? ""}`
+  ).toUpperCase() || member.user.username.charAt(0).toUpperCase();
+  const label = `${member.user.first_name ?? ""} ${member.user.last_name ?? ""}`.trim() || member.user.username;
+
+  if (member.user.avatar_url && !broken) {
+    return (
+      <img
+        src={member.user.avatar_url}
+        alt={initials}
+        title={label}
+        className="w-5 h-5 rounded-full object-cover"
+        onError={() => setBroken(true)}
+      />
+    );
+  }
+  return (
+    <span
+      title={label}
+      className="w-5 h-5 rounded-full bg-violet-100 text-violet-700 text-[9px] font-semibold flex items-center justify-center select-none"
+    >
+      {initials}
+    </span>
+  );
+}
+
+function AssigneeAvatars({ members }: { members: TeamMember[] }) {
+  const visible = members.slice(0, 4);
+  const extra = members.length - visible.length;
+  return (
+    <div className="flex items-center">
+      {visible.map((m, i) => (
+        <div key={m.user.id} className={`${i > 0 ? "-ml-1.5" : ""} ring-2 ring-white rounded-full`}>
+          <MemberAvatar member={m} />
+        </div>
+      ))}
+      {extra > 0 && (
+        <div className="-ml-1.5 w-5 h-5 rounded-full bg-slate-200 ring-2 ring-white flex items-center justify-center">
+          <span className="text-[9px] font-semibold text-slate-600">+{extra}</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useRef } from "react";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -242,6 +242,45 @@ export default function StoryDetailPage({
   );
 }
 
+// ── MemberAvatar ──────────────────────────────────────────────────────────────
+
+function MemberAvatar({ member, size = "sm" }: { member: TeamMember; size?: "sm" | "xs" }) {
+  const [broken, setBroken] = useState(false);
+  const prevUrl = useRef(member.user.avatar_url);
+  useEffect(() => {
+    if (member.user.avatar_url !== prevUrl.current) {
+      setBroken(false);
+      prevUrl.current = member.user.avatar_url;
+    }
+  }, [member.user.avatar_url]);
+
+  const initials = (
+    `${member.user.first_name?.charAt(0) ?? ""}${member.user.last_name?.charAt(0) ?? ""}`
+  ).toUpperCase() || member.user.username.charAt(0).toUpperCase();
+
+  const dim = size === "xs" ? "w-5 h-5 text-[9px]" : "w-6 h-6 text-[10px]";
+
+  if (member.user.avatar_url && !broken) {
+    return (
+      <img
+        src={member.user.avatar_url}
+        alt={initials}
+        title={`${member.user.first_name ?? ""} ${member.user.last_name ?? ""}`.trim() || member.user.username}
+        className={`${dim} rounded-full object-cover shrink-0`}
+        onError={() => setBroken(true)}
+      />
+    );
+  }
+  return (
+    <span
+      title={`${member.user.first_name ?? ""} ${member.user.last_name ?? ""}`.trim() || member.user.username}
+      className={`${dim} rounded-full bg-violet-100 text-violet-700 font-semibold flex items-center justify-center select-none shrink-0`}
+    >
+      {initials}
+    </span>
+  );
+}
+
 // ── TaskRow ───────────────────────────────────────────────────────────────────
 
 function TaskRow({
@@ -293,17 +332,20 @@ function TaskRow({
 
         {/* Assignee — filtered to role-eligible members when roles are set */}
         {teamMembers.length > 0 && (
-          <select
-            value={task.assigned_to ?? ""}
-            onChange={(e) => onAssigneeChange(e.target.value || null)}
-            className="text-xs border border-slate-200 rounded-lg px-2 py-1 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 bg-white text-slate-600 max-w-[130px] truncate"
-            title={assignedMember ? displayName(assignedMember) : "Unassigned"}
-          >
-            <option value="">Unassigned</option>
-            {eligibleMembers.map((m) => (
-              <option key={m.user.id} value={m.user.id}>{displayName(m)}</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-1.5">
+            {assignedMember && <MemberAvatar member={assignedMember} size="xs" />}
+            <select
+              value={task.assigned_to ?? ""}
+              onChange={(e) => onAssigneeChange(e.target.value || null)}
+              className="text-xs border border-slate-200 rounded-lg px-2 py-1 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 bg-white text-slate-600 max-w-[120px] truncate"
+              title={assignedMember ? displayName(assignedMember) : "Unassigned"}
+            >
+              <option value="">Unassigned</option>
+              {eligibleMembers.map((m) => (
+                <option key={m.user.id} value={m.user.id}>{displayName(m)}</option>
+              ))}
+            </select>
+          </div>
         )}
         {teamMembers.length === 0 && task.assigned_to && (
           <span className="text-xs text-slate-400 italic">@{task.assigned_to.slice(0, 8)}</span>

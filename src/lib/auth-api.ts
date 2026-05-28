@@ -11,6 +11,7 @@ export interface AuthUser {
   username: string;
   first_name: string | null;
   last_name: string | null;
+  avatar_url: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -23,9 +24,13 @@ export interface LoginResponse {
   permissions: string[];
 }
 
-async function authRequest<T>(path: string, init?: RequestInit): Promise<T> {
+async function authRequest<T>(path: string, init?: RequestInit, token?: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init?.headers,
+    },
     ...init,
   });
   const contentType = res.headers.get("content-type") ?? "";
@@ -103,4 +108,28 @@ export function isAdmin(token: string | null): boolean {
   const payload = decodePayload(token);
   if (!payload) return false;
   return ((payload.roles ?? []) as string[]).includes("admin");
+}
+
+// ── Profile ───────────────────────────────────────────────────────────────────
+
+export const getMe = (token: string): Promise<AuthUser> =>
+  authRequest("/users/me", {}, token);
+
+export interface UpdateProfilePayload {
+  first_name?: string | null;
+  last_name?: string | null;
+  /** Pass null to clear; omit to leave unchanged. */
+  avatar_url?: string | null;
+}
+
+export const updateProfile = (token: string, data: UpdateProfilePayload): Promise<AuthUser> =>
+  authRequest("/users/me", { method: "PATCH", body: JSON.stringify(data) }, token);
+
+export async function gravatarUrl(email: string, size = 200): Promise<string> {
+  const normalized = email.trim().toLowerCase();
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(normalized));
+  const hash = Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `https://gravatar.com/avatar/${hash}?d=identicon&s=${size}`;
 }

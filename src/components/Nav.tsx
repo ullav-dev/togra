@@ -4,12 +4,34 @@ import { useState, useRef, useEffect } from "react";
 import { usePathname, useRouter, Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import TograIcon from "@/components/TograIcon";
+import MyDetailsModal from "@/components/MyDetailsModal";
+
+function NavAvatar({ url, initials }: { url?: string | null; initials: string }) {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => setBroken(false), [url]);
+  if (url && !broken) {
+    return (
+      <img
+        src={url}
+        alt=""
+        className="w-7 h-7 rounded-full object-cover"
+        onError={() => setBroken(true)}
+      />
+    );
+  }
+  return (
+    <span className="w-7 h-7 rounded-full bg-violet-100 text-violet-700 text-xs font-semibold flex items-center justify-center select-none">
+      {initials}
+    </span>
+  );
+}
 
 export default function Nav() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoading, logout } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -27,6 +49,11 @@ export default function Nav() {
     setDropdownOpen(false);
     logout();
     router.push("/");
+  }
+
+  function handleMyDetails() {
+    setDropdownOpen(false);
+    setDetailsOpen(true);
   }
 
   const navLink = (path: string) =>
@@ -56,10 +83,17 @@ export default function Nav() {
                   <button
                     type="button"
                     onClick={() => setDropdownOpen((v) => !v)}
-                    className="flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+                    className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
                     aria-haspopup="true"
                     aria-expanded={dropdownOpen}
                   >
+                    <NavAvatar
+                      url={user.avatar_url}
+                      initials={
+                        (`${user.first_name?.charAt(0) ?? ""}${user.last_name?.charAt(0) ?? ""}`).toUpperCase() ||
+                        user.username.charAt(0).toUpperCase()
+                      }
+                    />
                     <span className="hidden sm:block">
                       {`${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() || user.username}
                     </span>
@@ -72,6 +106,14 @@ export default function Nav() {
                     <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl border border-slate-200 shadow-lg py-1 z-50">
                       <button
                         type="button"
+                        onClick={handleMyDetails}
+                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                      >
+                        My Details
+                      </button>
+                      <div className="my-1 border-t border-slate-100" />
+                      <button
+                        type="button"
                         onClick={handleLogout}
                         className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
                       >
@@ -80,6 +122,7 @@ export default function Nav() {
                     </div>
                   )}
                 </div>
+                {detailsOpen && <MyDetailsModal onClose={() => setDetailsOpen(false)} />}
               </>
             ) : !isLoading ? (
               <Link href="/login" className="text-sm font-medium text-violet-700 hover:text-violet-800 transition-colors">
