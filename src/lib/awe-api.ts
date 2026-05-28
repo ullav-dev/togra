@@ -109,6 +109,7 @@ export const createWorkflow = (
     description?: string;
     story_points?: number;
     sort_order?: number;
+    is_shared?: boolean;
   }
 ): Promise<Workflow> =>
   apiRequest("/workflows", token, { method: "POST", body: JSON.stringify(payload) });
@@ -125,6 +126,7 @@ export const updateWorkflow = (
     story_points?: number;
     sort_order?: number;
     is_shared?: boolean;
+    is_template?: boolean;
   }
 ): Promise<Workflow> =>
   apiRequest(`/workflows/${id}`, token, { method: "PUT", body: JSON.stringify(patch) });

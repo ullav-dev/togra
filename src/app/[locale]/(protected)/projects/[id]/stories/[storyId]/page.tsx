@@ -8,6 +8,7 @@ import { getProject } from "@/lib/togra-api";
 import type { WorkflowWithTasks, Task, ProjectWithJobs, Status } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 import NotesPanel from "@/components/notes/NotesPanel";
+import VisibilityToggle from "@/components/VisibilityToggle";
 
 export default function StoryDetailPage({
   params,
@@ -116,30 +117,41 @@ export default function StoryDetailPage({
           <StatusPill status={story.status} />
         </div>
 
-        {/* Story points */}
-        <div className="flex items-center gap-4 text-sm text-slate-500">
-          <span className="font-medium">Story points:</span>
-          {editingPoints ? (
-            <input
-              autoFocus
-              type="number"
-              min="0"
-              value={pointsValue}
-              onChange={(e) => setPointsValue(e.target.value)}
-              onBlur={savePoints}
-              onKeyDown={(e) => { if (e.key === "Enter") savePoints(); if (e.key === "Escape") { setEditingPoints(false); setPointsValue(story.story_points?.toString() ?? ""); } }}
-              className="w-16 border-b-2 border-violet-400 outline-none bg-transparent text-center text-sm font-semibold text-violet-700"
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setEditingPoints(true)}
-              className="text-sm font-semibold text-violet-700 hover:text-violet-800 transition-colors"
-              title="Click to edit"
-            >
-              {story.story_points != null ? story.story_points : "—"}
-            </button>
-          )}
+        {/* Story points + visibility */}
+        <div className="flex items-center gap-6 text-sm text-slate-500 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">Story points:</span>
+            {editingPoints ? (
+              <input
+                autoFocus
+                type="number"
+                min="0"
+                value={pointsValue}
+                onChange={(e) => setPointsValue(e.target.value)}
+                onBlur={savePoints}
+                onKeyDown={(e) => { if (e.key === "Enter") savePoints(); if (e.key === "Escape") { setEditingPoints(false); setPointsValue(story.story_points?.toString() ?? ""); } }}
+                className="w-16 border-b-2 border-violet-400 outline-none bg-transparent text-center text-sm font-semibold text-violet-700"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEditingPoints(true)}
+                className="text-sm font-semibold text-violet-700 hover:text-violet-800 transition-colors"
+                title="Click to edit"
+              >
+                {story.story_points != null ? story.story_points : "—"}
+              </button>
+            )}
+          </div>
+
+          <VisibilityToggle
+            isShared={story.is_shared}
+            onChange={async (val) => {
+              if (!token) return;
+              const updated = await updateWorkflow(token, storyId, { is_shared: val });
+              setStory((prev) => prev ? { ...prev, is_shared: updated.is_shared } : prev);
+            }}
+          />
         </div>
 
       </div>

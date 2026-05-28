@@ -21,6 +21,7 @@ import { useRouter } from "@/i18n/navigation";
 import type { ProjectWithJobs, Job, Workflow } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import VisibilityToggle from "@/components/VisibilityToggle";
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -744,6 +745,7 @@ function CreateStoryModal({
   const [noteBody, setNoteBody] = useState("");
   const [points, setPoints] = useState("");
   const [templateId, setTemplateId] = useState("");
+  const [isShared, setIsShared] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -762,6 +764,7 @@ function CreateStoryModal({
           name: name.trim(),
           description: description.trim() || undefined,
           story_points: pts,
+          is_shared: isShared,
         });
       } else {
         story = await createWorkflow(token, {
@@ -769,18 +772,19 @@ function CreateStoryModal({
           job_id: jobId,
           description: description.trim() || undefined,
           story_points: pts,
+          is_shared: isShared,
         });
         await createTask(token, { name: "Define", workflow_id: story.id });
       }
 
-      // Create the main Note (story description document) if body was provided
+      // Create the main Note if body was provided — inherits the same visibility as the story
       if (noteBody.trim()) {
         await createNote(token, {
           entity_type: "workflow",
           entity_id: story.id,
           title: name.trim(),
           body: noteBody.trim(),
-          is_shared: true,
+          is_shared: isShared,
         });
       }
 
@@ -861,6 +865,7 @@ function CreateStoryModal({
               <p className="text-xs text-slate-400">Templates are managed in Obair.</p>
             </div>
           )}
+          <VisibilityToggle isShared={isShared} onChange={setIsShared} />
           <div className="flex gap-3 justify-end pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
               Cancel
