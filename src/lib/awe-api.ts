@@ -1,7 +1,7 @@
 // AWE API calls (jobs, workflows, tasks, notes, teams) used by Togra.
 // All browser requests go via /api/* rewrite; server-side uses API_URL directly.
 
-import type { Job, JobWithWorkflows, Task, Workflow, WorkflowWithTasks, Note, TeamSummary, Team, TeamRole } from "./types";
+import type { Job, JobWithWorkflows, Task, Workflow, WorkflowWithTasks, Note, NoteFolder, TeamSummary, Team, TeamRole } from "./types";
 
 const BASE =
   typeof window === "undefined"
@@ -181,6 +181,29 @@ export const updateNote = (
 
 export const deleteNote = (token: string, id: string): Promise<void> =>
   apiRequest(`/notes/${id}`, token, { method: "DELETE" });
+
+export const listNoteReplies = (token: string, noteId: string): Promise<Note[]> =>
+  apiRequest(`/notes/${noteId}/replies`, token);
+
+export const createNoteReply = (token: string, noteId: string, body: string): Promise<Note> =>
+  apiRequest(`/notes/${noteId}/replies`, token, { method: "POST", body: JSON.stringify({ body }) });
+
+export const moveNote = (token: string, noteId: string, folderId: string | null): Promise<Note> =>
+  apiRequest(`/notes/${noteId}/folder`, token, { method: "PUT", body: JSON.stringify({ folder_id: folderId }) });
+
+// ── Note folders ──────────────────────────────────────────────────────────────
+
+export const listNoteFolders = (token: string): Promise<NoteFolder[]> =>
+  apiRequest("/note-folders", token);
+
+export const createNoteFolder = (token: string, name: string): Promise<NoteFolder> =>
+  apiRequest("/note-folders", token, { method: "POST", body: JSON.stringify({ name }) });
+
+export const updateNoteFolder = (token: string, id: string, name: string): Promise<NoteFolder> =>
+  apiRequest(`/note-folders/${id}`, token, { method: "PUT", body: JSON.stringify({ name }) });
+
+export const deleteNoteFolder = (token: string, id: string): Promise<void> =>
+  apiRequest(`/note-folders/${id}`, token, { method: "DELETE" });
 
 // ── Teams (UUM) ───────────────────────────────────────────────────────────────
 

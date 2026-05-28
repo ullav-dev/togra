@@ -3,7 +3,7 @@
 import { useState, useEffect, use, useRef } from "react";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { getProject, updateProject } from "@/lib/togra-api";
+import { getProject, updateProject, deleteProject } from "@/lib/togra-api";
 import {
   createJob,
   deleteJob,
@@ -13,7 +13,10 @@ import {
   deleteWorkflow,
   cloneWorkflowFromTemplate,
   createTask,
+  createNote,
 } from "@/lib/awe-api";
+import MarkdownEditor from "@/components/MarkdownEditor";
+import { useRouter } from "@/i18n/navigation";
 import type { ProjectWithJobs, Job, Workflow } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 
@@ -22,11 +25,14 @@ import StatusPill from "@/components/StatusPill";
 export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { token } = useAuth();
+  const router = useRouter();
 
   const [project, setProject] = useState<ProjectWithJobs | null>(null);
   const [backlogStories, setBacklogStories] = useState<Workflow[]>([]);
   const [templates, setTemplates] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [renamingProject, setRenamingProject] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
 
   const backlogJob = project?.jobs.find((j) => j.job_type === "backlog") ?? null;
   const sprints = (project?.jobs ?? [])
@@ -97,6 +103,22 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     );
   }
 
+  async function onRenameProject() {
+    if (!token || !project || !renameValue.trim() || renameValue.trim() === project.name) {
+      setRenamingProject(false);
+      return;
+    }
+    const updated = await updateProject(token, id, { name: renameValue.trim() });
+    setProject((prev) => prev ? { ...prev, name: updated.name } : prev);
+    setRenamingProject(false);
+  }
+
+  async function onDeleteProject() {
+    if (!token || !confirm(`Delete project "${project?.name}"? This cannot be undone.`)) return;
+    await deleteProject(token, id);
+    router.replace("/projects");
+  }
+
   if (loading) return <div className="p-8 text-slate-400 text-sm">Loading…</div>;
   if (!project) return <div className="p-8 text-slate-500 text-sm">Project not found.</div>;
 
@@ -110,11 +132,36 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           <span className="text-slate-700 font-medium">{project.name}</span>
         </nav>
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-slate-800">{project.name}</h1>
+          {renamingProject ? (
+            <input
+              autoFocus
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onBlur={onRenameProject}
+              onKeyDown={(e) => { if (e.key === "Enter") onRenameProject(); if (e.key === "Escape") setRenamingProject(false); }}
+              className="text-xl font-bold text-slate-800 border-b-2 border-violet-400 outline-none bg-transparent"
+            />
+          ) : (
+            <h1
+              className="text-xl font-bold text-slate-800 cursor-pointer hover:text-violet-700 transition-colors"
+              onClick={() => { setRenameValue(project.name); setRenamingProject(true); }}
+              title="Click to rename"
+            >
+              {project.name}
+            </h1>
+          )}
           <StatusPill status={project.status} />
           {project.description && (
             <span className="text-sm text-slate-400 truncate max-w-xs">{project.description}</span>
           )}
+          <button
+            type="button"
+            onClick={onDeleteProject}
+            className="ml-auto text-slate-400 hover:text-red-500 transition-colors p-1 rounded"
+            title="Delete project"
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75Zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.559a.75.75 0 1 0-1.492.14l.62 6.498A1.75 1.75 0 0 0 5.365 14.8h5.27a1.75 1.75 0 0 0 1.741-1.603l.62-6.498a.75.75 0 1 0-1.492-.14l-.62 6.498a.25.25 0 0 1-.249.229H5.365a.25.25 0 0 1-.249-.229l-.62-6.498Z"/></svg>
+          </button>
         </div>
       </div>
 
@@ -537,6 +584,8 @@ function CreateStoryModal({
   onClose: () => void;
 }) {
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [noteBody, setNoteBody] = useState("");
   const [points, setPoints] = useState("");
   const [templateId, setTemplateId] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -552,23 +601,33 @@ function CreateStoryModal({
       const pts = points ? parseInt(points, 10) : undefined;
 
       if (templateId) {
-        // Clone template workflow into the backlog job
         story = await cloneWorkflowFromTemplate(token, jobId, templateId);
-        // Rename it and set story points
         story = await updateWorkflow(token, story.id, {
           name: name.trim(),
+          description: description.trim() || undefined,
           story_points: pts,
         });
       } else {
-        // Create blank workflow
         story = await createWorkflow(token, {
           name: name.trim(),
           job_id: jobId,
+          description: description.trim() || undefined,
           story_points: pts,
         });
-        // Add a default "Define" task
         await createTask(token, { name: "Define", workflow_id: story.id });
       }
+
+      // Create the main Note (story description document) if body was provided
+      if (noteBody.trim()) {
+        await createNote(token, {
+          entity_type: "workflow",
+          entity_id: story.id,
+          title: name.trim(),
+          body: noteBody.trim(),
+          is_shared: true,
+        });
+      }
+
       onCreated(story);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create story");
@@ -578,8 +637,8 @@ function CreateStoryModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 my-4">
         <h2 className="text-lg font-semibold text-slate-800 mb-5">Add story to Backlog</h2>
         {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -594,6 +653,24 @@ function CreateStoryModal({
               className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
               placeholder="e.g. Implement login flow"
             />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="story-desc" className="text-sm font-medium text-slate-700">
+              Short description <span className="text-slate-400 font-normal">(optional)</span>
+            </label>
+            <input
+              id="story-desc"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              placeholder="One-line summary"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-slate-700">
+              Story notes <span className="text-slate-400 font-normal">(optional — markdown)</span>
+            </label>
+            <MarkdownEditor value={noteBody} onChange={setNoteBody} placeholder="Acceptance criteria, context, links…" height={200} />
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="story-points" className="text-sm font-medium text-slate-700">

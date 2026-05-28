@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { listProjects, createProjectWithBacklog } from "@/lib/togra-api";
+import { listProjects, createProjectWithBacklog, updateProject, deleteProject } from "@/lib/togra-api";
 import { getMyTeams } from "@/lib/awe-api";
 import { getObairTeamIds } from "@/lib/auth-api";
 import type { Project, TeamSummary } from "@/lib/types";
@@ -33,6 +33,18 @@ export default function ProjectsPage() {
     setShowCreate(false);
   }
 
+  async function onProjectRenamed(id: string, name: string) {
+    if (!token) return;
+    const updated = await updateProject(token, id, { name });
+    setProjects((prev) => prev.map((p) => p.id === updated.id ? { ...p, name: updated.name } : p));
+  }
+
+  async function onProjectDeleted(id: string) {
+    if (!token) return;
+    await deleteProject(token, id);
+    setProjects((prev) => prev.filter((p) => p.id !== id));
+  }
+
   return (
     <div className="max-w-5xl mx-auto px-6 py-8">
       <div className="flex items-center justify-between mb-8">
@@ -60,7 +72,7 @@ export default function ProjectsPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {projects.map((p) => (
-            <ProjectCard key={p.id} project={p} />
+            <ProjectCard key={p.id} project={p} onRename={onProjectRenamed} onDelete={onProjectDeleted} />
           ))}
         </div>
       )}
@@ -77,25 +89,72 @@ export default function ProjectsPage() {
   );
 }
 
-function ProjectCard({ project }: { project: Project }) {
+function ProjectCard({
+  project,
+  onRename,
+  onDelete,
+}: {
+  project: Project;
+  onRename: (id: string, name: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [renaming, setRenaming] = useState(false);
+  const [nameValue, setNameValue] = useState(project.name);
+
+  function commitRename() {
+    const trimmed = nameValue.trim();
+    if (trimmed && trimmed !== project.name) onRename(project.id, trimmed);
+    setRenaming(false);
+  }
+
+  function handleDelete(e: React.MouseEvent) {
+    e.preventDefault();
+    if (confirm(`Delete "${project.name}"?`)) onDelete(project.id);
+  }
+
   return (
-    <Link
-      href={`/projects/${project.id}`}
-      className="block bg-white rounded-xl border border-slate-200 p-5 hover:border-violet-300 hover:shadow-sm transition-all group"
-    >
+    <div className="relative bg-white rounded-xl border border-slate-200 p-5 hover:border-violet-300 hover:shadow-sm transition-all group">
       <div className="flex items-start justify-between gap-2 mb-3">
-        <h2 className="font-semibold text-slate-800 group-hover:text-violet-700 transition-colors leading-tight">
-          {project.name}
-        </h2>
-        <StatusPill status={project.status} />
+        {renaming ? (
+          <input
+            autoFocus
+            value={nameValue}
+            onChange={(e) => setNameValue(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={(e) => { if (e.key === "Enter") commitRename(); if (e.key === "Escape") { setNameValue(project.name); setRenaming(false); } }}
+            onClick={(e) => e.preventDefault()}
+            className="font-semibold text-slate-800 border-b-2 border-violet-400 outline-none bg-transparent flex-1 min-w-0"
+          />
+        ) : (
+          <Link href={`/projects/${project.id}`} className="flex-1 min-w-0">
+            <h2 className="font-semibold text-slate-800 group-hover:text-violet-700 transition-colors leading-tight">{project.name}</h2>
+          </Link>
+        )}
+        <div className="flex items-center gap-1 shrink-0">
+          <StatusPill status={project.status} />
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); setNameValue(project.name); setRenaming(true); }}
+            className="p-1 text-slate-300 hover:text-slate-600 transition-colors opacity-0 group-hover:opacity-100 rounded"
+            title="Rename"
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354l-1.086-1.086ZM11.189 6.25 9.75 4.81l-6.286 6.287a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.25.25 0 0 0 .108-.064L11.19 6.25Z"/></svg>
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            className="p-1 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 rounded"
+            title="Delete"
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75Zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.559a.75.75 0 1 0-1.492.14l.62 6.498A1.75 1.75 0 0 0 5.365 14.8h5.27a1.75 1.75 0 0 0 1.741-1.603l.62-6.498a.75.75 0 1 0-1.492-.14l-.62 6.498a.25.25 0 0 1-.249.229H5.365a.25.25 0 0 1-.249-.229l-.62-6.498Z"/></svg>
+          </button>
+        </div>
       </div>
       {project.description && (
         <p className="text-sm text-slate-500 line-clamp-2 mb-3">{project.description}</p>
       )}
-      <p className="text-xs text-slate-400">
-        Created {new Date(project.created_at).toLocaleDateString()}
-      </p>
-    </Link>
+      <p className="text-xs text-slate-400">Created {new Date(project.created_at).toLocaleDateString()}</p>
+    </div>
   );
 }
 

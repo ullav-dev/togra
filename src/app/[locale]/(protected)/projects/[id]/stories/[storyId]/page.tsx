@@ -7,6 +7,7 @@ import { getWorkflow, updateWorkflow, listTasks, updateTask } from "@/lib/awe-ap
 import { getProject } from "@/lib/togra-api";
 import type { WorkflowWithTasks, Task, ProjectWithJobs, Status } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
+import NotesPanel from "@/components/notes/NotesPanel";
 
 const OBAIR_URL = process.env.NEXT_PUBLIC_OBAIR_URL ?? "http://localhost:3004";
 
@@ -177,6 +178,11 @@ export default function StoryDetailPage({
             ))}
           </div>
         )}
+      </div>
+
+      {/* Notes */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6">
+        <NotesPanel entityType="workflow" entityId={storyId} isTeam={!!story.team_id} />
       </div>
     </div>
   );
