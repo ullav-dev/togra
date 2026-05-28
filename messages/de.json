@@ -1,0 +1,8 @@
+{
+  "idleWarning": {
+    "title": "Sie waren inaktiv",
+    "message": "Sie werden in {seconds} Sekunden abgemeldet.",
+    "stayLoggedIn": "Angemeldet bleiben",
+    "logoutNow": "Jetzt abmelden"
+  }
+}

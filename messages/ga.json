@@ -1,0 +1,8 @@
+{
+  "idleWarning": {
+    "title": "Bhí tú díomhaoin",
+    "message": "Déanfar do dhíshealbhú i gceann {seconds} soicind.",
+    "stayLoggedIn": "Fan logáilte isteach",
+    "logoutNow": "Logáil amach anois"
+  }
+}

@@ -1,0 +1,15 @@
+export default function TograIcon({ className = "w-8 h-8" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+      <rect width="32" height="32" rx="8" fill="#7c3aed"/>
+      <rect x="4"  y="8" width="6" height="16" rx="2" fill="white" opacity="0.2"/>
+      <rect x="13" y="8" width="6" height="16" rx="2" fill="white" opacity="0.2"/>
+      <rect x="22" y="8" width="6" height="16" rx="2" fill="white" opacity="0.2"/>
+      <rect x="5"  y="10" width="4" height="2.5" rx="1" fill="white"/>
+      <rect x="5"  y="14" width="4" height="2.5" rx="1" fill="white"/>
+      <rect x="14" y="10" width="4" height="2.5" rx="1" fill="white"/>
+      <rect x="14" y="14" width="4" height="2.5" rx="1" fill="white" opacity="0.6"/>
+      <rect x="23" y="10" width="4" height="2.5" rx="1" fill="white"/>
+    </svg>
+  );
+}
