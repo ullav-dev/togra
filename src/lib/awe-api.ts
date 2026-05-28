@@ -1,7 +1,7 @@
 // AWE API calls (jobs, workflows, tasks, notes, teams) used by Togra.
 // All browser requests go via /api/* rewrite; server-side uses API_URL directly.
 
-import type { Job, JobWithWorkflows, Task, Workflow, WorkflowWithTasks, Note, NoteFolder, TeamSummary, Team, TeamRole } from "./types";
+import type { Job, JobWithWorkflows, Task, Workflow, WorkflowWithTasks, Note, NoteFolder, TeamSummary, Team, TeamRole, TaskTeamRole } from "./types";
 
 const BASE =
   typeof window === "undefined"
@@ -162,6 +162,18 @@ export const updateTask = (
 
 export const deleteTask = (token: string, id: string): Promise<void> =>
   apiRequest(`/tasks/${id}`, token, { method: "DELETE" });
+
+export const listTaskTeamRoles = (token: string, taskId: string): Promise<TaskTeamRole[]> =>
+  apiRequest(`/tasks/${taskId}/team-roles`, token);
+
+export const assignTaskTeamRole = (token: string, taskId: string, teamRoleId: string): Promise<TaskTeamRole> =>
+  apiRequest(`/tasks/${taskId}/team-roles`, token, {
+    method: "POST",
+    body: JSON.stringify({ team_role_id: teamRoleId }),
+  });
+
+export const removeTaskTeamRole = (token: string, taskId: string, teamRoleId: string): Promise<void> =>
+  apiRequest(`/tasks/${taskId}/team-roles/${teamRoleId}`, token, { method: "DELETE" });
 
 // ── Notes ─────────────────────────────────────────────────────────────────────
 

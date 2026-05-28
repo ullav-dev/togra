@@ -3,9 +3,16 @@
 import { useState, useEffect, use } from "react";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { getWorkflow, updateWorkflow, listTasks, updateTask } from "@/lib/awe-api";
+import {
+  getWorkflow, updateWorkflow, updateTask,
+  getTeam, listTeamRoles,
+  listTaskTeamRoles, assignTaskTeamRole, removeTaskTeamRole,
+} from "@/lib/awe-api";
 import { getProject } from "@/lib/togra-api";
-import type { WorkflowWithTasks, Task, ProjectWithJobs, Status } from "@/lib/types";
+import type {
+  WorkflowWithTasks, Task, ProjectWithJobs, Status,
+  TeamUserRef, TeamRole, TaskTeamRole,
+} from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 import NotesPanel from "@/components/notes/NotesPanel";
 import VisibilityToggle from "@/components/VisibilityToggle";
@@ -22,22 +29,44 @@ export default function StoryDetailPage({
   const [story, setStory] = useState<WorkflowWithTasks | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Inline editing state
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState("");
   const [editingPoints, setEditingPoints] = useState(false);
   const [pointsValue, setPointsValue] = useState("");
+
+  const [teamMembers, setTeamMembers] = useState<TeamUserRef[]>([]);
+  const [teamRoles, setTeamRoles] = useState<TeamRole[]>([]);
+  const [taskTeamRoles, setTaskTeamRoles] = useState<Record<string, TaskTeamRole[]>>({});
 
   useEffect(() => {
     if (!token) return;
     Promise.all([
       getProject(token, projectId),
       getWorkflow(token, storyId),
-    ]).then(([proj, wft]) => {
+    ]).then(async ([proj, wft]) => {
       setProject(proj);
       setStory(wft);
       setNameValue(wft.name);
       setPointsValue(wft.story_points?.toString() ?? "");
+
+      const teamId = wft.team_id ?? proj.team_id ?? null;
+      if (teamId) {
+        const [team, roles] = await Promise.all([
+          getTeam(token, teamId),
+          listTeamRoles(token, teamId),
+        ]).catch(() => [null, []] as [null, TeamRole[]]);
+
+        if (team) setTeamMembers(team.members.map((m) => m.user));
+        setTeamRoles(roles);
+
+        const ttrMap: Record<string, TaskTeamRole[]> = {};
+        await Promise.all(
+          wft.tasks.map(async (t) => {
+            ttrMap[t.id] = await listTaskTeamRoles(token, t.id).catch(() => []);
+          })
+        );
+        setTaskTeamRoles(ttrMap);
+      }
     }).finally(() => setLoading(false));
   }, [token, projectId, storyId]);
 
@@ -64,6 +93,29 @@ export default function StoryDetailPage({
     setStory((prev) =>
       prev ? { ...prev, tasks: prev.tasks.map((t) => t.id === updated.id ? updated : t) } : prev
     );
+  }
+
+  async function onAssigneeChange(task: Task, userId: string | null) {
+    if (!token) return;
+    const updated = await updateTask(token, task.id, { assigned_to: userId });
+    setStory((prev) =>
+      prev ? { ...prev, tasks: prev.tasks.map((t) => t.id === updated.id ? updated : t) } : prev
+    );
+  }
+
+  async function onRoleAdd(taskId: string, roleId: string) {
+    if (!token) return;
+    const ttr = await assignTaskTeamRole(token, taskId, roleId);
+    setTaskTeamRoles((prev) => ({ ...prev, [taskId]: [...(prev[taskId] ?? []), ttr] }));
+  }
+
+  async function onRoleRemove(taskId: string, roleId: string) {
+    if (!token) return;
+    await removeTaskTeamRole(token, taskId, roleId);
+    setTaskTeamRoles((prev) => ({
+      ...prev,
+      [taskId]: (prev[taskId] ?? []).filter((r) => r.team_role_id !== roleId),
+    }));
   }
 
   if (loading) return <div className="p-8 text-slate-400 text-sm">Loading story…</div>;
@@ -153,11 +205,10 @@ export default function StoryDetailPage({
             }}
           />
         </div>
-
       </div>
 
       {/* Tasks (workflow steps) */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden mb-6">
         <div className="px-6 py-4 border-b border-slate-100">
           <h2 className="text-sm font-semibold text-slate-700">Workflow steps</h2>
           <p className="text-xs text-slate-400 mt-0.5">{story.tasks.length} tasks</p>
@@ -170,7 +221,13 @@ export default function StoryDetailPage({
               <TaskRow
                 key={task.id}
                 task={task}
+                taskRoles={taskTeamRoles[task.id] ?? []}
+                teamMembers={teamMembers}
+                teamRoles={teamRoles}
                 onStatusChange={(s) => onTaskStatusChange(task, s)}
+                onAssigneeChange={(userId) => onAssigneeChange(task, userId)}
+                onRoleAdd={(roleId) => onRoleAdd(task.id, roleId)}
+                onRoleRemove={(roleId) => onRoleRemove(task.id, roleId)}
               />
             ))}
           </div>
@@ -185,32 +242,118 @@ export default function StoryDetailPage({
   );
 }
 
+// ── TaskRow ───────────────────────────────────────────────────────────────────
+
 function TaskRow({
   task,
+  taskRoles,
+  teamMembers,
+  teamRoles,
   onStatusChange,
+  onAssigneeChange,
+  onRoleAdd,
+  onRoleRemove,
 }: {
   task: Task;
+  taskRoles: TaskTeamRole[];
+  teamMembers: TeamUserRef[];
+  teamRoles: TeamRole[];
   onStatusChange: (status: Status) => void;
+  onAssigneeChange: (userId: string | null) => void;
+  onRoleAdd: (roleId: string) => void;
+  onRoleRemove: (roleId: string) => void;
 }) {
   const statuses: Status[] = ["Not Started", "Ready", "In Progress", "On Hold", "Complete"];
 
+  const assignedMember = task.assigned_to
+    ? teamMembers.find((m) => m.id === task.assigned_to)
+    : null;
+
+  const assignedRoleIds = new Set(taskRoles.map((r) => r.team_role_id));
+  const unassignedRoles = teamRoles.filter((r) => !assignedRoleIds.has(r.id));
+
+  function displayName(m: TeamUserRef): string {
+    const full = [m.first_name, m.last_name].filter(Boolean).join(" ");
+    return full || m.username;
+  }
+
   return (
-    <div className="flex items-center gap-3 px-6 py-3 hover:bg-slate-50">
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-800">{task.name}</p>
-        {task.description && (
-          <p className="text-xs text-slate-400 truncate mt-0.5">{task.description}</p>
+    <div className="px-6 py-3 hover:bg-slate-50 space-y-2">
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-slate-800">{task.name}</p>
+          {task.description && (
+            <p className="text-xs text-slate-400 truncate mt-0.5">{task.description}</p>
+          )}
+        </div>
+
+        {/* Assignee */}
+        {teamMembers.length > 0 && (
+          <select
+            value={task.assigned_to ?? ""}
+            onChange={(e) => onAssigneeChange(e.target.value || null)}
+            className="text-xs border border-slate-200 rounded-lg px-2 py-1 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 bg-white text-slate-600 max-w-[130px] truncate"
+            title={assignedMember ? displayName(assignedMember) : "Unassigned"}
+          >
+            <option value="">Unassigned</option>
+            {teamMembers.map((m) => (
+              <option key={m.id} value={m.id}>{displayName(m)}</option>
+            ))}
+          </select>
         )}
+        {teamMembers.length === 0 && task.assigned_to && (
+          <span className="text-xs text-slate-400 italic">@{task.assigned_to.slice(0, 8)}</span>
+        )}
+
+        {/* Status */}
+        <select
+          value={task.status}
+          onChange={(e) => onStatusChange(e.target.value as Status)}
+          className="text-xs border border-slate-200 rounded-lg px-2 py-1 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 bg-white"
+        >
+          {statuses.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
       </div>
-      <select
-        value={task.status}
-        onChange={(e) => onStatusChange(e.target.value as Status)}
-        className="text-xs border border-slate-200 rounded-lg px-2 py-1 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 bg-white"
-      >
-        {statuses.map((s) => (
-          <option key={s} value={s}>{s}</option>
-        ))}
-      </select>
+
+      {/* Team roles row */}
+      {(taskRoles.length > 0 || unassignedRoles.length > 0) && (
+        <div className="flex items-center gap-1.5 flex-wrap pl-0">
+          {taskRoles.map((ttr) => {
+            const role = teamRoles.find((r) => r.id === ttr.team_role_id);
+            if (!role) return null;
+            return (
+              <span
+                key={ttr.team_role_id}
+                className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full"
+              >
+                {role.name}
+                <button
+                  type="button"
+                  onClick={() => onRoleRemove(ttr.team_role_id)}
+                  className="text-violet-400 hover:text-violet-700 transition-colors leading-none"
+                  title={`Remove ${role.name}`}
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
+          {unassignedRoles.length > 0 && (
+            <select
+              value=""
+              onChange={(e) => { if (e.target.value) onRoleAdd(e.target.value); }}
+              className="text-[10px] border border-dashed border-slate-300 rounded-full px-2 py-0.5 focus:border-violet-400 focus:outline-none bg-white text-slate-400 cursor-pointer"
+            >
+              <option value="">+ role</option>
+              {unassignedRoles.map((r) => (
+                <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
     </div>
   );
 }

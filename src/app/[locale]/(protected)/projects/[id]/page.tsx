@@ -15,6 +15,7 @@ import {
   cloneWorkflowFromTemplate,
   createTask,
   createNote,
+  getTeam,
 } from "@/lib/awe-api";
 import MarkdownEditor from "@/components/MarkdownEditor";
 import { useRouter } from "@/i18n/navigation";
@@ -41,6 +42,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
   const [confirmDeleteSprintId, setConfirmDeleteSprintId] = useState<string | null>(null);
   const [sprintRefreshMap, setSprintRefreshMap] = useState<Record<string, number>>({});
+  const [pmName, setPmName] = useState<string | null>(null);
 
   const backlogJob = project?.jobs.find((j) => j.job_type === "backlog") ?? null;
   const sprints = (project?.jobs ?? [])
@@ -55,6 +57,19 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       const [stories, tmpl] = await Promise.all([
         bl ? listWorkflows(token, { job_id: bl.id }) : Promise.resolve([]),
         listWorkflows(token),
+        proj.team_id && proj.project_manager_id
+          ? getTeam(token, proj.team_id).then((team) => {
+              const member = team.members.find((m) => m.user.id === proj.project_manager_id);
+              if (member) {
+                const { first_name, last_name, username } = member.user;
+                setPmName(
+                  first_name || last_name
+                    ? [first_name, last_name].filter(Boolean).join(" ")
+                    : username
+                );
+              }
+            }).catch(() => {})
+          : Promise.resolve(),
       ]);
       setBacklogStories(stories);
       setTemplates(tmpl.filter((w) => w.is_template));
@@ -158,6 +173,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             </h1>
           )}
           <StatusPill status={project.status} />
+          {pmName && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-slate-400"><path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3.5 13.5a5.5 5.5 0 0 1 9 0"/></svg>
+              <span className="font-medium text-slate-400 uppercase tracking-wide text-[10px]">PM</span>
+              {pmName}
+            </span>
+          )}
           {project.description && (
             <span className="text-sm text-slate-400 truncate max-w-xs">{project.description}</span>
           )}
