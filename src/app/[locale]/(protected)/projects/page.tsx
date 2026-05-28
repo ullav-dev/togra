@@ -9,6 +9,7 @@ import { getObairTeamIds } from "@/lib/auth-api";
 import type { Project, TeamSummary } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 import TograIcon from "@/components/TograIcon";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 export default function ProjectsPage() {
   const { token } = useAuth();
@@ -100,6 +101,7 @@ function ProjectCard({
 }) {
   const [renaming, setRenaming] = useState(false);
   const [nameValue, setNameValue] = useState(project.name);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   function commitRename() {
     const trimmed = nameValue.trim();
@@ -109,7 +111,7 @@ function ProjectCard({
 
   function handleDelete(e: React.MouseEvent) {
     e.preventDefault();
-    if (confirm(`Delete "${project.name}"?`)) onDelete(project.id);
+    setConfirmingDelete(true);
   }
 
   return (
@@ -154,6 +156,16 @@ function ProjectCard({
         <p className="text-sm text-slate-500 line-clamp-2 mb-3">{project.description}</p>
       )}
       <p className="text-xs text-slate-400">Created {new Date(project.created_at).toLocaleDateString()}</p>
+
+      {confirmingDelete && (
+        <ConfirmDialog
+          title={`Delete "${project.name}"?`}
+          message="This project and all its data will be permanently deleted."
+          confirmLabel="Delete project"
+          onConfirm={() => { setConfirmingDelete(false); onDelete(project.id); }}
+          onCancel={() => setConfirmingDelete(false)}
+        />
+      )}
     </div>
   );
 }

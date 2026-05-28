@@ -19,12 +19,13 @@ import MarkdownEditor from "@/components/MarkdownEditor";
 import { useRouter } from "@/i18n/navigation";
 import type { ProjectWithJobs, Job, Workflow } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { token } = useAuth();
+  const { token, roles } = useAuth();
   const router = useRouter();
 
   const [project, setProject] = useState<ProjectWithJobs | null>(null);
@@ -33,6 +34,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [loading, setLoading] = useState(true);
   const [renamingProject, setRenamingProject] = useState(false);
   const [renameValue, setRenameValue] = useState("");
+  const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
+  const [confirmDeleteSprintId, setConfirmDeleteSprintId] = useState<string | null>(null);
 
   const backlogJob = project?.jobs.find((j) => j.job_type === "backlog") ?? null;
   const sprints = (project?.jobs ?? [])
@@ -87,9 +90,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     );
   }
 
-  async function onSprintDeleted(sprintId: string) {
-    if (!token || !confirm("Delete this sprint? Stories will be moved back to the Backlog.")) return;
-    // Move all sprint stories to backlog first
+  async function doDeleteSprint(sprintId: string) {
+    if (!token) return;
     if (backlogJob) {
       const sprintStories = await listWorkflows(token, { job_id: sprintId });
       await Promise.all(
@@ -113,8 +115,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     setRenamingProject(false);
   }
 
-  async function onDeleteProject() {
-    if (!token || !confirm(`Delete project "${project?.name}"? This cannot be undone.`)) return;
+  async function doDeleteProject() {
+    if (!token) return;
     await deleteProject(token, id);
     router.replace("/projects");
   }
@@ -154,14 +156,16 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           {project.description && (
             <span className="text-sm text-slate-400 truncate max-w-xs">{project.description}</span>
           )}
-          <button
-            type="button"
-            onClick={onDeleteProject}
-            className="ml-auto text-slate-400 hover:text-red-500 transition-colors p-1 rounded"
-            title="Delete project"
-          >
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75Zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.559a.75.75 0 1 0-1.492.14l.62 6.498A1.75 1.75 0 0 0 5.365 14.8h5.27a1.75 1.75 0 0 0 1.741-1.603l.62-6.498a.75.75 0 1 0-1.492-.14l-.62 6.498a.25.25 0 0 1-.249.229H5.365a.25.25 0 0 1-.249-.229l-.62-6.498Z"/></svg>
-          </button>
+          {canDeleteProject(roles, token, project.team_id) && (
+            <button
+              type="button"
+              onClick={() => setConfirmDeleteProject(true)}
+              className="ml-auto text-slate-400 hover:text-red-500 transition-colors p-1 rounded"
+              title="Delete project"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75Zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.559a.75.75 0 1 0-1.492.14l.62 6.498A1.75 1.75 0 0 0 5.365 14.8h5.27a1.75 1.75 0 0 0 1.741-1.603l.62-6.498a.75.75 0 1 0-1.492-.14l-.62 6.498a.25.25 0 0 1-.249.229H5.365a.25.25 0 0 1-.249-.229l-.62-6.498Z"/></svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -191,12 +195,46 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           token={token!}
           loadSprintStories={loadSprintStories}
           onSprintCreated={onSprintCreated}
-          onSprintDeleted={onSprintDeleted}
+          onSprintDeleted={(sprintId) => setConfirmDeleteSprintId(sprintId)}
           onStoryMoved={onStoryMoved}
         />
       </div>
+
+      {confirmDeleteProject && project && (
+        <ConfirmDialog
+          title={`Delete "${project.name}"?`}
+          message="All sprints, stories, and notes in this project will be permanently deleted. This cannot be undone."
+          confirmLabel="Delete project"
+          onConfirm={() => { setConfirmDeleteProject(false); doDeleteProject(); }}
+          onCancel={() => setConfirmDeleteProject(false)}
+        />
+      )}
+
+      {confirmDeleteSprintId && (
+        <ConfirmDialog
+          title="Delete sprint?"
+          message="Stories in this sprint will be moved back to the Backlog."
+          confirmLabel="Delete sprint"
+          onConfirm={() => { const id = confirmDeleteSprintId; setConfirmDeleteSprintId(null); doDeleteSprint(id); }}
+          onCancel={() => setConfirmDeleteSprintId(null)}
+        />
+      )}
     </div>
   );
+}
+
+// ── Permission helper ─────────────────────────────────────────────────────────
+
+function canDeleteProject(roles: string[], token: string | null, teamId: string | null): boolean {
+  if (roles.includes("admin")) return true;
+  if (!token) return false;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    const teams = (payload.teams ?? {}) as Record<string, { role: string; products: string[] }>;
+    return Object.entries(teams).some(([tid, t]) =>
+      t.role === "owner" && (teamId === null || tid === teamId)
+    );
+  } catch { return false; }
 }
 
 // ── Backlog Panel ─────────────────────────────────────────────────────────────
@@ -228,7 +266,13 @@ function BacklogPanel({
     <div className="w-80 shrink-0 flex flex-col bg-slate-50 overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-200 bg-white flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-slate-700">Backlog</h2>
+          {backlogJob ? (
+            <Link href={`/projects/${projectId}/jobs/${backlogJob.id}`} className="text-sm font-semibold text-slate-700 hover:text-violet-700 transition-colors">
+              Backlog →
+            </Link>
+          ) : (
+            <h2 className="text-sm font-semibold text-slate-700">Backlog</h2>
+          )}
           <p className="text-xs text-slate-400">{stories.length} {stories.length === 1 ? "story" : "stories"}</p>
         </div>
         <button

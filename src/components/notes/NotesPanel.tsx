@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MarkdownEditor from "@/components/MarkdownEditor";
 import { useAuth } from "@/contexts/AuthContext";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import {
   listNotes, createNote, updateNote, deleteNote,
   listNoteReplies, createNoteReply,
@@ -244,6 +245,8 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
   const [mode, setMode] = useState<"list" | "view" | "create" | "edit">("list");
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteNote, setConfirmDeleteNote] = useState<Note | null>(null);
+  const [confirmDeleteFolder, setConfirmDeleteFolder] = useState<NoteFolder | null>(null);
   const [activeFolder, setActiveFolder] = useState<"all" | "mine" | "shared" | string>("all");
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -301,8 +304,8 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
     } finally { setSaving(false); }
   }
 
-  async function handleDelete(note: Note) {
-    if (!token || !confirm(`Delete "${note.title}"?`)) return;
+  async function doDeleteNote(note: Note) {
+    if (!token) return;
     setDeletingId(note.id);
     try {
       await deleteNote(token, note.id);
@@ -337,15 +340,13 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
     finally { setRenamingFolderId(null); }
   }
 
-  async function handleDeleteFolder(id: string) {
+  async function doDeleteFolder(folder: NoteFolder) {
     if (!token) return;
-    const folder = folders.find((f) => f.id === id);
-    if (!folder || !confirm(`Delete folder "${folder.name}"? Notes will be unfiled.`)) return;
     try {
-      await deleteNoteFolder(token, id);
-      setFolders((prev) => prev.filter((f) => f.id !== id));
-      setNotes((prev) => prev.map((n) => n.folder_id === id ? { ...n, folder_id: null } : n));
-      if (activeFolder === id) setActiveFolder("all");
+      await deleteNoteFolder(token, folder.id);
+      setFolders((prev) => prev.filter((f) => f.id !== folder.id));
+      setNotes((prev) => prev.map((n) => n.folder_id === folder.id ? { ...n, folder_id: null } : n));
+      if (activeFolder === folder.id) setActiveFolder("all");
     } catch { alert("Failed to delete folder"); }
   }
 
@@ -382,7 +383,7 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
     if (mode === "view" && selectedNote) return (
       <div className="bg-white rounded-xl border border-slate-200 p-4">
         <NoteView note={selectedNote} folders={folders} currentUserId={currentUserId} resolveCreator={resolveCreator}
-          token={token ?? ""} onEdit={() => setMode("edit")} onDelete={() => handleDelete(selectedNote)}
+          token={token ?? ""} onEdit={() => setMode("edit")} onDelete={() => setConfirmDeleteNote(selectedNote)}
           onMove={(folderId) => handleMove(selectedNote.id, folderId)} deleting={deletingId === selectedNote.id} />
       </div>
     );
@@ -422,22 +423,49 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
     </div>
   );
 
+  const confirmDialogs = (
+    <>
+      {confirmDeleteNote && (
+        <ConfirmDialog
+          title={`Delete "${confirmDeleteNote.title}"?`}
+          message="This note and all its replies will be permanently deleted."
+          confirmLabel="Delete note"
+          onConfirm={() => { const n = confirmDeleteNote; setConfirmDeleteNote(null); doDeleteNote(n); }}
+          onCancel={() => setConfirmDeleteNote(null)}
+        />
+      )}
+      {confirmDeleteFolder && (
+        <ConfirmDialog
+          title={`Delete folder "${confirmDeleteFolder.name}"?`}
+          message="Notes in this folder will be unfiled but not deleted."
+          confirmLabel="Delete folder"
+          onConfirm={() => { const f = confirmDeleteFolder; setConfirmDeleteFolder(null); doDeleteFolder(f); }}
+          onCancel={() => setConfirmDeleteFolder(null)}
+        />
+      )}
+    </>
+  );
+
   // Compact layout
   if (compact) return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Notes ({topLevel.length})</span>
-        <button onClick={() => { setSelectedId(null); setMode("create"); }} className="text-xs font-medium text-violet-700 hover:text-violet-800 transition-colors">+ New note</button>
+    <>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Notes ({topLevel.length})</span>
+          <button onClick={() => { setSelectedId(null); setMode("create"); }} className="text-xs font-medium text-violet-700 hover:text-violet-800 transition-colors">+ New note</button>
+        </div>
+        {mainContent() ?? noteList}
+        {mode !== "list" && (
+          <button onClick={() => { setMode("list"); setSelectedId(null); }} className="text-xs text-slate-500 hover:text-slate-700 transition-colors">← All notes</button>
+        )}
       </div>
-      {mainContent() ?? noteList}
-      {mode !== "list" && (
-        <button onClick={() => { setMode("list"); setSelectedId(null); }} className="text-xs text-slate-500 hover:text-slate-700 transition-colors">← All notes</button>
-      )}
-    </div>
+      {confirmDialogs}
+    </>
   );
 
   // Full layout
   return (
+    <>
     <div className="flex gap-4 min-h-0">
       {/* Folder sidebar */}
       <div className="w-44 shrink-0 space-y-0.5">
@@ -468,7 +496,7 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
               </button>
               <div className="hidden group-hover:flex items-center pr-1 gap-0.5">
                 <button onClick={() => { setRenamingFolderId(folder.id); setRenameFolderName(folder.name); }} className="p-0.5 text-slate-300 hover:text-slate-600 transition-colors text-xs" title="Rename">✏️</button>
-                <button onClick={() => handleDeleteFolder(folder.id)} className="p-0.5 text-slate-300 hover:text-red-500 transition-colors text-xs" title="Delete folder">🗑️</button>
+                <button onClick={() => setConfirmDeleteFolder(folder)} className="p-0.5 text-slate-300 hover:text-red-500 transition-colors text-xs" title="Delete folder">🗑️</button>
               </div>
             </div>
           )
@@ -497,5 +525,7 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
         ) : noteList}
       </div>
     </div>
+    {confirmDialogs}
+    </>
   );
 }
