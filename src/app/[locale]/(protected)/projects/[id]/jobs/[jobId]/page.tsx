@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, use } from "react";
-import { Link } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { getJob, listWorkflows, updateWorkflow, listTasks } from "@/lib/awe-api";
 import { getProject } from "@/lib/togra-api";
@@ -22,6 +22,7 @@ export default function SprintBoardPage({
 }) {
   const { id: projectId, jobId } = use(params);
   const { token } = useAuth();
+  const router = useRouter();
 
   const [project, setProject] = useState<Project | null>(null);
   const [job, setJob] = useState<Job | null>(null);
@@ -41,6 +42,12 @@ export default function SprintBoardPage({
       setStories(wfs);
     }).finally(() => setLoading(false));
   }, [token, projectId, jobId]);
+
+  useEffect(() => {
+    if (job && job.job_type === "backlog") {
+      router.replace(`/projects/${projectId}`);
+    }
+  }, [job, projectId, router]);
 
   async function onStatusChange(storyId: string, newStatus: Status) {
     if (!token) return;

@@ -23,6 +23,8 @@ import StatusPill from "@/components/StatusPill";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import VisibilityToggle from "@/components/VisibilityToggle";
 
+const BACKLOG_PAGE_SIZE = 20;
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
@@ -38,6 +40,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [renameValue, setRenameValue] = useState("");
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
   const [confirmDeleteSprintId, setConfirmDeleteSprintId] = useState<string | null>(null);
+  const [sprintRefreshMap, setSprintRefreshMap] = useState<Record<string, number>>({});
 
   const backlogJob = project?.jobs.find((j) => j.job_type === "backlog") ?? null;
   const sprints = (project?.jobs ?? [])
@@ -51,14 +54,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       const bl = proj.jobs.find((j) => j.job_type === "backlog");
       const [stories, tmpl] = await Promise.all([
         bl ? listWorkflows(token, { job_id: bl.id }) : Promise.resolve([]),
-        listWorkflows(token),  // all accessible workflows for template picker
+        listWorkflows(token),
       ]);
       setBacklogStories(stories);
       setTemplates(tmpl.filter((w) => w.is_template));
     }).finally(() => setLoading(false));
   }, [token, id]);
 
-  // Load stories for a given sprint
   async function loadSprintStories(sprintId: string): Promise<Workflow[]> {
     if (!token) return [];
     return listWorkflows(token, { job_id: sprintId });
@@ -73,11 +75,12 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     const targetId = targetJobId ?? backlogJob?.id;
     if (!targetId) return;
     await updateWorkflow(token, storyId, { job_id: targetId });
-    // Refresh stories for backlog and all sprints
     if (backlogJob) {
       setBacklogStories(await listWorkflows(token, { job_id: backlogJob.id }));
     }
-    setProject((prev) => prev ? { ...prev, _refresh: Date.now() } as typeof prev : prev);
+    if (targetJobId) {
+      setSprintRefreshMap((prev) => ({ ...prev, [targetJobId]: Date.now() }));
+    }
   }
 
   async function onStoryDeleted(storyId: string) {
@@ -204,6 +207,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             );
           }}
           onStoryMoved={onStoryMoved}
+          sprintRefreshMap={sprintRefreshMap}
         />
       </div>
 
@@ -268,19 +272,28 @@ function BacklogPanel({
   onStoryDeleted: (storyId: string) => void;
 }) {
   const [showCreate, setShowCreate] = useState(false);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
+
+  useEffect(() => { setPage(0); }, [search]);
+
+  const filtered = stories.filter((s) =>
+    s.name.toLowerCase().includes(search.toLowerCase())
+  );
+  const totalPages = Math.ceil(filtered.length / BACKLOG_PAGE_SIZE);
+  const effectivePage = Math.min(page, Math.max(0, totalPages - 1));
+  const paged = filtered.slice(effectivePage * BACKLOG_PAGE_SIZE, (effectivePage + 1) * BACKLOG_PAGE_SIZE);
+
+  const countLabel = search
+    ? `${filtered.length} of ${stories.length} ${stories.length === 1 ? "story" : "stories"}`
+    : `${stories.length} ${stories.length === 1 ? "story" : "stories"}`;
 
   return (
     <div className="w-80 shrink-0 flex flex-col bg-slate-50 overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-200 bg-white flex items-center justify-between">
         <div>
-          {backlogJob ? (
-            <Link href={`/projects/${projectId}/jobs/${backlogJob.id}`} className="text-sm font-semibold text-slate-700 hover:text-violet-700 transition-colors">
-              Backlog →
-            </Link>
-          ) : (
-            <h2 className="text-sm font-semibold text-slate-700">Backlog</h2>
-          )}
-          <p className="text-xs text-slate-400">{stories.length} {stories.length === 1 ? "story" : "stories"}</p>
+          <h2 className="text-sm font-semibold text-slate-700">Backlog</h2>
+          <p className="text-xs text-slate-400">{countLabel}</p>
         </div>
         <button
           type="button"
@@ -293,13 +306,27 @@ function BacklogPanel({
         </button>
       </div>
 
+      {stories.length > 0 && (
+        <div className="px-3 pt-2 pb-1 bg-slate-50 border-b border-slate-100">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search stories…"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-400"
+          />
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
-        {stories.length === 0 ? (
+        {filtered.length === 0 && search ? (
+          <p className="text-xs text-slate-400 text-center py-8">No stories match &ldquo;{search}&rdquo;</p>
+        ) : paged.length === 0 ? (
           <p className="text-xs text-slate-400 text-center py-8">
             {backlogJob ? "No stories yet — add the first one." : "No backlog found for this project."}
           </p>
         ) : (
-          stories.map((story) => (
+          paged.map((story) => (
             <BacklogStoryCard
               key={story.id}
               story={story}
@@ -311,6 +338,28 @@ function BacklogPanel({
           ))
         )}
       </div>
+
+      {totalPages > 1 && (
+        <div className="px-3 py-2 border-t border-slate-200 bg-white flex items-center justify-between shrink-0">
+          <button
+            type="button"
+            disabled={effectivePage === 0}
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            className="text-xs text-slate-500 hover:text-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            ← Prev
+          </button>
+          <span className="text-xs text-slate-400">{effectivePage + 1} / {totalPages}</span>
+          <button
+            type="button"
+            disabled={effectivePage >= totalPages - 1}
+            onClick={() => setPage((p) => p + 1)}
+            className="text-xs text-slate-500 hover:text-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Next →
+          </button>
+        </div>
+      )}
 
       {showCreate && backlogJob && (
         <CreateStoryModal
@@ -350,12 +399,23 @@ function BacklogStoryCard({
     return () => document.removeEventListener("mousedown", handler);
   }, [menuOpen]);
 
+  function handleDragStart(e: React.DragEvent) {
+    e.dataTransfer.setData("storyId", story.id);
+    e.dataTransfer.setData("source", "backlog");
+    e.dataTransfer.effectAllowed = "move";
+  }
+
   return (
-    <div className="bg-white rounded-lg border border-slate-200 p-3 hover:border-violet-200 transition-colors group">
+    <div
+      className="bg-white rounded-lg border border-slate-200 p-3 hover:border-violet-200 transition-colors group cursor-grab active:cursor-grabbing"
+      draggable
+      onDragStart={handleDragStart}
+    >
       <div className="flex items-start justify-between gap-2">
         <Link
           href={`/projects/${projectId}/stories/${story.id}`}
           className="flex-1 min-w-0 text-sm font-medium text-slate-800 hover:text-violet-700 transition-colors leading-snug"
+          onClick={(e) => e.stopPropagation()}
         >
           {story.name}
         </Link>
@@ -422,6 +482,7 @@ function SprintsPanel({
   onSprintDeleted,
   onSprintUpdated,
   onStoryMoved,
+  sprintRefreshMap,
 }: {
   projectId: string;
   sprints: Job[];
@@ -432,6 +493,7 @@ function SprintsPanel({
   onSprintDeleted: (sprintId: string) => void;
   onSprintUpdated: (sprintId: string, patch: Partial<Job>) => void;
   onStoryMoved: (storyId: string, targetJobId: string | null) => void;
+  sprintRefreshMap: Record<string, number>;
 }) {
   const [showCreate, setShowCreate] = useState(false);
 
@@ -464,9 +526,11 @@ function SprintsPanel({
               backlogJobId={backlogJob?.id ?? null}
               token={token}
               loadStories={loadSprintStories}
+              refreshToken={sprintRefreshMap[sprint.id] ?? 0}
               onDelete={() => onSprintDeleted(sprint.id)}
               onUpdate={(patch) => onSprintUpdated(sprint.id, patch)}
               onMoveToBacklog={(storyId) => onStoryMoved(storyId, null)}
+              onDropStory={(storyId) => onStoryMoved(storyId, sprint.id)}
             />
           ))
         )}
@@ -490,18 +554,22 @@ function SprintCard({
   backlogJobId,
   token,
   loadStories,
+  refreshToken,
   onDelete,
   onUpdate,
   onMoveToBacklog,
+  onDropStory,
 }: {
   sprint: Job;
   projectId: string;
   backlogJobId: string | null;
   token: string;
   loadStories: (sprintId: string) => Promise<Workflow[]>;
+  refreshToken: number;
   onDelete: () => void;
   onUpdate: (patch: Partial<Job>) => void;
   onMoveToBacklog: (storyId: string) => void;
+  onDropStory: (storyId: string) => void;
 }) {
   const [sprint, setSprint] = useState(initialSprint);
   const [stories, setStories] = useState<Workflow[] | null>(null);
@@ -509,6 +577,8 @@ function SprintCard({
   const [showEdit, setShowEdit] = useState(false);
   const [confirmStart, setConfirmStart] = useState(false);
   const [confirmComplete, setConfirmComplete] = useState(false);
+  const [isDropOver, setIsDropOver] = useState(false);
+  const dropCounter = useRef(0);
 
   useEffect(() => { setSprint(initialSprint); }, [initialSprint]);
 
@@ -517,6 +587,13 @@ function SprintCard({
       loadStories(sprint.id).then(setStories);
     }
   }, [expanded, stories, sprint.id, loadStories]);
+
+  // Reload stories when a backlog story is dropped into this sprint
+  useEffect(() => {
+    if (refreshToken) {
+      setStories(null);
+    }
+  }, [refreshToken]);
 
   const totalPoints = (stories ?? []).reduce((sum, s) => sum + (s.story_points ?? 0), 0);
 
@@ -541,9 +618,42 @@ function SprintCard({
     setShowEdit(false);
   }
 
+  function handleDragEnter(e: React.DragEvent) {
+    if (!e.dataTransfer.types.includes("storyid")) return;
+    e.preventDefault();
+    dropCounter.current++;
+    setIsDropOver(true);
+  }
+  function handleDragLeave() {
+    dropCounter.current--;
+    if (dropCounter.current === 0) setIsDropOver(false);
+  }
+  function handleDragOver(e: React.DragEvent) {
+    if (!e.dataTransfer.types.includes("storyid")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  }
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    dropCounter.current = 0;
+    setIsDropOver(false);
+    const storyId = e.dataTransfer.getData("storyId");
+    if (storyId) onDropStory(storyId);
+  }
+
   return (
     <>
-    <div className="border border-slate-200 rounded-xl overflow-hidden">
+    <div
+      className={`rounded-xl overflow-hidden transition-all ${
+        isDropOver
+          ? "border-2 border-violet-400 shadow-md"
+          : "border border-slate-200"
+      }`}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       {/* Sprint header */}
       <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-200">
         <button type="button" onClick={() => setExpanded((v) => !v)} className="text-slate-400 hover:text-slate-600 transition-colors">
@@ -588,7 +698,9 @@ function SprintCard({
           {stories === null ? (
             <p className="px-4 py-3 text-xs text-slate-400">Loading…</p>
           ) : stories.length === 0 ? (
-            <p className="px-4 py-3 text-xs text-slate-400 italic">No stories in this sprint yet.</p>
+            <p className={`px-4 py-3 text-xs italic ${isDropOver ? "text-violet-400" : "text-slate-400"}`}>
+              {isDropOver ? "Drop story here" : "No stories in this sprint yet."}
+            </p>
           ) : (
             stories.map((story) => (
               <SprintStoryRow key={story.id} story={story} projectId={projectId}
@@ -777,7 +889,6 @@ function CreateStoryModal({
         await createTask(token, { name: "Define", workflow_id: story.id });
       }
 
-      // Create the main Note if body was provided — inherits the same visibility as the story
       if (noteBody.trim()) {
         await createNote(token, {
           entity_type: "workflow",

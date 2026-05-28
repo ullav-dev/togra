@@ -179,7 +179,7 @@ export default function StoryDetailPage({
 
       {/* Notes */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6">
-        <NotesPanel entityType="workflow" entityId={storyId} isTeam={!!story.team_id} />
+        <NotesPanel entityType="workflow" entityId={storyId} isTeam={true} />
       </div>
     </div>
   );
