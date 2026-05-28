@@ -11,7 +11,7 @@ import {
 import { getProject } from "@/lib/togra-api";
 import type {
   WorkflowWithTasks, Task, ProjectWithJobs, Status,
-  TeamUserRef, TeamRole, TaskTeamRole,
+  TeamMember, TeamRole, TaskTeamRole,
 } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 import NotesPanel from "@/components/notes/NotesPanel";
@@ -34,7 +34,7 @@ export default function StoryDetailPage({
   const [editingPoints, setEditingPoints] = useState(false);
   const [pointsValue, setPointsValue] = useState("");
 
-  const [teamMembers, setTeamMembers] = useState<TeamUserRef[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [teamRoles, setTeamRoles] = useState<TeamRole[]>([]);
   const [taskTeamRoles, setTaskTeamRoles] = useState<Record<string, TaskTeamRole[]>>({});
 
@@ -56,7 +56,7 @@ export default function StoryDetailPage({
           listTeamRoles(token, teamId),
         ]).catch(() => [null, []] as [null, TeamRole[]]);
 
-        if (team) setTeamMembers(team.members.map((m) => m.user));
+        if (team) setTeamMembers(team.members.filter((m) => m.status === "active"));
         setTeamRoles(roles);
 
         const ttrMap: Record<string, TaskTeamRole[]> = {};
@@ -256,7 +256,7 @@ function TaskRow({
 }: {
   task: Task;
   taskRoles: TaskTeamRole[];
-  teamMembers: TeamUserRef[];
+  teamMembers: TeamMember[];
   teamRoles: TeamRole[];
   onStatusChange: (status: Status) => void;
   onAssigneeChange: (userId: string | null) => void;
@@ -265,17 +265,22 @@ function TaskRow({
 }) {
   const statuses: Status[] = ["Not Started", "Ready", "In Progress", "On Hold", "Complete"];
 
-  const assignedMember = task.assigned_to
-    ? teamMembers.find((m) => m.id === task.assigned_to)
-    : null;
-
   const assignedRoleIds = new Set(taskRoles.map((r) => r.team_role_id));
   const unassignedRoles = teamRoles.filter((r) => !assignedRoleIds.has(r.id));
 
-  function displayName(m: TeamUserRef): string {
-    const full = [m.first_name, m.last_name].filter(Boolean).join(" ");
-    return full || m.username;
+  // When the task has roles, restrict the assignee list to members who hold any of those roles.
+  const eligibleMembers = assignedRoleIds.size > 0
+    ? teamMembers.filter((m) => m.team_roles.some((mr) => assignedRoleIds.has(mr.id)))
+    : teamMembers;
+
+  function displayName(m: TeamMember): string {
+    const full = [m.user.first_name, m.user.last_name].filter(Boolean).join(" ");
+    return full || m.user.username;
   }
+
+  const assignedMember = task.assigned_to
+    ? teamMembers.find((m) => m.user.id === task.assigned_to)
+    : null;
 
   return (
     <div className="px-6 py-3 hover:bg-slate-50 space-y-2">
@@ -287,7 +292,7 @@ function TaskRow({
           )}
         </div>
 
-        {/* Assignee */}
+        {/* Assignee — filtered to role-eligible members when roles are set */}
         {teamMembers.length > 0 && (
           <select
             value={task.assigned_to ?? ""}
@@ -296,8 +301,8 @@ function TaskRow({
             title={assignedMember ? displayName(assignedMember) : "Unassigned"}
           >
             <option value="">Unassigned</option>
-            {teamMembers.map((m) => (
-              <option key={m.id} value={m.id}>{displayName(m)}</option>
+            {eligibleMembers.map((m) => (
+              <option key={m.user.id} value={m.user.id}>{displayName(m)}</option>
             ))}
           </select>
         )}
