@@ -83,18 +83,21 @@ export interface Job {
   schedule_status: ScheduleStatus;
   team_id: string | null;
   project_id: string | null;
-  /** `"sprint"` or `"kanban"`. Null for jobs predating this field. */
-  job_type: "sprint" | "kanban" | null;
+  /** `"sprint"`, `"kanban"`, `"backlog"`, or null for legacy jobs. */
+  job_type: "sprint" | "kanban" | "backlog" | null;
   created_at: string;
   updated_at: string;
   archived: boolean;
+  /** ISO date string (YYYY-MM-DD). Relevant for sprint jobs. */
+  start_date: string | null;
+  end_date: string | null;
 }
 
 export interface JobWithWorkflows extends Job {
   workflows: Workflow[];
 }
 
-// ── Workflows ─────────────────────────────────────────────────────────────────
+// ── Workflows / Stories ───────────────────────────────────────────────────────
 
 export interface Workflow {
   id: string;
@@ -109,9 +112,18 @@ export interface Workflow {
   job_id: string | null;
   team_id: string | null;
   is_shared: boolean;
+  /** Display order within the parent job. */
+  sort_order: number | null;
+  /** Story point estimate. */
+  story_points: number | null;
 }
 
-// ── Tasks / Stories ───────────────────────────────────────────────────────────
+export interface WorkflowWithTasks extends Workflow {
+  tasks: Task[];
+  links: TaskLink[];
+}
+
+// ── Tasks ─────────────────────────────────────────────────────────────────────
 
 export type TaskType = "standard" | "decision" | "automated" | "loop_block";
 
@@ -132,6 +144,12 @@ export interface Task {
   assigned_to: string | null;
   start_time: string | null;
   end_time: string | null;
+}
+
+export interface TaskLink {
+  from_task_id: string;
+  to_task_id: string;
+  branch_label: string | null;
 }
 
 export interface TaskTeamRole {

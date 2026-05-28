@@ -1,7 +1,8 @@
 // Togra-specific API calls against awe-server's /projects endpoints.
 // In the browser all requests go via /api/* Next.js rewrite to avoid CORS.
 
-import type { Project, ProjectWithJobs } from "./types";
+import type { Project, ProjectWithJobs, Job } from "./types";
+import { createJob } from "./awe-api";
 
 const BASE =
   typeof window === "undefined"
@@ -32,11 +33,23 @@ async function apiRequest<T>(path: string, token: string, init?: RequestInit): P
 export const listProjects = (token: string, teamId?: string): Promise<Project[]> =>
   apiRequest(`/projects${teamId ? `?team_id=${teamId}` : ""}`, token);
 
-export const createProject = (
+/** Create a project, then immediately create its Backlog job. Returns both. */
+export async function createProjectWithBacklog(
   token: string,
   payload: { name: string; description?: string; team_id?: string; project_manager_id?: string }
-): Promise<Project> =>
-  apiRequest("/projects", token, { method: "POST", body: JSON.stringify(payload) });
+): Promise<{ project: Project; backlogJob: Job }> {
+  const project = await apiRequest<Project>("/projects", token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const backlogJob = await createJob(token, {
+    name: "Backlog",
+    project_id: project.id,
+    team_id: payload.team_id,
+    job_type: "backlog",
+  });
+  return { project, backlogJob };
+}
 
 export const getProject = (token: string, id: string): Promise<ProjectWithJobs> =>
   apiRequest(`/projects/${id}`, token);

@@ -1,7 +1,7 @@
-// AWE API calls (jobs, workflows, tasks, notes) used by Togra.
+// AWE API calls (jobs, workflows, tasks, notes, teams) used by Togra.
 // All browser requests go via /api/* rewrite; server-side uses API_URL directly.
 
-import type { Job, JobWithWorkflows, Task, Workflow, Note, TeamSummary, Team, TeamRole } from "./types";
+import type { Job, JobWithWorkflows, Task, Workflow, WorkflowWithTasks, Note, TeamSummary, Team, TeamRole } from "./types";
 
 const BASE =
   typeof window === "undefined"
@@ -53,7 +53,7 @@ async function authApiRequest<T>(path: string, token: string, init?: RequestInit
 
 // ── Jobs ──────────────────────────────────────────────────────────────────────
 
-export const listJobs = (token: string, params?: { team_id?: string; project_id?: string }): Promise<Job[]> => {
+export const listJobs = (token: string, params?: { team_id?: string }): Promise<Job[]> => {
   const qs = new URLSearchParams();
   if (params?.team_id) qs.set("team_id", params.team_id);
   const query = qs.toString() ? `?${qs}` : "";
@@ -62,7 +62,14 @@ export const listJobs = (token: string, params?: { team_id?: string; project_id?
 
 export const createJob = (
   token: string,
-  payload: { name: string; project_id?: string; team_id?: string; job_type?: "sprint" | "kanban" }
+  payload: {
+    name: string;
+    project_id?: string;
+    team_id?: string;
+    job_type?: "sprint" | "kanban" | "backlog";
+    start_date?: string;
+    end_date?: string;
+  }
 ): Promise<Job> =>
   apiRequest("/jobs", token, { method: "POST", body: JSON.stringify(payload) });
 
@@ -72,19 +79,68 @@ export const getJob = (token: string, id: string): Promise<JobWithWorkflows> =>
 export const updateJob = (
   token: string,
   id: string,
-  patch: { name?: string; status?: string; archived?: boolean }
+  patch: { name?: string; status?: string; archived?: boolean; start_date?: string; end_date?: string }
 ): Promise<Job> =>
   apiRequest(`/jobs/${id}`, token, { method: "PUT", body: JSON.stringify(patch) });
 
 export const deleteJob = (token: string, id: string): Promise<void> =>
   apiRequest(`/jobs/${id}`, token, { method: "DELETE" });
 
-// ── Workflows ─────────────────────────────────────────────────────────────────
+// ── Workflows / Stories ───────────────────────────────────────────────────────
 
-export const listWorkflows = (token: string, jobId?: string): Promise<Workflow[]> =>
-  apiRequest(`/workflows${jobId ? `?job_id=${jobId}` : ""}`, token);
+/** List workflows. Pass job_id to get only stories for a specific job (backlog or sprint). */
+export const listWorkflows = (token: string, params?: { job_id?: string; team_id?: string }): Promise<Workflow[]> => {
+  const qs = new URLSearchParams();
+  if (params?.job_id) qs.set("job_id", params.job_id);
+  else if (params?.team_id) qs.set("team_id", params.team_id);
+  const query = qs.toString() ? `?${qs}` : "";
+  return apiRequest(`/workflows${query}`, token);
+};
 
-// ── Tasks / Stories ───────────────────────────────────────────────────────────
+export const getWorkflow = (token: string, id: string): Promise<WorkflowWithTasks> =>
+  apiRequest(`/workflows/${id}`, token);
+
+export const createWorkflow = (
+  token: string,
+  payload: {
+    name: string;
+    job_id?: string;
+    is_template?: boolean;
+    description?: string;
+    story_points?: number;
+    sort_order?: number;
+  }
+): Promise<Workflow> =>
+  apiRequest("/workflows", token, { method: "POST", body: JSON.stringify(payload) });
+
+/** Update a workflow. Pass job_id to move a story between jobs (backlog ↔ sprint). */
+export const updateWorkflow = (
+  token: string,
+  id: string,
+  patch: {
+    name?: string;
+    description?: string;
+    status?: string;
+    job_id?: string;
+    story_points?: number;
+    sort_order?: number;
+    is_shared?: boolean;
+  }
+): Promise<Workflow> =>
+  apiRequest(`/workflows/${id}`, token, { method: "PUT", body: JSON.stringify(patch) });
+
+export const deleteWorkflow = (token: string, id: string): Promise<void> =>
+  apiRequest(`/workflows/${id}`, token, { method: "DELETE" });
+
+/** Clone a workflow template into a job. Returns the new workflow. */
+export const cloneWorkflowFromTemplate = (
+  token: string,
+  jobId: string,
+  templateId: string
+): Promise<Workflow> =>
+  apiRequest(`/jobs/${jobId}/workflows/from-template/${templateId}`, token, { method: "POST" });
+
+// ── Tasks ─────────────────────────────────────────────────────────────────────
 
 export const listTasks = (token: string, workflowId: string): Promise<Task[]> =>
   apiRequest(`/tasks?workflow_id=${workflowId}`, token);

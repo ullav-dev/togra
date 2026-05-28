@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { listProjects, createProject } from "@/lib/togra-api";
+import { listProjects, createProjectWithBacklog } from "@/lib/togra-api";
 import { getMyTeams } from "@/lib/awe-api";
 import { getObairTeamIds } from "@/lib/auth-api";
 import type { Project, TeamSummary } from "@/lib/types";
@@ -141,7 +141,7 @@ function CreateProjectModal({
     setError(null);
     setSubmitting(true);
     try {
-      const p = await createProject(token, {
+      const { project: p } = await createProjectWithBacklog(token, {
         name: name.trim(),
         description: description.trim() || undefined,
         team_id: teamId || undefined,

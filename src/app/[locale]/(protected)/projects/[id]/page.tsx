@@ -1,105 +1,225 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useRef } from "react";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { getProject } from "@/lib/togra-api";
-import { createJob, deleteJob } from "@/lib/awe-api";
-import { getMyTeams } from "@/lib/awe-api";
-import { getObairTeamIds } from "@/lib/auth-api";
-import type { ProjectWithJobs, Job, TeamSummary } from "@/lib/types";
+import { getProject, updateProject } from "@/lib/togra-api";
+import {
+  createJob,
+  deleteJob,
+  listWorkflows,
+  createWorkflow,
+  updateWorkflow,
+  deleteWorkflow,
+  cloneWorkflowFromTemplate,
+  createTask,
+} from "@/lib/awe-api";
+import type { ProjectWithJobs, Job, Workflow } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { token } = useAuth();
+
   const [project, setProject] = useState<ProjectWithJobs | null>(null);
-  const [teams, setTeams] = useState<TeamSummary[]>([]);
+  const [backlogStories, setBacklogStories] = useState<Workflow[]>([]);
+  const [templates, setTemplates] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
+
+  const backlogJob = project?.jobs.find((j) => j.job_type === "backlog") ?? null;
+  const sprints = (project?.jobs ?? [])
+    .filter((j) => j.job_type === "sprint")
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
   useEffect(() => {
     if (!token) return;
-    Promise.all([getProject(token, id), getMyTeams(token)])
-      .then(([p, ts]) => {
-        setProject(p);
-        const eligibleIds = getObairTeamIds(token);
-        setTeams(ts.filter((t) => eligibleIds.includes(t.id)));
-      })
-      .finally(() => setLoading(false));
+    getProject(token, id).then(async (proj) => {
+      setProject(proj);
+      const bl = proj.jobs.find((j) => j.job_type === "backlog");
+      const [stories, tmpl] = await Promise.all([
+        bl ? listWorkflows(token, { job_id: bl.id }) : Promise.resolve([]),
+        listWorkflows(token),  // all accessible workflows for template picker
+      ]);
+      setBacklogStories(stories);
+      setTemplates(tmpl.filter((w) => w.is_template));
+    }).finally(() => setLoading(false));
   }, [token, id]);
 
-  function onJobCreated(job: Job) {
-    setProject((prev) => prev ? { ...prev, jobs: [job, ...prev.jobs] } : prev);
-    setShowCreate(false);
+  // Load stories for a given sprint
+  async function loadSprintStories(sprintId: string): Promise<Workflow[]> {
+    if (!token) return [];
+    return listWorkflows(token, { job_id: sprintId });
   }
 
-  async function onJobDelete(jobId: string) {
-    if (!token || !confirm("Delete this job?")) return;
-    await deleteJob(token, jobId);
-    setProject((prev) => prev ? { ...prev, jobs: prev.jobs.filter((j) => j.id !== jobId) } : prev);
+  async function onStoryCreated(story: Workflow) {
+    setBacklogStories((prev) => [...prev, story]);
+  }
+
+  async function onStoryMoved(storyId: string, targetJobId: string | null) {
+    if (!token) return;
+    const targetId = targetJobId ?? backlogJob?.id;
+    if (!targetId) return;
+    await updateWorkflow(token, storyId, { job_id: targetId });
+    // Refresh stories for backlog and all sprints
+    if (backlogJob) {
+      setBacklogStories(await listWorkflows(token, { job_id: backlogJob.id }));
+    }
+    setProject((prev) => prev ? { ...prev, _refresh: Date.now() } as typeof prev : prev);
+  }
+
+  async function onStoryDeleted(storyId: string) {
+    if (!token) return;
+    await deleteWorkflow(token, storyId);
+    setBacklogStories((prev) => prev.filter((s) => s.id !== storyId));
+  }
+
+  async function onSprintCreated(sprint: Job) {
+    setProject((prev) =>
+      prev ? { ...prev, jobs: [...prev.jobs, sprint] } : prev
+    );
+  }
+
+  async function onSprintDeleted(sprintId: string) {
+    if (!token || !confirm("Delete this sprint? Stories will be moved back to the Backlog.")) return;
+    // Move all sprint stories to backlog first
+    if (backlogJob) {
+      const sprintStories = await listWorkflows(token, { job_id: sprintId });
+      await Promise.all(
+        sprintStories.map((s) => updateWorkflow(token, s.id, { job_id: backlogJob.id }))
+      );
+      setBacklogStories(await listWorkflows(token, { job_id: backlogJob.id }));
+    }
+    await deleteJob(token, sprintId);
+    setProject((prev) =>
+      prev ? { ...prev, jobs: prev.jobs.filter((j) => j.id !== sprintId) } : prev
+    );
   }
 
   if (loading) return <div className="p-8 text-slate-400 text-sm">Loading…</div>;
   if (!project) return <div className="p-8 text-slate-500 text-sm">Project not found.</div>;
 
-  const sprintJobs = project.jobs.filter((j) => j.job_type === "sprint");
-  const kanbanJobs = project.jobs.filter((j) => j.job_type === "kanban");
-  const otherJobs  = project.jobs.filter((j) => !j.job_type);
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="bg-white border-b border-slate-200 px-6 py-4 shrink-0">
+        <nav className="flex items-center gap-2 text-sm text-slate-500 mb-1">
+          <Link href="/projects" className="hover:text-violet-700 transition-colors">Projects</Link>
+          <span>/</span>
+          <span className="text-slate-700 font-medium">{project.name}</span>
+        </nav>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold text-slate-800">{project.name}</h1>
+          <StatusPill status={project.status} />
+          {project.description && (
+            <span className="text-sm text-slate-400 truncate max-w-xs">{project.description}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Split pane */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left — Backlog */}
+        <BacklogPanel
+          backlogJob={backlogJob}
+          stories={backlogStories}
+          sprints={sprints}
+          templates={templates}
+          token={token!}
+          projectId={id}
+          onStoryCreated={onStoryCreated}
+          onStoryMoved={onStoryMoved}
+          onStoryDeleted={onStoryDeleted}
+        />
+
+        {/* Divider */}
+        <div className="w-px bg-slate-200 shrink-0" />
+
+        {/* Right — Sprints */}
+        <SprintsPanel
+          projectId={id}
+          sprints={sprints}
+          backlogJob={backlogJob}
+          token={token!}
+          loadSprintStories={loadSprintStories}
+          onSprintCreated={onSprintCreated}
+          onSprintDeleted={onSprintDeleted}
+          onStoryMoved={onStoryMoved}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Backlog Panel ─────────────────────────────────────────────────────────────
+
+function BacklogPanel({
+  backlogJob,
+  stories,
+  sprints,
+  templates,
+  token,
+  projectId,
+  onStoryCreated,
+  onStoryMoved,
+  onStoryDeleted,
+}: {
+  backlogJob: Job | null;
+  stories: Workflow[];
+  sprints: Job[];
+  templates: Workflow[];
+  token: string;
+  projectId: string;
+  onStoryCreated: (s: Workflow) => void;
+  onStoryMoved: (storyId: string, targetJobId: string | null) => void;
+  onStoryDeleted: (storyId: string) => void;
+}) {
+  const [showCreate, setShowCreate] = useState(false);
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-8">
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-sm text-slate-500 mb-6">
-        <Link href="/projects" className="hover:text-violet-700 transition-colors">Projects</Link>
-        <span>/</span>
-        <span className="text-slate-700 font-medium">{project.name}</span>
-      </nav>
-
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 mb-8">
+    <div className="w-80 shrink-0 flex flex-col bg-slate-50 overflow-hidden">
+      <div className="px-4 py-3 border-b border-slate-200 bg-white flex items-center justify-between">
         <div>
-          <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-2xl font-bold text-slate-800">{project.name}</h1>
-            <StatusPill status={project.status} />
-          </div>
-          {project.description && (
-            <p className="text-sm text-slate-500 max-w-xl">{project.description}</p>
-          )}
+          <h2 className="text-sm font-semibold text-slate-700">Backlog</h2>
+          <p className="text-xs text-slate-400">{stories.length} {stories.length === 1 ? "story" : "stories"}</p>
         </div>
         <button
           type="button"
+          disabled={!backlogJob}
           onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors shrink-0"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-violet-700 hover:text-violet-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
-          <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path d="M8 2a1 1 0 0 1 1 1v4h4a1 1 0 1 1 0 2H9v4a1 1 0 1 1-2 0V9H3a1 1 0 1 1 0-2h4V3a1 1 0 0 1 1-1Z"/></svg>
-          Add job
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M8 2a1 1 0 0 1 1 1v4h4a1 1 0 1 1 0 2H9v4a1 1 0 1 1-2 0V9H3a1 1 0 1 1 0-2h4V3a1 1 0 0 1 1-1Z"/></svg>
+          Add story
         </button>
       </div>
 
-      {/* Jobs grouped by type */}
-      {project.jobs.length === 0 ? (
-        <EmptyJobs onCreate={() => setShowCreate(true)} />
-      ) : (
-        <div className="space-y-8">
-          {sprintJobs.length > 0 && (
-            <JobSection title="Sprints" jobs={sprintJobs} projectId={id} onDelete={onJobDelete} />
-          )}
-          {kanbanJobs.length > 0 && (
-            <JobSection title="Kanban Boards" jobs={kanbanJobs} projectId={id} onDelete={onJobDelete} />
-          )}
-          {otherJobs.length > 0 && (
-            <JobSection title="Jobs" jobs={otherJobs} projectId={id} onDelete={onJobDelete} />
-          )}
-        </div>
-      )}
+      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {stories.length === 0 ? (
+          <p className="text-xs text-slate-400 text-center py-8">
+            {backlogJob ? "No stories yet — add the first one." : "No backlog found for this project."}
+          </p>
+        ) : (
+          stories.map((story) => (
+            <BacklogStoryCard
+              key={story.id}
+              story={story}
+              sprints={sprints}
+              projectId={projectId}
+              onMoveToSprint={(sprintId) => onStoryMoved(story.id, sprintId)}
+              onDelete={() => onStoryDeleted(story.id)}
+            />
+          ))
+        )}
+      </div>
 
-      {showCreate && (
-        <CreateJobModal
-          projectId={id}
-          teams={teams}
-          token={token!}
-          onCreated={onJobCreated}
+      {showCreate && backlogJob && (
+        <CreateStoryModal
+          jobId={backlogJob.id}
+          templates={templates}
+          token={token}
+          onCreated={(s) => { onStoryCreated(s); setShowCreate(false); }}
           onClose={() => setShowCreate(false)}
         />
       )}
@@ -107,110 +227,318 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   );
 }
 
-function JobSection({
-  title,
-  jobs,
+function BacklogStoryCard({
+  story,
+  sprints,
   projectId,
+  onMoveToSprint,
   onDelete,
 }: {
-  title: string;
-  jobs: Job[];
+  story: Workflow;
+  sprints: Job[];
   projectId: string;
-  onDelete: (id: string) => void;
+  onMoveToSprint: (sprintId: string) => void;
+  onDelete: () => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menuOpen]);
+
   return (
-    <section>
-      <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">{title}</h2>
-      <div className="space-y-2">
-        {jobs.map((job) => (
-          <JobRow key={job.id} job={job} projectId={projectId} onDelete={onDelete} />
-        ))}
+    <div className="bg-white rounded-lg border border-slate-200 p-3 hover:border-violet-200 transition-colors group">
+      <div className="flex items-start justify-between gap-2">
+        <Link
+          href={`/projects/${projectId}/stories/${story.id}`}
+          className="flex-1 min-w-0 text-sm font-medium text-slate-800 hover:text-violet-700 transition-colors leading-snug"
+        >
+          {story.name}
+        </Link>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {story.story_points != null && (
+            <span className="text-xs bg-violet-100 text-violet-700 font-semibold px-1.5 py-0.5 rounded-full">
+              {story.story_points}
+            </span>
+          )}
+          <div className="relative" ref={menuRef}>
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors opacity-0 group-hover:opacity-100"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path d="M8 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM1.5 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM14.5 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/></svg>
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl border border-slate-200 shadow-lg py-1 z-20">
+                {sprints.length > 0 && (
+                  <>
+                    <p className="px-3 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">Move to sprint</p>
+                    {sprints.map((sp) => (
+                      <button
+                        key={sp.id}
+                        type="button"
+                        onClick={() => { onMoveToSprint(sp.id); setMenuOpen(false); }}
+                        className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-violet-50 hover:text-violet-700 transition-colors truncate"
+                      >
+                        {sp.name}
+                      </button>
+                    ))}
+                    <div className="my-1 border-t border-slate-100" />
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { onDelete(); setMenuOpen(false); }}
+                  className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  Delete story
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
-    </section>
+      <div className="flex items-center gap-2 mt-2">
+        <StatusPill status={story.status} />
+      </div>
+    </div>
   );
 }
 
-function JobRow({
-  job,
+// ── Sprints Panel ─────────────────────────────────────────────────────────────
+
+function SprintsPanel({
   projectId,
-  onDelete,
+  sprints,
+  backlogJob,
+  token,
+  loadSprintStories,
+  onSprintCreated,
+  onSprintDeleted,
+  onStoryMoved,
 }: {
-  job: Job;
   projectId: string;
-  onDelete: (id: string) => void;
+  sprints: Job[];
+  backlogJob: Job | null;
+  token: string;
+  loadSprintStories: (sprintId: string) => Promise<Workflow[]>;
+  onSprintCreated: (sprint: Job) => void;
+  onSprintDeleted: (sprintId: string) => void;
+  onStoryMoved: (storyId: string, targetJobId: string | null) => void;
 }) {
-  const typeLabel = job.job_type === "sprint" ? "Sprint" : job.job_type === "kanban" ? "Kanban" : "";
-  const typeBadge =
-    job.job_type === "sprint"
-      ? "bg-indigo-50 text-indigo-700"
-      : job.job_type === "kanban"
-      ? "bg-teal-50 text-teal-700"
-      : "bg-slate-100 text-slate-500";
+  const [showCreate, setShowCreate] = useState(false);
 
   return (
-    <div className="flex items-center gap-3 bg-white rounded-xl border border-slate-200 px-4 py-3 group hover:border-violet-200 transition-colors">
-      {typeLabel && (
-        <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${typeBadge}`}>
-          {typeLabel}
-        </span>
+    <div className="flex-1 flex flex-col overflow-hidden bg-white">
+      <div className="px-6 py-3 border-b border-slate-200 flex items-center justify-between shrink-0">
+        <h2 className="text-sm font-semibold text-slate-700">Sprints</h2>
+        <button
+          type="button"
+          onClick={() => setShowCreate(true)}
+          className="inline-flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M8 2a1 1 0 0 1 1 1v4h4a1 1 0 1 1 0 2H9v4a1 1 0 1 1-2 0V9H3a1 1 0 1 1 0-2h4V3a1 1 0 0 1 1-1Z"/></svg>
+          New sprint
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {sprints.length === 0 ? (
+          <div className="text-center py-16 text-slate-400">
+            <p className="text-sm mb-1">No sprints yet.</p>
+            <p className="text-xs">Create a sprint to start planning.</p>
+          </div>
+        ) : (
+          sprints.map((sprint) => (
+            <SprintCard
+              key={sprint.id}
+              sprint={sprint}
+              projectId={projectId}
+              backlogJobId={backlogJob?.id ?? null}
+              token={token}
+              loadStories={loadSprintStories}
+              onDelete={() => onSprintDeleted(sprint.id)}
+              onMoveToBacklog={(storyId) => onStoryMoved(storyId, null)}
+            />
+          ))
+        )}
+      </div>
+
+      {showCreate && (
+        <CreateSprintModal
+          projectId={projectId}
+          token={token}
+          onCreated={(s) => { onSprintCreated(s); setShowCreate(false); }}
+          onClose={() => setShowCreate(false)}
+        />
       )}
-      <Link
-        href={`/projects/${projectId}/jobs/${job.id}`}
-        className="flex-1 min-w-0 text-sm font-medium text-slate-700 hover:text-violet-700 transition-colors truncate"
-      >
-        {job.name}
-      </Link>
-      <StatusPill status={job.status} />
-      <Link
-        href={`/projects/${projectId}/jobs/${job.id}`}
-        className="hidden group-hover:inline-flex items-center gap-1 text-xs text-violet-600 hover:text-violet-700 font-medium shrink-0 transition-colors"
-      >
-        Open board
-        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"/></svg>
-      </Link>
-      <button
-        type="button"
-        onClick={() => onDelete(job.id)}
-        className="hidden group-hover:inline-flex text-slate-400 hover:text-red-500 transition-colors p-1 rounded"
-        title="Delete job"
-      >
-        <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75Zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.559a.75.75 0 1 0-1.492.14l.62 6.498A1.75 1.75 0 0 0 5.365 14.8h5.27a1.75 1.75 0 0 0 1.741-1.603l.62-6.498a.75.75 0 1 0-1.492-.14l-.62 6.498a.25.25 0 0 1-.249.229H5.365a.25.25 0 0 1-.249-.229l-.62-6.498Z"/></svg>
-      </button>
     </div>
   );
 }
 
-function EmptyJobs({ onCreate }: { onCreate: () => void }) {
-  return (
-    <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
-      <p className="text-slate-500 text-sm mb-4">No jobs yet. Add a Sprint or Kanban board to get started.</p>
-      <button
-        type="button"
-        onClick={onCreate}
-        className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-      >
-        Add first job
-      </button>
-    </div>
-  );
-}
-
-function CreateJobModal({
+function SprintCard({
+  sprint,
   projectId,
-  teams,
+  backlogJobId,
+  token,
+  loadStories,
+  onDelete,
+  onMoveToBacklog,
+}: {
+  sprint: Job;
+  projectId: string;
+  backlogJobId: string | null;
+  token: string;
+  loadStories: (sprintId: string) => Promise<Workflow[]>;
+  onDelete: () => void;
+  onMoveToBacklog: (storyId: string) => void;
+}) {
+  const [stories, setStories] = useState<Workflow[] | null>(null);
+  const [expanded, setExpanded] = useState(true);
+
+  useEffect(() => {
+    if (expanded && stories === null) {
+      loadStories(sprint.id).then(setStories);
+    }
+  }, [expanded, stories, sprint.id, loadStories]);
+
+  const totalPoints = (stories ?? []).reduce((sum, s) => sum + (s.story_points ?? 0), 0);
+
+  const dateRange = sprint.start_date && sprint.end_date
+    ? `${fmtDate(sprint.start_date)} – ${fmtDate(sprint.end_date)}`
+    : sprint.start_date
+    ? `From ${fmtDate(sprint.start_date)}`
+    : null;
+
+  return (
+    <div className="border border-slate-200 rounded-xl overflow-hidden">
+      {/* Sprint header */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-200">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="text-slate-400 hover:text-slate-600 transition-colors"
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className={`w-4 h-4 transition-transform ${expanded ? "" : "-rotate-90"}`}>
+            <path d="M4 6l4 4 4-4H4z"/>
+          </svg>
+        </button>
+        <div className="flex-1 min-w-0">
+          <span className="text-sm font-semibold text-slate-800">{sprint.name}</span>
+          {dateRange && <span className="ml-2 text-xs text-slate-400">{dateRange}</span>}
+        </div>
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          {stories !== null && (
+            <>
+              <span>{stories.length} {stories.length === 1 ? "story" : "stories"}</span>
+              {totalPoints > 0 && <span>· {totalPoints} pts</span>}
+            </>
+          )}
+          <StatusPill status={sprint.status} />
+        </div>
+        <Link
+          href={`/projects/${projectId}/jobs/${sprint.id}`}
+          className="text-xs text-violet-600 hover:text-violet-700 font-medium transition-colors shrink-0"
+        >
+          Board →
+        </Link>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="text-slate-300 hover:text-red-500 transition-colors p-1"
+          title="Delete sprint"
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75Zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.559a.75.75 0 1 0-1.492.14l.62 6.498A1.75 1.75 0 0 0 5.365 14.8h5.27a1.75 1.75 0 0 0 1.741-1.603l.62-6.498a.75.75 0 1 0-1.492-.14l-.62 6.498a.25.25 0 0 1-.249.229H5.365a.25.25 0 0 1-.249-.229l-.62-6.498Z"/></svg>
+        </button>
+      </div>
+
+      {/* Sprint stories */}
+      {expanded && (
+        <div className="divide-y divide-slate-100">
+          {stories === null ? (
+            <p className="px-4 py-3 text-xs text-slate-400">Loading…</p>
+          ) : stories.length === 0 ? (
+            <p className="px-4 py-3 text-xs text-slate-400 italic">No stories in this sprint yet.</p>
+          ) : (
+            stories.map((story) => (
+              <SprintStoryRow
+                key={story.id}
+                story={story}
+                projectId={projectId}
+                onMoveToBacklog={backlogJobId ? () => onMoveToBacklog(story.id) : undefined}
+              />
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SprintStoryRow({
+  story,
+  projectId,
+  onMoveToBacklog,
+}: {
+  story: Workflow;
+  projectId: string;
+  onMoveToBacklog?: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 group">
+      <Link
+        href={`/projects/${projectId}/stories/${story.id}`}
+        className="flex-1 min-w-0 text-sm text-slate-700 hover:text-violet-700 transition-colors truncate"
+      >
+        {story.name}
+      </Link>
+      <div className="flex items-center gap-2 shrink-0">
+        {story.story_points != null && (
+          <span className="text-xs bg-violet-100 text-violet-700 font-semibold px-1.5 py-0.5 rounded-full">
+            {story.story_points}
+          </span>
+        )}
+        <StatusPill status={story.status} />
+        {onMoveToBacklog && (
+          <button
+            type="button"
+            onClick={onMoveToBacklog}
+            className="text-xs text-slate-400 hover:text-violet-600 transition-colors opacity-0 group-hover:opacity-100"
+            title="Move to backlog"
+          >
+            ← Backlog
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Modals ────────────────────────────────────────────────────────────────────
+
+function CreateStoryModal({
+  jobId,
+  templates,
   token,
   onCreated,
   onClose,
 }: {
-  projectId: string;
-  teams: TeamSummary[];
+  jobId: string;
+  templates: Workflow[];
   token: string;
-  onCreated: (j: Job) => void;
+  onCreated: (s: Workflow) => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState("");
-  const [jobType, setJobType] = useState<"sprint" | "kanban">("sprint");
-  const [teamId, setTeamId] = useState("");
+  const [points, setPoints] = useState("");
+  const [templateId, setTemplateId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -220,15 +548,30 @@ function CreateJobModal({
     setError(null);
     setSubmitting(true);
     try {
-      const j = await createJob(token, {
-        name: name.trim(),
-        project_id: projectId,
-        team_id: teamId || undefined,
-        job_type: jobType,
-      });
-      onCreated(j);
+      let story: Workflow;
+      const pts = points ? parseInt(points, 10) : undefined;
+
+      if (templateId) {
+        // Clone template workflow into the backlog job
+        story = await cloneWorkflowFromTemplate(token, jobId, templateId);
+        // Rename it and set story points
+        story = await updateWorkflow(token, story.id, {
+          name: name.trim(),
+          story_points: pts,
+        });
+      } else {
+        // Create blank workflow
+        story = await createWorkflow(token, {
+          name: name.trim(),
+          job_id: jobId,
+          story_points: pts,
+        });
+        // Add a default "Define" task
+        await createTask(token, { name: "Define", workflow_id: story.id });
+      }
+      onCreated(story);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create job");
+      setError(err instanceof Error ? err.message : "Failed to create story");
     } finally {
       setSubmitting(false);
     }
@@ -237,53 +580,52 @@ function CreateJobModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-        <h2 className="text-lg font-semibold text-slate-800 mb-5">Add job</h2>
+        <h2 className="text-lg font-semibold text-slate-800 mb-5">Add story to Backlog</h2>
         {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="flex flex-col gap-1">
-            <label htmlFor="job-name" className="text-sm font-medium text-slate-700">Name</label>
+            <label htmlFor="story-name" className="text-sm font-medium text-slate-700">Story name</label>
             <input
-              id="job-name"
+              id="story-name"
               required
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
-              placeholder="e.g. Sprint 1 or Backlog"
+              placeholder="e.g. Implement login flow"
             />
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-sm font-medium text-slate-700">Type</span>
-            <div className="flex gap-3">
-              {(["sprint", "kanban"] as const).map((t) => (
-                <label key={t} className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="radio"
-                    name="job-type"
-                    value={t}
-                    checked={jobType === t}
-                    onChange={() => setJobType(t)}
-                    className="w-4 h-4 text-violet-600 focus:ring-violet-500"
-                  />
-                  <span className="text-sm text-slate-700 capitalize">{t}</span>
-                </label>
-              ))}
-            </div>
+            <label htmlFor="story-points" className="text-sm font-medium text-slate-700">
+              Story points <span className="text-slate-400 font-normal">(optional)</span>
+            </label>
+            <input
+              id="story-points"
+              type="number"
+              min="0"
+              value={points}
+              onChange={(e) => setPoints(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 w-28"
+              placeholder="e.g. 3"
+            />
           </div>
-          {teams.length > 0 && (
+          {templates.length > 0 && (
             <div className="flex flex-col gap-1">
-              <label htmlFor="job-team" className="text-sm font-medium text-slate-700">Team <span className="text-slate-400 font-normal">(optional)</span></label>
+              <label htmlFor="story-template" className="text-sm font-medium text-slate-700">
+                Workflow template <span className="text-slate-400 font-normal">(optional)</span>
+              </label>
               <select
-                id="job-team"
-                value={teamId}
-                onChange={(e) => setTeamId(e.target.value)}
+                id="story-template"
+                value={templateId}
+                onChange={(e) => setTemplateId(e.target.value)}
                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
               >
-                <option value="">No team</option>
-                {teams.map((t) => (
+                <option value="">Blank (Define task only)</option>
+                {templates.map((t) => (
                   <option key={t.id} value={t.id}>{t.name}</option>
                 ))}
               </select>
+              <p className="text-xs text-slate-400">Templates are managed in Obair.</p>
             </div>
           )}
           <div className="flex gap-3 justify-end pt-2">
@@ -295,11 +637,114 @@ function CreateJobModal({
               disabled={submitting || !name.trim()}
               className="px-4 py-2 text-sm font-medium bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
             >
-              {submitting ? "Creating…" : "Create"}
+              {submitting ? "Creating…" : "Add to Backlog"}
             </button>
           </div>
         </form>
       </div>
     </div>
   );
+}
+
+function CreateSprintModal({
+  projectId,
+  token,
+  onCreated,
+  onClose,
+}: {
+  projectId: string;
+  token: string;
+  onCreated: (sprint: Job) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      const sprint = await createJob(token, {
+        name: name.trim(),
+        project_id: projectId,
+        job_type: "sprint",
+        start_date: startDate || undefined,
+        end_date: endDate || undefined,
+      });
+      onCreated(sprint);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create sprint");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <h2 className="text-lg font-semibold text-slate-800 mb-5">New sprint</h2>
+        {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">{error}</div>}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="sprint-name" className="text-sm font-medium text-slate-700">Sprint name</label>
+            <input
+              id="sprint-name"
+              required
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              placeholder="e.g. Sprint 1"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label htmlFor="sprint-start" className="text-sm font-medium text-slate-700">Start date</label>
+              <input
+                id="sprint-start"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="sprint-end" className="text-sm font-medium text-slate-700">End date</label>
+              <input
+                id="sprint-end"
+                type="date"
+                value={endDate}
+                min={startDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              />
+            </div>
+          </div>
+          <div className="flex gap-3 justify-end pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || !name.trim()}
+              className="px-4 py-2 text-sm font-medium bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+            >
+              {submitting ? "Creating…" : "Create sprint"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function fmtDate(iso: string): string {
+  return new Date(iso + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
