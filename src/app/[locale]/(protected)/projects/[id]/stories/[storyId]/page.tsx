@@ -274,8 +274,7 @@ function TaskRow({
     : teamMembers;
 
   function displayName(m: TeamMember): string {
-    const full = [m.user.first_name, m.user.last_name].filter(Boolean).join(" ");
-    return full || m.user.username;
+    return `${m.user.first_name ?? ""} ${m.user.last_name ?? ""}`.trim() || m.user.username;
   }
 
   const assignedMember = task.assigned_to
