@@ -7,6 +7,7 @@ import { getProject, updateProject, deleteProject } from "@/lib/togra-api";
 import {
   createJob,
   deleteJob,
+  updateJob,
   listWorkflows,
   createWorkflow,
   updateWorkflow,
@@ -196,6 +197,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           loadSprintStories={loadSprintStories}
           onSprintCreated={onSprintCreated}
           onSprintDeleted={(sprintId) => setConfirmDeleteSprintId(sprintId)}
+          onSprintUpdated={(sprintId, patch) => {
+            setProject((prev) =>
+              prev ? { ...prev, jobs: prev.jobs.map((j) => j.id === sprintId ? { ...j, ...patch } : j) } : prev
+            );
+          }}
           onStoryMoved={onStoryMoved}
         />
       </div>
@@ -413,6 +419,7 @@ function SprintsPanel({
   loadSprintStories,
   onSprintCreated,
   onSprintDeleted,
+  onSprintUpdated,
   onStoryMoved,
 }: {
   projectId: string;
@@ -422,6 +429,7 @@ function SprintsPanel({
   loadSprintStories: (sprintId: string) => Promise<Workflow[]>;
   onSprintCreated: (sprint: Job) => void;
   onSprintDeleted: (sprintId: string) => void;
+  onSprintUpdated: (sprintId: string, patch: Partial<Job>) => void;
   onStoryMoved: (storyId: string, targetJobId: string | null) => void;
 }) {
   const [showCreate, setShowCreate] = useState(false);
@@ -456,6 +464,7 @@ function SprintsPanel({
               token={token}
               loadStories={loadSprintStories}
               onDelete={() => onSprintDeleted(sprint.id)}
+              onUpdate={(patch) => onSprintUpdated(sprint.id, patch)}
               onMoveToBacklog={(storyId) => onStoryMoved(storyId, null)}
             />
           ))
@@ -475,12 +484,13 @@ function SprintsPanel({
 }
 
 function SprintCard({
-  sprint,
+  sprint: initialSprint,
   projectId,
   backlogJobId,
   token,
   loadStories,
   onDelete,
+  onUpdate,
   onMoveToBacklog,
 }: {
   sprint: Job;
@@ -489,10 +499,17 @@ function SprintCard({
   token: string;
   loadStories: (sprintId: string) => Promise<Workflow[]>;
   onDelete: () => void;
+  onUpdate: (patch: Partial<Job>) => void;
   onMoveToBacklog: (storyId: string) => void;
 }) {
+  const [sprint, setSprint] = useState(initialSprint);
   const [stories, setStories] = useState<Workflow[] | null>(null);
   const [expanded, setExpanded] = useState(true);
+  const [showEdit, setShowEdit] = useState(false);
+  const [confirmStart, setConfirmStart] = useState(false);
+  const [confirmComplete, setConfirmComplete] = useState(false);
+
+  useEffect(() => { setSprint(initialSprint); }, [initialSprint]);
 
   useEffect(() => {
     if (expanded && stories === null) {
@@ -504,50 +521,64 @@ function SprintCard({
 
   const dateRange = sprint.start_date && sprint.end_date
     ? `${fmtDate(sprint.start_date)} – ${fmtDate(sprint.end_date)}`
-    : sprint.start_date
-    ? `From ${fmtDate(sprint.start_date)}`
-    : null;
+    : sprint.start_date ? `From ${fmtDate(sprint.start_date)}` : null;
+
+  async function applyStatusChange(newStatus: string) {
+    const updated = await updateJob(token, sprint.id, { status: newStatus });
+    setSprint(updated);
+    onUpdate({ status: updated.status });
+  }
+
+  async function saveEdit(name: string, startDate: string, endDate: string) {
+    const updated = await updateJob(token, sprint.id, {
+      name: name.trim(),
+      start_date: startDate || undefined,
+      end_date: endDate || undefined,
+    });
+    setSprint(updated);
+    onUpdate({ name: updated.name, start_date: updated.start_date, end_date: updated.end_date });
+    setShowEdit(false);
+  }
 
   return (
+    <>
     <div className="border border-slate-200 rounded-xl overflow-hidden">
       {/* Sprint header */}
       <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-200">
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="text-slate-400 hover:text-slate-600 transition-colors"
-        >
-          <svg viewBox="0 0 16 16" fill="currentColor" className={`w-4 h-4 transition-transform ${expanded ? "" : "-rotate-90"}`}>
-            <path d="M4 6l4 4 4-4H4z"/>
-          </svg>
+        <button type="button" onClick={() => setExpanded((v) => !v)} className="text-slate-400 hover:text-slate-600 transition-colors">
+          <svg viewBox="0 0 16 16" fill="currentColor" className={`w-4 h-4 transition-transform ${expanded ? "" : "-rotate-90"}`}><path d="M4 6l4 4 4-4H4z"/></svg>
         </button>
         <div className="flex-1 min-w-0">
           <span className="text-sm font-semibold text-slate-800">{sprint.name}</span>
           {dateRange && <span className="ml-2 text-xs text-slate-400">{dateRange}</span>}
         </div>
-        <div className="flex items-center gap-2 text-xs text-slate-400">
+        <div className="flex items-center gap-2 shrink-0">
           {stories !== null && (
-            <>
-              <span>{stories.length} {stories.length === 1 ? "story" : "stories"}</span>
-              {totalPoints > 0 && <span>· {totalPoints} pts</span>}
-            </>
+            <span className="text-xs text-slate-400">{stories.length} {stories.length === 1 ? "story" : "stories"}{totalPoints > 0 ? ` · ${totalPoints} pts` : ""}</span>
           )}
           <StatusPill status={sprint.status} />
+          {sprint.status === "Not Started" && (
+            <button type="button" onClick={() => setConfirmStart(true)}
+              className="text-xs font-medium text-emerald-700 hover:text-emerald-800 border border-emerald-300 hover:bg-emerald-50 px-2 py-0.5 rounded-md transition-colors">
+              Start
+            </button>
+          )}
+          {sprint.status === "In Progress" && (
+            <button type="button" onClick={() => setConfirmComplete(true)}
+              className="text-xs font-medium text-blue-700 hover:text-blue-800 border border-blue-300 hover:bg-blue-50 px-2 py-0.5 rounded-md transition-colors">
+              Complete
+            </button>
+          )}
+          <Link href={`/projects/${projectId}/jobs/${sprint.id}`} className="text-xs text-violet-600 hover:text-violet-700 font-medium transition-colors">
+            Board →
+          </Link>
+          <button type="button" onClick={() => setShowEdit(true)} className="text-slate-400 hover:text-slate-700 transition-colors p-1 rounded" title="Edit sprint">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354l-1.086-1.086ZM11.189 6.25 9.75 4.81l-6.286 6.287a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.25.25 0 0 0 .108-.064L11.19 6.25Z"/></svg>
+          </button>
+          <button type="button" onClick={onDelete} className="text-slate-300 hover:text-red-500 transition-colors p-1 rounded" title="Delete sprint">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75Zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.559a.75.75 0 1 0-1.492.14l.62 6.498A1.75 1.75 0 0 0 5.365 14.8h5.27a1.75 1.75 0 0 0 1.741-1.603l.62-6.498a.75.75 0 1 0-1.492-.14l-.62 6.498a.25.25 0 0 1-.249.229H5.365a.25.25 0 0 1-.249-.229l-.62-6.498Z"/></svg>
+          </button>
         </div>
-        <Link
-          href={`/projects/${projectId}/jobs/${sprint.id}`}
-          className="text-xs text-violet-600 hover:text-violet-700 font-medium transition-colors shrink-0"
-        >
-          Board →
-        </Link>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="text-slate-300 hover:text-red-500 transition-colors p-1"
-          title="Delete sprint"
-        >
-          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75Zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.559a.75.75 0 1 0-1.492.14l.62 6.498A1.75 1.75 0 0 0 5.365 14.8h5.27a1.75 1.75 0 0 0 1.741-1.603l.62-6.498a.75.75 0 1 0-1.492-.14l-.62 6.498a.25.25 0 0 1-.249.229H5.365a.25.25 0 0 1-.249-.229l-.62-6.498Z"/></svg>
-        </button>
       </div>
 
       {/* Sprint stories */}
@@ -559,16 +590,97 @@ function SprintCard({
             <p className="px-4 py-3 text-xs text-slate-400 italic">No stories in this sprint yet.</p>
           ) : (
             stories.map((story) => (
-              <SprintStoryRow
-                key={story.id}
-                story={story}
-                projectId={projectId}
-                onMoveToBacklog={backlogJobId ? () => onMoveToBacklog(story.id) : undefined}
-              />
+              <SprintStoryRow key={story.id} story={story} projectId={projectId}
+                onMoveToBacklog={backlogJobId ? () => onMoveToBacklog(story.id) : undefined} />
             ))
           )}
         </div>
       )}
+    </div>
+
+    {showEdit && (
+      <EditSprintModal sprint={sprint} onSave={saveEdit} onClose={() => setShowEdit(false)} />
+    )}
+    {confirmStart && (
+      <ConfirmDialog
+        title={`Start "${sprint.name}"?`}
+        message="The sprint status will be set to In Progress."
+        confirmLabel="Start sprint"
+        variant="primary"
+        onConfirm={() => { setConfirmStart(false); applyStatusChange("In Progress"); }}
+        onCancel={() => setConfirmStart(false)}
+      />
+    )}
+    {confirmComplete && (
+      <ConfirmDialog
+        title={`Complete "${sprint.name}"?`}
+        message="The sprint status will be set to Complete. Unfinished stories will remain in the sprint."
+        confirmLabel="Complete sprint"
+        variant="primary"
+        onConfirm={() => { setConfirmComplete(false); applyStatusChange("Complete"); }}
+        onCancel={() => setConfirmComplete(false)}
+      />
+    )}
+    </>
+  );
+}
+
+function EditSprintModal({
+  sprint,
+  onSave,
+  onClose,
+}: {
+  sprint: Job;
+  onSave: (name: string, startDate: string, endDate: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(sprint.name);
+  const [startDate, setStartDate] = useState(sprint.start_date ?? "");
+  const [endDate, setEndDate] = useState(sprint.end_date ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setSaving(true);
+    setError(null);
+    try { await onSave(name, startDate, endDate); }
+    catch (err) { setError(err instanceof Error ? err.message : "Failed to save"); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6">
+        <h3 className="font-semibold text-slate-800 text-base mb-5">Edit sprint</h3>
+        {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">{error}</div>}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-slate-700">Sprint name</label>
+            <input required autoFocus value={name} onChange={(e) => setName(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-slate-700">Start date</label>
+              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-slate-700">End date</label>
+              <input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+            </div>
+          </div>
+          <div className="flex gap-3 justify-end pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
+            <button type="submit" disabled={saving || !name.trim()} className="px-4 py-2 text-sm font-medium bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg transition-colors">
+              {saving ? "Saving…" : "Save changes"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

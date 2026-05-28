@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { listProjects, createProjectWithBacklog, updateProject, deleteProject } from "@/lib/togra-api";
-import { getMyTeams } from "@/lib/awe-api";
+import { getMyTeams, getTeam } from "@/lib/awe-api";
 import { getObairTeamIds } from "@/lib/auth-api";
-import type { Project, TeamSummary } from "@/lib/types";
+import type { Project, TeamSummary, TeamMember } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 import TograIcon from "@/components/TograIcon";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -202,20 +202,38 @@ function CreateProjectModal({
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [teamId, setTeamId] = useState("");
+  const [teamId, setTeamId] = useState(teams.length === 1 ? teams[0].id : "");
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [pmId, setPmId] = useState("");
+  const [loadingMembers, setLoadingMembers] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Load active team members whenever the selected team changes
+  useEffect(() => {
+    if (!teamId) { setMembers([]); setPmId(""); return; }
+    setLoadingMembers(true);
+    getTeam(token, teamId)
+      .then((t) => {
+        const active = t.members.filter((m) => m.status === "active");
+        setMembers(active);
+        setPmId("");
+      })
+      .catch(() => setMembers([]))
+      .finally(() => setLoadingMembers(false));
+  }, [teamId, token]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || !teamId) return;
     setError(null);
     setSubmitting(true);
     try {
       const { project: p } = await createProjectWithBacklog(token, {
         name: name.trim(),
         description: description.trim() || undefined,
-        team_id: teamId || undefined,
+        team_id: teamId,
+        project_manager_id: pmId || undefined,
       });
       onCreated(p);
     } catch (err) {
@@ -225,48 +243,50 @@ function CreateProjectModal({
     }
   }
 
+  const inputCls = "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500";
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6">
         <h2 className="text-lg font-semibold text-slate-800 mb-5">New project</h2>
         {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="flex flex-col gap-1">
             <label htmlFor="proj-name" className="text-sm font-medium text-slate-700">Project name</label>
-            <input
-              id="proj-name"
-              required
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
-              placeholder="e.g. Ullav Portal v2"
-            />
+            <input id="proj-name" required autoFocus value={name} onChange={(e) => setName(e.target.value)}
+              className={inputCls} placeholder="e.g. Ullav Portal v2" />
           </div>
           <div className="flex flex-col gap-1">
-            <label htmlFor="proj-desc" className="text-sm font-medium text-slate-700">Description <span className="text-slate-400 font-normal">(optional)</span></label>
-            <textarea
-              id="proj-desc"
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none"
-            />
+            <label htmlFor="proj-desc" className="text-sm font-medium text-slate-700">
+              Description <span className="text-slate-400 font-normal">(optional)</span>
+            </label>
+            <textarea id="proj-desc" rows={2} value={description} onChange={(e) => setDescription(e.target.value)}
+              className={`${inputCls} resize-none`} />
           </div>
-          {teams.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <label htmlFor="proj-team" className="text-sm font-medium text-slate-700">Team</label>
+            <select id="proj-team" required value={teamId} onChange={(e) => setTeamId(e.target.value)} className={inputCls}>
+              <option value="">— Select a team —</option>
+              {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          {teamId && (
             <div className="flex flex-col gap-1">
-              <label htmlFor="proj-team" className="text-sm font-medium text-slate-700">Owner team <span className="text-slate-400 font-normal">(optional)</span></label>
-              <select
-                id="proj-team"
-                value={teamId}
-                onChange={(e) => setTeamId(e.target.value)}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
-              >
-                <option value="">No team</option>
-                {teams.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
+              <label htmlFor="proj-pm" className="text-sm font-medium text-slate-700">
+                Project Manager <span className="text-slate-400 font-normal">(optional)</span>
+              </label>
+              {loadingMembers ? (
+                <p className="text-xs text-slate-400 py-2">Loading team members…</p>
+              ) : (
+                <select id="proj-pm" value={pmId} onChange={(e) => setPmId(e.target.value)} className={inputCls}>
+                  <option value="">— Assign later —</option>
+                  {members.map((m) => (
+                    <option key={m.id} value={m.user.id}>
+                      {m.user.username}{m.user.first_name ? ` (${m.user.first_name} ${m.user.last_name ?? ""})`.trimEnd() : ""}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           )}
           <div className="flex gap-3 justify-end pt-2">
@@ -275,7 +295,7 @@ function CreateProjectModal({
             </button>
             <button
               type="submit"
-              disabled={submitting || !name.trim()}
+              disabled={submitting || !name.trim() || !teamId}
               className="px-4 py-2 text-sm font-medium bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
             >
               {submitting ? "Creating…" : "Create"}
