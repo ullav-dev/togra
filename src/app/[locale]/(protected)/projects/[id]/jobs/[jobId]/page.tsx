@@ -1,17 +1,17 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, useRef, use } from "react";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { getJob, listWorkflows, listTasks, createTask, updateTask } from "@/lib/awe-api";
 import { getProject } from "@/lib/togra-api";
 import type { Job, Workflow, Task, Project, Status } from "@/lib/types";
 
-const COLUMNS: { status: Status; label: string; colour: string; header: string }[] = [
-  { status: "Not Started", label: "To Do",       colour: "bg-slate-50 border-slate-200",   header: "text-slate-500" },
-  { status: "In Progress", label: "In Progress", colour: "bg-blue-50 border-blue-200",     header: "text-blue-700" },
-  { status: "On Hold",     label: "On Hold",     colour: "bg-amber-50 border-amber-200",   header: "text-amber-700" },
-  { status: "Complete",    label: "Done",        colour: "bg-emerald-50 border-emerald-200", header: "text-emerald-700" },
+const COLUMNS: { status: Status; label: string; bg: string; border: string; header: string; overBorder: string }[] = [
+  { status: "Not Started", label: "To Do",       bg: "bg-slate-50",   border: "border-slate-200",   header: "text-slate-500",  overBorder: "border-violet-400 bg-violet-50" },
+  { status: "In Progress", label: "In Progress", bg: "bg-blue-50",    border: "border-blue-200",    header: "text-blue-700",   overBorder: "border-blue-400 bg-blue-100" },
+  { status: "On Hold",     label: "On Hold",     bg: "bg-amber-50",   border: "border-amber-200",   header: "text-amber-700",  overBorder: "border-amber-400 bg-amber-100" },
+  { status: "Complete",    label: "Done",        bg: "bg-emerald-50", border: "border-emerald-200", header: "text-emerald-700", overBorder: "border-emerald-400 bg-emerald-100" },
 ];
 
 export default function BoardPage({
@@ -29,6 +29,7 @@ export default function BoardPage({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -49,10 +50,19 @@ export default function BoardPage({
     listTasks(token, selectedWorkflow).then(setTasks);
   }, [token, selectedWorkflow]);
 
-  async function onStatusChange(task: Task, newStatus: Status) {
+  async function onStatusChange(taskId: string, newStatus: Status) {
     if (!token) return;
-    const updated = await updateTask(token, task.id, { status: newStatus });
-    setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task || task.status === newStatus) return;
+    // Optimistic update
+    setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status: newStatus } : t));
+    try {
+      const updated = await updateTask(token, taskId, { status: newStatus });
+      setTasks((prev) => prev.map((t) => t.id === updated.id ? updated : t));
+    } catch {
+      // Revert on failure
+      setTasks((prev) => prev.map((t) => t.id === taskId ? task : t));
+    }
   }
 
   function onTaskCreated(task: Task) {
@@ -123,8 +133,11 @@ export default function BoardPage({
                   key={col.status}
                   column={col}
                   tasks={colTasks}
-                  allStatuses={COLUMNS.map((c) => c.status)}
-                  onStatusChange={onStatusChange}
+                  draggingTaskId={draggingTaskId}
+                  onDragStart={setDraggingTaskId}
+                  onDragEnd={() => setDraggingTaskId(null)}
+                  onDrop={(taskId) => onStatusChange(taskId, col.status)}
+                  onStatusChange={(task, status) => onStatusChange(task.id, status)}
                 />
               );
             })}
@@ -147,16 +160,61 @@ export default function BoardPage({
 function KanbanColumn({
   column,
   tasks,
-  allStatuses,
+  draggingTaskId,
+  onDragStart,
+  onDragEnd,
+  onDrop,
   onStatusChange,
 }: {
   column: (typeof COLUMNS)[number];
   tasks: Task[];
-  allStatuses: Status[];
+  draggingTaskId: string | null;
+  onDragStart: (id: string) => void;
+  onDragEnd: () => void;
+  onDrop: (taskId: string) => void;
   onStatusChange: (task: Task, status: Status) => void;
 }) {
+  const [isOver, setIsOver] = useState(false);
+  // Counter avoids false leave events when cursor moves over child elements.
+  const dragCounter = useRef(0);
+
+  function handleDragEnter(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounter.current++;
+    setIsOver(true);
+  }
+
+  function handleDragLeave() {
+    dragCounter.current--;
+    if (dragCounter.current === 0) setIsOver(false);
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounter.current = 0;
+    setIsOver(false);
+    const taskId = e.dataTransfer.getData("taskId");
+    if (taskId) onDrop(taskId);
+  }
+
+  const isDraggingActive = draggingTaskId !== null;
+  const colClass = isOver
+    ? `border-2 ${column.overBorder}`
+    : `border ${column.bg} ${column.border}`;
+
   return (
-    <div className={`flex flex-col rounded-xl border ${column.colour} w-72 shrink-0`}>
+    <div
+      className={`flex flex-col rounded-xl w-72 shrink-0 transition-colors ${colClass}`}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       <div className="px-4 py-3 border-b border-inherit">
         <div className="flex items-center justify-between">
           <span className={`text-sm font-semibold ${column.header}`}>{column.label}</span>
@@ -165,17 +223,23 @@ function KanbanColumn({
           </span>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-24">
+      <div className={`flex-1 overflow-y-auto p-3 space-y-2 min-h-24 transition-colors ${isOver ? "bg-white/40" : ""}`}>
         {tasks.map((task) => (
           <StoryCard
             key={task.id}
             task={task}
-            allStatuses={allStatuses}
+            isDragging={draggingTaskId === task.id}
+            isDraggingActive={isDraggingActive}
+            allStatuses={COLUMNS.map((c) => c.status)}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
             onStatusChange={onStatusChange}
           />
         ))}
         {tasks.length === 0 && (
-          <p className="text-xs text-slate-400 text-center py-4">No stories</p>
+          <p className={`text-xs text-center py-4 transition-colors ${isOver ? "text-violet-400" : "text-slate-400"}`}>
+            {isOver ? "Drop here" : "No stories"}
+          </p>
         )}
       </div>
     </div>
@@ -184,26 +248,61 @@ function KanbanColumn({
 
 function StoryCard({
   task,
+  isDragging,
+  isDraggingActive,
   allStatuses,
+  onDragStart,
+  onDragEnd,
   onStatusChange,
 }: {
   task: Task;
+  isDragging: boolean;
+  isDraggingActive: boolean;
   allStatuses: Status[];
+  onDragStart: (id: string) => void;
+  onDragEnd: () => void;
   onStatusChange: (task: Task, status: Status) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
+  function handleDragStart(e: React.DragEvent) {
+    e.dataTransfer.setData("taskId", task.id);
+    e.dataTransfer.effectAllowed = "move";
+    // Slight delay so the drag image renders before the card goes semi-transparent
+    requestAnimationFrame(() => onDragStart(task.id));
+  }
+
   return (
-    <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-sm hover:shadow-md transition-shadow group">
+    <div
+      draggable
+      onDragStart={handleDragStart}
+      onDragEnd={onDragEnd}
+      className={`bg-white rounded-lg border p-3 shadow-sm select-none transition-all
+        ${isDragging
+          ? "opacity-40 border-violet-300 shadow-none cursor-grabbing"
+          : isDraggingActive
+          ? "border-slate-200 cursor-grab opacity-90"
+          : "border-slate-200 hover:shadow-md cursor-grab"
+        } group`}
+    >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-medium text-slate-800 leading-snug">{task.name}</p>
+        {/* Drag handle */}
+        <div className="mt-0.5 shrink-0 text-slate-300 group-hover:text-slate-400 transition-colors cursor-grab">
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+            <circle cx="5" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/>
+            <circle cx="10" cy="4" r="1.2"/><circle cx="10" cy="8" r="1.2"/><circle cx="10" cy="12" r="1.2"/>
+          </svg>
+        </div>
+        <p className="flex-1 text-sm font-medium text-slate-800 leading-snug">{task.name}</p>
         <div className="relative shrink-0">
           <button
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
             className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors opacity-0 group-hover:opacity-100"
           >
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path d="M8 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM1.5 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM14.5 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/></svg>
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+              <path d="M8 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM1.5 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM14.5 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/>
+            </svg>
           </button>
           {menuOpen && (
             <StatusMenu
@@ -216,10 +315,10 @@ function StoryCard({
         </div>
       </div>
       {task.description && (
-        <p className="text-xs text-slate-500 mt-1 line-clamp-2">{task.description}</p>
+        <p className="text-xs text-slate-500 mt-1.5 line-clamp-2 ml-5">{task.description}</p>
       )}
       {task.assigned_to && (
-        <p className="text-xs text-slate-400 mt-2">→ {task.assigned_to}</p>
+        <p className="text-xs text-slate-400 mt-2 ml-5">→ {task.assigned_to}</p>
       )}
     </div>
   );
