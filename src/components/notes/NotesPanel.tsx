@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MarkdownEditor from "@/components/MarkdownEditor";
@@ -14,16 +15,16 @@ import {
 } from "@/lib/awe-api";
 import type { Note, NoteFolder, NoteEntityType } from "@/lib/types";
 
-function formatRelative(iso: string): string {
+function formatRelative(iso: string, t: (key: string, params?: Record<string, string | number | Date>) => string): string {
   try {
     const diff = Date.now() - new Date(iso).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
+    if (mins < 1) return t("justNow");
+    if (mins < 60) return t("mAgo", { count: mins });
     const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
+    if (hours < 24) return t("hAgo", { count: hours });
     const days = Math.floor(hours / 24);
-    return days < 7 ? `${days}d ago` : new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return days < 7 ? t("dAgo", { count: days }) : new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   } catch { return iso; }
 }
 
@@ -44,6 +45,7 @@ interface EditorProps {
 }
 
 function NoteEditor({ initial, onSubmit, onCancel, saving, showShareToggle }: EditorProps) {
+  const t = useTranslations("notes");
   const [title, setTitle] = useState(initial?.title ?? "");
   const [body, setBody] = useState(initial?.body ?? "");
   const [isShared, setIsShared] = useState(initial?.is_shared ?? false);
@@ -54,7 +56,7 @@ function NoteEditor({ initial, onSubmit, onCancel, saving, showShareToggle }: Ed
     if (!title.trim()) return;
     setError(null);
     try { await onSubmit(title.trim(), body, isShared); }
-    catch (err) { setError(err instanceof Error ? err.message : "Save failed"); }
+    catch (err) { setError(err instanceof Error ? err.message : t("saveFailed")); }
   }
 
   return (
@@ -65,10 +67,10 @@ function NoteEditor({ initial, onSubmit, onCancel, saving, showShareToggle }: Ed
         autoFocus
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="Note title *"
+        placeholder={t("titlePlaceholder")}
         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-400"
       />
-      <MarkdownEditor value={body} onChange={setBody} placeholder="Add details in markdown…" height={200} />
+      <MarkdownEditor value={body} onChange={setBody} placeholder={t("bodyPlaceholder")} height={200} />
       {showShareToggle && (
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <button
@@ -78,15 +80,15 @@ function NoteEditor({ initial, onSubmit, onCancel, saving, showShareToggle }: Ed
           >
             <span className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${isShared ? "translate-x-4" : "translate-x-0"}`} />
           </button>
-          <span className="text-xs text-slate-600">{isShared ? "Shared with team" : "Private"}</span>
+          <span className="text-xs text-slate-600">{isShared ? t("sharedWithTeam") : t("private")}</span>
         </label>
       )}
       <div className="flex gap-2 justify-end pt-1">
         <button type="button" onClick={onCancel} className="text-sm text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors">
-          Cancel
+          {t("cancel")}
         </button>
         <button type="submit" disabled={saving || !title.trim()} className="text-sm font-medium bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white px-4 py-1.5 rounded-lg transition-colors">
-          {saving ? "Saving…" : "Save"}
+          {saving ? t("saving") : t("save")}
         </button>
       </div>
     </form>
@@ -96,6 +98,7 @@ function NoteEditor({ initial, onSubmit, onCancel, saving, showShareToggle }: Ed
 // ── NoteThread ────────────────────────────────────────────────────────────────
 
 function NoteThread({ note, token, resolveCreator }: { note: Note; token: string; resolveCreator: (id: string) => string }) {
+  const t = useTranslations("notes");
   const [replies, setReplies] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -125,9 +128,9 @@ function NoteThread({ note, token, resolveCreator }: { note: Note; token: string
   return (
     <div className="border-t border-slate-100 pt-3 mt-2 space-y-3">
       <h4 className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-        Replies{replies.length > 0 && <span className="ml-1 font-normal normal-case">({replies.length})</span>}
+        {t("repliesTitle")}{replies.length > 0 && <span className="ml-1 font-normal normal-case">({replies.length})</span>}
       </h4>
-      {loading ? <p className="text-xs text-slate-400">Loading…</p> : (
+      {loading ? <p className="text-xs text-slate-400">{t("loadingReplies")}</p> : (
         <div className="space-y-3">
           {replies.map((reply) => (
             <div key={reply.id} className="flex gap-2">
@@ -137,7 +140,7 @@ function NoteThread({ note, token, resolveCreator }: { note: Note; token: string
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 mb-0.5">
                   <span className="text-xs font-medium text-slate-700">{resolveCreator(reply.created_by)}</span>
-                  <span className="text-[10px] text-slate-400">{formatRelative(reply.created_at)}</span>
+                  <span className="text-[10px] text-slate-400">{formatRelative(reply.created_at, t)}</span>
                 </div>
                 {reply.body ? (
                   <div className="prose prose-xs prose-slate max-w-none text-sm">
@@ -151,20 +154,20 @@ function NoteThread({ note, token, resolveCreator }: { note: Note; token: string
       )}
       {note.is_shared && !showForm && (
         <button onClick={() => setShowForm(true)} className="text-xs font-medium text-violet-700 hover:text-violet-900 transition-colors">
-          + Reply
+          {t("reply")}
         </button>
       )}
       {note.is_shared && showForm && (
         <form onSubmit={handleSubmit} className="space-y-2">
           <textarea
             autoFocus value={draft} onChange={(e) => setDraft(e.target.value)}
-            placeholder="Write a reply…" rows={3}
+            placeholder={t("replyPlaceholder")} rows={3}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-400 resize-none"
           />
           <div className="flex gap-2 justify-end">
-            <button type="button" onClick={() => { setShowForm(false); setDraft(""); }} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded transition-colors">Cancel</button>
+            <button type="button" onClick={() => { setShowForm(false); setDraft(""); }} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded transition-colors">{t("cancel")}</button>
             <button type="submit" disabled={submitting || !draft.trim()} className="text-xs font-medium bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white px-4 py-1.5 rounded-lg transition-colors">
-              {submitting ? "Sending…" : "Reply"}
+              {submitting ? t("sending") : t("reply")}
             </button>
           </div>
         </form>
@@ -180,6 +183,7 @@ function NoteView({ note, folders, currentUserId, token, resolveCreator, onEdit,
   resolveCreator: (id: string) => string;
   onEdit: () => void; onDelete: () => void; onMove: (folderId: string | null) => void; deleting: boolean;
 }) {
+  const t = useTranslations("notes");
   const isOwner = note.created_by === currentUserId;
   return (
     <div className="space-y-3">
@@ -190,8 +194,8 @@ function NoteView({ note, folders, currentUserId, token, resolveCreator, onEdit,
             <span className="text-xs text-slate-500">{resolveCreator(note.created_by)}</span>
             <span className="text-xs text-slate-400">{formatDate(note.updated_at)}</span>
             {note.is_shared
-              ? <span className="text-xs text-violet-600 font-medium">Shared</span>
-              : <span className="text-xs text-slate-400">Private</span>}
+              ? <span className="text-xs text-violet-600 font-medium">{t("shared")}</span>
+              : <span className="text-xs text-slate-400">{t("private")}</span>}
           </div>
         </div>
         {isOwner && (
@@ -207,9 +211,9 @@ function NoteView({ note, folders, currentUserId, token, resolveCreator, onEdit,
       </div>
       {isOwner && folders.length > 0 && (
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-slate-400">Folder:</span>
+          <span className="text-xs text-slate-400">{t("folder")}</span>
           <select value={note.folder_id ?? ""} onChange={(e) => onMove(e.target.value || null)} className="text-xs border border-slate-200 rounded px-2 py-1 focus:border-violet-400 focus:outline-none bg-white text-slate-600">
-            <option value="">— Unfiled —</option>
+            <option value="">{t("unfiled")}</option>
             {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
         </div>
@@ -220,7 +224,7 @@ function NoteView({ note, folders, currentUserId, token, resolveCreator, onEdit,
             {note.body}
           </ReactMarkdown>
         </div>
-      ) : <p className="text-sm text-slate-400 italic border-t border-slate-100 pt-3">No body</p>}
+      ) : <p className="text-sm text-slate-400 italic border-t border-slate-100 pt-3">{t("noBody")}</p>}
       <NoteThread note={note} token={token} resolveCreator={resolveCreator} />
     </div>
   );
@@ -237,6 +241,7 @@ interface NotesPanelProps {
 
 export default function NotesPanel({ entityType, entityId, isTeam, compact = false }: NotesPanelProps) {
   const { user, token } = useAuth();
+  const t = useTranslations("notes");
   const [notes, setNotes] = useState<Note[]>([]);
   const [folders, setFolders] = useState<NoteFolder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -254,7 +259,7 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
   const [renameFolderName, setRenameFolderName] = useState("");
 
   const currentUserId = user?.id ?? "";
-  const resolveCreator = (id: string) => id === currentUserId ? (user?.username ?? "You") : id;
+  const resolveCreator = (id: string) => id === currentUserId ? (user?.username ?? t("you")) : id;
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -319,7 +324,7 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
     try {
       const updated = await moveNote(token, noteId, folderId);
       setNotes((prev) => prev.map((n) => n.id === updated.id ? updated : n));
-    } catch { alert("Failed to move note"); }
+    } catch { /* ignore */ }
   }
 
   async function handleCreateFolder() {
@@ -328,7 +333,7 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
       const folder = await createNoteFolder(token, newFolderName.trim());
       setFolders((prev) => [...prev, folder].sort((a, b) => a.name.localeCompare(b.name)));
       setNewFolderName(""); setCreatingFolder(false);
-    } catch { alert("Failed to create folder"); }
+    } catch { /* ignore */ }
   }
 
   async function handleRenameFolder(id: string, name: string) {
@@ -336,7 +341,7 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
     try {
       const updated = await updateNoteFolder(token, id, name.trim());
       setFolders((prev) => prev.map((f) => f.id === updated.id ? updated : f).sort((a, b) => a.name.localeCompare(b.name)));
-    } catch { alert("Failed to rename folder"); }
+    } catch { /* ignore */ }
     finally { setRenamingFolderId(null); }
   }
 
@@ -347,7 +352,7 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
       setFolders((prev) => prev.filter((f) => f.id !== folder.id));
       setNotes((prev) => prev.map((n) => n.folder_id === folder.id ? { ...n, folder_id: null } : n));
       if (activeFolder === folder.id) setActiveFolder("all");
-    } catch { alert("Failed to delete folder"); }
+    } catch { /* ignore */ }
   }
 
   const filterNotes = (all: Note[]) => {
@@ -359,24 +364,24 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
   };
   const visibleNotes = filterNotes(topLevel);
 
-  if (loading) return <div className="text-sm text-slate-400 py-6 text-center">Loading notes…</div>;
+  if (loading) return <div className="text-sm text-slate-400 py-6 text-center">{t("loading")}</div>;
   if (error) return (
     <div className="text-sm text-red-600 py-4 text-center">
       {error}
-      <button onClick={load} className="block mx-auto mt-2 text-xs text-violet-700 hover:underline">Retry</button>
+      <button onClick={load} className="block mx-auto mt-2 text-xs text-violet-700 hover:underline">{t("retry")}</button>
     </div>
   );
 
   const mainContent = () => {
     if (mode === "create") return (
       <div className="bg-white rounded-xl border border-slate-200 p-4">
-        <h3 className="text-sm font-semibold text-slate-700 mb-3">New note</h3>
+        <h3 className="text-sm font-semibold text-slate-700 mb-3">{t("newNoteTitle")}</h3>
         <NoteEditor saving={saving} showShareToggle={isTeam} onSubmit={handleCreate} onCancel={() => setMode("list")} />
       </div>
     );
     if (mode === "edit" && selectedNote) return (
       <div className="bg-white rounded-xl border border-slate-200 p-4">
-        <h3 className="text-sm font-semibold text-slate-700 mb-3">Edit note</h3>
+        <h3 className="text-sm font-semibold text-slate-700 mb-3">{t("editNoteTitle")}</h3>
         <NoteEditor initial={selectedNote} saving={saving} showShareToggle={isTeam} onSubmit={handleUpdate} onCancel={() => setMode("view")} />
       </div>
     );
@@ -394,9 +399,9 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
     <div className="space-y-2">
       {visibleNotes.length === 0 ? (
         <div className="text-center py-8 text-slate-400">
-          <p className="text-sm">No notes yet</p>
+          <p className="text-sm">{t("noNotes")}</p>
           <button onClick={() => { setSelectedId(null); setMode("create"); }} className="mt-2 text-sm text-violet-700 hover:text-violet-800 font-medium transition-colors">
-            Add the first note
+            {t("addFirstNote")}
           </button>
         </div>
       ) : (
@@ -413,7 +418,7 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-[10px] text-slate-400">{resolveCreator(note.created_by)}</span>
                 <span className="text-[10px] text-slate-300">·</span>
-                <span className="text-[10px] text-slate-400">{formatRelative(note.updated_at)}</span>
+                <span className="text-[10px] text-slate-400">{formatRelative(note.updated_at, t)}</span>
                 {folderName && <><span className="text-[10px] text-slate-300">·</span><span className="text-[10px] text-slate-400">📁 {folderName}</span></>}
               </div>
             </button>
@@ -427,18 +432,18 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
     <>
       {confirmDeleteNote && (
         <ConfirmDialog
-          title={`Delete "${confirmDeleteNote.title}"?`}
-          message="This note and all its replies will be permanently deleted."
-          confirmLabel="Delete note"
+          title={t("deleteNoteTitle", { title: confirmDeleteNote.title })}
+          message={t("deleteNoteMessage")}
+          confirmLabel={t("deleteNoteLabel")}
           onConfirm={() => { const n = confirmDeleteNote; setConfirmDeleteNote(null); doDeleteNote(n); }}
           onCancel={() => setConfirmDeleteNote(null)}
         />
       )}
       {confirmDeleteFolder && (
         <ConfirmDialog
-          title={`Delete folder "${confirmDeleteFolder.name}"?`}
-          message="Notes in this folder will be unfiled but not deleted."
-          confirmLabel="Delete folder"
+          title={t("deleteFolderTitle", { name: confirmDeleteFolder.name })}
+          message={t("deleteFolderMessage")}
+          confirmLabel={t("deleteFolderLabel")}
           onConfirm={() => { const f = confirmDeleteFolder; setConfirmDeleteFolder(null); doDeleteFolder(f); }}
           onCancel={() => setConfirmDeleteFolder(null)}
         />
@@ -446,17 +451,19 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
     </>
   );
 
+  const noteCount = visibleNotes.length === 1 ? t("noteCountSingle") : t("noteCountPlural", { count: visibleNotes.length });
+
   // Compact layout
   if (compact) return (
     <>
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Notes ({topLevel.length})</span>
-          <button onClick={() => { setSelectedId(null); setMode("create"); }} className="text-xs font-medium text-violet-700 hover:text-violet-800 transition-colors">+ New note</button>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t("compactTitle", { count: topLevel.length })}</span>
+          <button onClick={() => { setSelectedId(null); setMode("create"); }} className="text-xs font-medium text-violet-700 hover:text-violet-800 transition-colors">+ {t("newNote")}</button>
         </div>
         {mainContent() ?? noteList}
         {mode !== "list" && (
-          <button onClick={() => { setMode("list"); setSelectedId(null); }} className="text-xs text-slate-500 hover:text-slate-700 transition-colors">← All notes</button>
+          <button onClick={() => { setMode("list"); setSelectedId(null); }} className="text-xs text-slate-500 hover:text-slate-700 transition-colors">{t("allNotes")}</button>
         )}
       </div>
       {confirmDialogs}
@@ -470,14 +477,14 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
       {/* Folder sidebar */}
       <div className="w-44 shrink-0 space-y-0.5">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Folders</span>
-          <button onClick={() => { setCreatingFolder(true); setNewFolderName(""); }} className="text-slate-400 hover:text-violet-700 transition-colors text-base leading-none" title="New folder">+</button>
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{t("foldersLabel")}</span>
+          <button onClick={() => { setCreatingFolder(true); setNewFolderName(""); }} className="text-slate-400 hover:text-violet-700 transition-colors text-base leading-none" title={t("newNote")}>+</button>
         </div>
         {(["all", "mine", "shared"] as const).map((key) => (
           <button key={key} onClick={() => { setActiveFolder(key); setSelectedId(null); setMode("list"); }}
             className={`w-full text-left text-xs px-2 py-1.5 rounded-md transition-colors ${activeFolder === key ? "bg-violet-50 text-violet-700 font-medium" : "text-slate-600 hover:bg-slate-100"}`}
           >
-            {key === "all" ? "All notes" : key === "mine" ? "My notes" : "Shared"}
+            {key === "all" ? t("allNotesFilter") : key === "mine" ? t("myNotes") : t("sharedFilter")}
           </button>
         ))}
         <hr className="border-slate-200 my-1" />
@@ -505,7 +512,7 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
           <form onSubmit={(e) => { e.preventDefault(); handleCreateFolder(); }} className="px-1 py-0.5">
             <input autoFocus value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)}
               onBlur={() => { if (!newFolderName.trim()) setCreatingFolder(false); }}
-              placeholder="Folder name"
+              placeholder={t("folderNamePlaceholder")}
               className="w-full text-xs border border-violet-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-violet-400" />
           </form>
         )}
@@ -514,12 +521,12 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
       {/* Right panel */}
       <div className="flex-1 min-w-0 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-slate-700">{visibleNotes.length} {visibleNotes.length === 1 ? "note" : "notes"}</span>
-          <button onClick={() => { setSelectedId(null); setMode("create"); }} className="text-sm font-medium bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded-lg transition-colors">+ New note</button>
+          <span className="text-sm font-medium text-slate-700">{noteCount}</span>
+          <button onClick={() => { setSelectedId(null); setMode("create"); }} className="text-sm font-medium bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded-lg transition-colors">+ {t("newNote")}</button>
         </div>
         {mode !== "list" ? (
           <div className="space-y-3">
-            <button onClick={() => { setMode("list"); setSelectedId(null); }} className="text-xs text-slate-500 hover:text-slate-700 transition-colors">← Back to list</button>
+            <button onClick={() => { setMode("list"); setSelectedId(null); }} className="text-xs text-slate-500 hover:text-slate-700 transition-colors">{t("backToList")}</button>
             {mainContent()}
           </div>
         ) : noteList}

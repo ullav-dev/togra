@@ -1,3 +1,6 @@
+"use client";
+
+import { useTranslations } from "next-intl";
 import type { Status } from "@/lib/types";
 
 const colours: Record<string, string> = {
@@ -10,9 +13,11 @@ const colours: Record<string, string> = {
 };
 
 export default function StatusPill({ status }: { status: Status | string }) {
+  const t = useTranslations("status");
+  const label = t.has(status as never) ? t(status as never) : status;
   return (
     <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${colours[status] ?? "bg-slate-100 text-slate-500"}`}>
-      {status}
+      {label}
     </span>
   );
 }

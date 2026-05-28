@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, use, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -24,6 +25,7 @@ export default function StoryDetailPage({
 }) {
   const { id: projectId, storyId } = use(params);
   const { token } = useAuth();
+  const t = useTranslations("story");
 
   const [project, setProject] = useState<ProjectWithJobs | null>(null);
   const [story, setStory] = useState<WorkflowWithTasks | null>(null);
@@ -118,8 +120,8 @@ export default function StoryDetailPage({
     }));
   }
 
-  if (loading) return <div className="p-8 text-slate-400 text-sm">Loading story…</div>;
-  if (!story) return <div className="p-8 text-slate-500 text-sm">Story not found.</div>;
+  if (loading) return <div className="p-8 text-slate-400 text-sm">{t("loading")}</div>;
+  if (!story) return <div className="p-8 text-slate-500 text-sm">{t("notFound")}</div>;
 
   const parentJobId = story.job_id;
 
@@ -127,14 +129,14 @@ export default function StoryDetailPage({
     <div className="max-w-2xl mx-auto px-6 py-8">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-slate-500 mb-6 flex-wrap">
-        <Link href="/projects" className="hover:text-violet-700 transition-colors">Projects</Link>
+        <Link href="/projects" className="hover:text-violet-700 transition-colors">{t("breadcrumbProjects")}</Link>
         <span>/</span>
         <Link href={`/projects/${projectId}`} className="hover:text-violet-700 transition-colors">{project?.name ?? "…"}</Link>
         {parentJobId && (
           <>
             <span>/</span>
             <Link href={`/projects/${projectId}/jobs/${parentJobId}`} className="hover:text-violet-700 transition-colors">
-              {project?.jobs?.find((j) => j.id === parentJobId)?.name ?? "Sprint"}
+              {project?.jobs?.find((j) => j.id === parentJobId)?.name ?? t("sprintFallback")}
             </Link>
           </>
         )}
@@ -172,7 +174,7 @@ export default function StoryDetailPage({
         {/* Story points + visibility */}
         <div className="flex items-center gap-6 text-sm text-slate-500 flex-wrap">
           <div className="flex items-center gap-2">
-            <span className="font-medium">Story points:</span>
+            <span className="font-medium">{t("storyPoints")}</span>
             {editingPoints ? (
               <input
                 autoFocus
@@ -210,11 +212,11 @@ export default function StoryDetailPage({
       {/* Tasks (workflow steps) */}
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden mb-6">
         <div className="px-6 py-4 border-b border-slate-100">
-          <h2 className="text-sm font-semibold text-slate-700">Workflow steps</h2>
-          <p className="text-xs text-slate-400 mt-0.5">{story.tasks.length} tasks</p>
+          <h2 className="text-sm font-semibold text-slate-700">{t("workflowSteps")}</h2>
+          <p className="text-xs text-slate-400 mt-0.5">{t("taskCount", { count: story.tasks.length })}</p>
         </div>
         {story.tasks.length === 0 ? (
-          <p className="px-6 py-4 text-sm text-slate-400">No workflow steps yet.</p>
+          <p className="px-6 py-4 text-sm text-slate-400">{t("noSteps")}</p>
         ) : (
           <div className="divide-y divide-slate-100">
             {story.tasks.map((task) => (
@@ -302,6 +304,7 @@ function TaskRow({
   onRoleAdd: (roleId: string) => void;
   onRoleRemove: (roleId: string) => void;
 }) {
+  const t = useTranslations("story");
   const statuses: Status[] = ["Not Started", "Ready", "In Progress", "On Hold", "Complete"];
 
   const assignedRoleIds = new Set(taskRoles.map((r) => r.team_role_id));
@@ -338,9 +341,9 @@ function TaskRow({
               value={task.assigned_to ?? ""}
               onChange={(e) => onAssigneeChange(e.target.value || null)}
               className="text-xs border border-slate-200 rounded-lg px-2 py-1 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 bg-white text-slate-600 max-w-[120px] truncate"
-              title={assignedMember ? displayName(assignedMember) : "Unassigned"}
+              title={assignedMember ? displayName(assignedMember) : t("unassigned")}
             >
-              <option value="">Unassigned</option>
+              <option value="">{t("unassigned")}</option>
               {eligibleMembers.map((m) => (
                 <option key={m.user.id} value={m.user.id}>{displayName(m)}</option>
               ))}
@@ -358,7 +361,7 @@ function TaskRow({
           className="text-xs border border-slate-200 rounded-lg px-2 py-1 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 bg-white"
         >
           {statuses.map((s) => (
-            <option key={s} value={s}>{s}</option>
+            <option key={s} value={s}>{t(`statuses.${s}` as Parameters<typeof t>[0])}</option>
           ))}
         </select>
       </div>

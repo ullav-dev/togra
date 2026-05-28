@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
 import { updateProfile, gravatarUrl } from "@/lib/auth-api";
 import type { AuthUser } from "@/lib/auth-api";
@@ -37,6 +38,7 @@ function userInitials(user: AuthUser): string {
 
 export default function MyDetailsModal({ onClose }: Props) {
   const { user, token, updateUser } = useAuth();
+  const t = useTranslations("myDetails");
 
   const [firstName, setFirstName] = useState(user?.first_name ?? "");
   const [lastName, setLastName] = useState(user?.last_name ?? "");
@@ -86,7 +88,7 @@ export default function MyDetailsModal({ onClose }: Props) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-          <h2 className="text-base font-semibold text-slate-800">My Details</h2>
+          <h2 className="text-base font-semibold text-slate-800">{t("title")}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -104,7 +106,7 @@ export default function MyDetailsModal({ onClose }: Props) {
           <div className="flex items-center gap-4">
             <AvatarPreview url={avatarUrl.trim()} initials={initials} />
             <div className="flex-1 min-w-0">
-              <label className="block text-xs font-medium text-slate-500 mb-1">Avatar URL</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1">{t("avatarUrl")}</label>
               <input
                 type="url"
                 value={avatarUrl}
@@ -119,7 +121,7 @@ export default function MyDetailsModal({ onClose }: Props) {
                   disabled={gravatarLoading}
                   className="text-xs text-violet-600 hover:text-violet-800 transition-colors disabled:opacity-50"
                 >
-                  {gravatarLoading ? "Generating…" : "Use Gravatar"}
+                  {gravatarLoading ? t("generating") : t("useGravatar")}
                 </button>
                 {avatarUrl && (
                   <button
@@ -127,7 +129,7 @@ export default function MyDetailsModal({ onClose }: Props) {
                     onClick={() => setAvatarUrl("")}
                     className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
                   >
-                    Clear
+                    {t("clear")}
                   </button>
                 )}
               </div>
@@ -137,7 +139,7 @@ export default function MyDetailsModal({ onClose }: Props) {
           {/* Name fields */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">First name</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1">{t("firstName")}</label>
               <input
                 type="text"
                 value={firstName}
@@ -146,7 +148,7 @@ export default function MyDetailsModal({ onClose }: Props) {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Last name</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1">{t("lastName")}</label>
               <input
                 type="text"
                 value={lastName}
@@ -158,14 +160,14 @@ export default function MyDetailsModal({ onClose }: Props) {
 
           {/* Email (read-only) */}
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Email</label>
+            <label className="block text-xs font-medium text-slate-500 mb-1">{t("email")}</label>
             <input
               type="email"
               value={user.email}
               readOnly
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-slate-50 text-slate-500 cursor-default"
             />
-            <p className="text-xs text-slate-400 mt-1">Contact support to change your email address.</p>
+            <p className="text-xs text-slate-400 mt-1">{t("emailNote")}</p>
           </div>
 
           {error && (
@@ -179,7 +181,7 @@ export default function MyDetailsModal({ onClose }: Props) {
             onClick={onClose}
             className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
           >
-            Cancel
+            {t("cancel")}
           </button>
           <button
             type="button"
@@ -187,7 +189,7 @@ export default function MyDetailsModal({ onClose }: Props) {
             disabled={saving}
             className="px-4 py-2 text-sm font-medium bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors disabled:opacity-60"
           >
-            {saving ? "Saving…" : "Save changes"}
+            {saving ? t("saving") : t("save")}
           </button>
         </div>
       </div>

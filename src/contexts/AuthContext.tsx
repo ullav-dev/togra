@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import type { AuthUser, LoginResponse } from "@/lib/auth-api";
 import { login as apiLogin, hasTograAccess } from "@/lib/auth-api";
 
@@ -32,6 +33,7 @@ const WARN_BEFORE_MS = 60_000;
 const ACTIVITY_EVENTS = ["mousemove", "keydown", "pointerdown", "scroll", "touchstart"] as const;
 
 function IdleWarningModal({ onStay, onLogout }: { onStay: () => void; onLogout: () => void }) {
+  const t = useTranslations("idleWarning");
   const [seconds, setSeconds] = useState(Math.round(WARN_BEFORE_MS / 1000));
   useEffect(() => {
     const id = setInterval(() => setSeconds((s) => Math.max(0, s - 1)), 1000);
@@ -40,14 +42,14 @@ function IdleWarningModal({ onStay, onLogout }: { onStay: () => void; onLogout: 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50">
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4">
-        <h2 className="text-base font-semibold text-slate-800 mb-2">You&apos;ve been idle</h2>
-        <p className="text-sm text-slate-600 mb-5">You will be logged out in {seconds} seconds.</p>
+        <h2 className="text-base font-semibold text-slate-800 mb-2">{t("title")}</h2>
+        <p className="text-sm text-slate-600 mb-5">{t("message", { seconds })}</p>
         <div className="flex gap-3 justify-end">
           <button type="button" onClick={onLogout} className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors">
-            Log out now
+            {t("logoutNow")}
           </button>
           <button type="button" onClick={onStay} className="px-4 py-2 rounded-lg text-sm font-medium bg-violet-600 hover:bg-violet-700 text-white transition-colors">
-            Stay logged in
+            {t("stayLoggedIn")}
           </button>
         </div>
       </div>

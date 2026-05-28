@@ -1,11 +1,14 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 interface Props {
   isShared: boolean;
   onChange: (value: boolean) => void;
 }
 
 export default function VisibilityToggle({ isShared, onChange }: Props) {
+  const t = useTranslations("visibility");
   return (
     <label className="flex items-center gap-2 cursor-pointer select-none">
       <button
@@ -19,9 +22,9 @@ export default function VisibilityToggle({ isShared, onChange }: Props) {
       </button>
       <span className="text-sm text-slate-600">
         {isShared ? (
-          <span className="text-violet-700 font-medium">Shared with team</span>
+          <span className="text-violet-700 font-medium">{t("shared")}</span>
         ) : (
-          <span className="text-slate-500">Private</span>
+          <span className="text-slate-500">{t("private")}</span>
         )}
       </span>
     </label>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, use } from "react";
+import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { getJob, listWorkflows, updateWorkflow, listTasks, getTeam } from "@/lib/awe-api";
@@ -8,11 +9,11 @@ import { getProject } from "@/lib/togra-api";
 import type { Job, Workflow, Task, Project, Status, TeamMember } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 
-const STORY_COLUMNS: { status: Status; label: string; bg: string; border: string; header: string; overBorder: string }[] = [
-  { status: "Not Started", label: "To Do",       bg: "bg-slate-50",   border: "border-slate-200",   header: "text-slate-500",   overBorder: "border-violet-400 bg-violet-50" },
-  { status: "In Progress", label: "In Progress", bg: "bg-blue-50",    border: "border-blue-200",    header: "text-blue-700",    overBorder: "border-blue-400 bg-blue-100" },
-  { status: "On Hold",     label: "On Hold",     bg: "bg-amber-50",   border: "border-amber-200",   header: "text-amber-700",   overBorder: "border-amber-400 bg-amber-100" },
-  { status: "Complete",    label: "Done",        bg: "bg-emerald-50", border: "border-emerald-200", header: "text-emerald-700", overBorder: "border-emerald-400 bg-emerald-100" },
+const STORY_COLUMNS: { status: Status; labelKey: string; bg: string; border: string; header: string; overBorder: string }[] = [
+  { status: "Not Started", labelKey: "todo",       bg: "bg-slate-50",   border: "border-slate-200",   header: "text-slate-500",   overBorder: "border-violet-400 bg-violet-50" },
+  { status: "In Progress", labelKey: "inProgress", bg: "bg-blue-50",    border: "border-blue-200",    header: "text-blue-700",    overBorder: "border-blue-400 bg-blue-100" },
+  { status: "On Hold",     labelKey: "onHold",     bg: "bg-amber-50",   border: "border-amber-200",   header: "text-amber-700",   overBorder: "border-amber-400 bg-amber-100" },
+  { status: "Complete",    labelKey: "done",       bg: "bg-emerald-50", border: "border-emerald-200", header: "text-emerald-700", overBorder: "border-emerald-400 bg-emerald-100" },
 ];
 
 export default function SprintBoardPage({
@@ -23,6 +24,9 @@ export default function SprintBoardPage({
   const { id: projectId, jobId } = use(params);
   const { token } = useAuth();
   const router = useRouter();
+  const t = useTranslations("board");
+
+  const columns = STORY_COLUMNS.map((col) => ({ ...col, label: t(`columns.${col.labelKey}` as Parameters<typeof t>[0]) }));
 
   const [project, setProject] = useState<Project | null>(null);
   const [job, setJob] = useState<Job | null>(null);
@@ -68,10 +72,10 @@ export default function SprintBoardPage({
     }
   }
 
-  if (loading) return <div className="p-8 text-slate-400 text-sm">Loading board…</div>;
-  if (!job) return <div className="p-8 text-slate-500 text-sm">Sprint not found.</div>;
+  if (loading) return <div className="p-8 text-slate-400 text-sm">{t("loading")}</div>;
+  if (!job) return <div className="p-8 text-slate-500 text-sm">{t("notFound")}</div>;
 
-  const typeLabel = job.job_type === "sprint" ? "Sprint" : job.job_type === "kanban" ? "Kanban" : "Board";
+  const typeLabel = job.job_type === "sprint" ? t("sprint") : job.job_type === "kanban" ? t("kanban") : "Board";
   const dateRange = job.start_date && job.end_date
     ? ` · ${fmtDate(job.start_date)} – ${fmtDate(job.end_date)}`
     : "";
@@ -80,7 +84,7 @@ export default function SprintBoardPage({
     <div className="flex flex-col h-full">
       <div className="bg-white border-b border-slate-200 px-6 py-4 shrink-0">
         <nav className="flex items-center gap-2 text-sm text-slate-500 mb-1">
-          <Link href="/projects" className="hover:text-violet-700 transition-colors">Projects</Link>
+          <Link href="/projects" className="hover:text-violet-700 transition-colors">{t("breadcrumbProjects")}</Link>
           <span>/</span>
           <Link href={`/projects/${projectId}`} className="hover:text-violet-700 transition-colors">{project?.name ?? "…"}</Link>
           <span>/</span>
@@ -93,13 +97,13 @@ export default function SprintBoardPage({
             job.job_type === "kanban" ? "bg-teal-50 text-teal-700" : "bg-slate-100 text-slate-500"
           }`}>{typeLabel}</span>
           {dateRange && <span className="text-xs text-slate-400">{dateRange}</span>}
-          <span className="text-xs text-slate-400">{stories.length} {stories.length === 1 ? "story" : "stories"}</span>
+          <span className="text-xs text-slate-400">{t("stories", { count: stories.length })}</span>
         </div>
       </div>
 
       <div className="flex-1 overflow-x-auto p-6">
         <div className="flex gap-4 h-full min-w-max">
-          {STORY_COLUMNS.map((col) => {
+          {columns.map((col) => {
             const colStories = stories.filter((s) => s.status === col.status);
             return (
               <StoryColumn
@@ -135,7 +139,7 @@ function StoryColumn({
   onDrop,
   onStatusChange,
 }: {
-  column: (typeof STORY_COLUMNS)[number];
+  column: (typeof STORY_COLUMNS)[number] & { label: string };
   stories: Workflow[];
   projectId: string;
   teamMembers: TeamMember[];
@@ -145,6 +149,7 @@ function StoryColumn({
   onDrop: (storyId: string) => void;
   onStatusChange: (storyId: string, status: Status) => void;
 }) {
+  const t = useTranslations("board");
   const [isOver, setIsOver] = useState(false);
   const dragCounter = useRef(0);
 
@@ -194,7 +199,7 @@ function StoryColumn({
         ))}
         {stories.length === 0 && (
           <p className={`text-xs text-center py-4 transition-colors ${isOver ? "text-violet-400" : "text-slate-400"}`}>
-            {isOver ? "Drop here" : "No stories"}
+            {isOver ? t("dropHere") : t("noStories")}
           </p>
         )}
       </div>
@@ -368,6 +373,7 @@ function StatusMenu({
 }: {
   current: Status; statuses: Status[]; onSelect: (s: Status) => void; onClose: () => void;
 }) {
+  const t = useTranslations("board");
   useEffect(() => {
     const h = () => onClose();
     document.addEventListener("click", h);
@@ -376,7 +382,7 @@ function StatusMenu({
 
   return (
     <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-xl border border-slate-200 shadow-lg py-1 z-20" onClick={(e) => e.stopPropagation()}>
-      <p className="px-3 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">Move to</p>
+      <p className="px-3 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">{t("moveTo")}</p>
       {statuses.filter((s) => s !== current).map((s) => (
         <button key={s} type="button" onClick={() => onSelect(s)} className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-violet-50 hover:text-violet-700 transition-colors">
           {s === "Not Started" ? "To Do" : s}

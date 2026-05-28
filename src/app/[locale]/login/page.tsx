@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTranslations } from "next-intl";
 import { requestPasswordReset } from "@/lib/auth-api";
 import TograIcon from "@/components/TograIcon";
 
@@ -19,14 +20,14 @@ function Field({ label, htmlFor, children }: { label: string; htmlFor: string; c
   );
 }
 
-function SubmitButton({ loading, label }: { loading: boolean; label: string }) {
+function SubmitButton({ loading, label, pleaseWait }: { loading: boolean; label: string; pleaseWait: string }) {
   return (
     <button
       type="submit"
       disabled={loading}
       className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2.5 rounded-lg transition-colors"
     >
-      {loading ? "Please wait…" : label}
+      {loading ? pleaseWait : label}
     </button>
   );
 }
@@ -43,6 +44,7 @@ function LoginPageContent() {
   const { user, isLoading, login } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const t = useTranslations("login");
 
   const [stage, setStage] = useState<"form" | "reset-request">("form");
   const [error, setError] = useState<string | null>(null);
@@ -59,14 +61,14 @@ function LoginPageContent() {
 
   useEffect(() => {
     if (searchParams.get("error") === "no_access") {
-      setError("Your account does not have access to Togra. Ask your team owner to enable Obair for your team.");
+      setError(t("errors.noAccessQuery"));
     }
-  }, [searchParams]);
+  }, [searchParams, t]);
 
   function errMsg(err: unknown, fallback: string): string {
     const msg = err instanceof Error ? err.message : "";
-    if (/^HTTP 5/.test(msg)) return "Server error. Please try again.";
-    if (msg === "no_togra_access") return "Your account does not have access to Togra.";
+    if (/^HTTP 5/.test(msg)) return t("errors.serverError");
+    if (msg === "no_togra_access") return t("errors.noAccess");
     return msg || fallback;
   }
 
@@ -78,7 +80,7 @@ function LoginPageContent() {
       await login(email, password);
       router.push("/");
     } catch (err) {
-      setError(errMsg(err, "Login failed. Please check your credentials."));
+      setError(errMsg(err, t("errors.loginFailed")));
     } finally {
       setSubmitting(false);
     }
@@ -92,7 +94,7 @@ function LoginPageContent() {
       await requestPasswordReset(resetEmail, window.location.origin);
       setResetSent(true);
     } catch (err) {
-      setError(errMsg(err, "Could not send reset link."));
+      setError(errMsg(err, t("errors.resetFailed")));
     } finally {
       setSubmitting(false);
     }
@@ -106,25 +108,25 @@ function LoginPageContent() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm w-full max-w-md p-8">
           <div className="flex items-center gap-2 mb-6">
             <TograIcon className="w-7 h-7" />
-            <span className="font-bold text-lg text-slate-800">Reset password</span>
+            <span className="font-bold text-lg text-slate-800">{t("resetPasswordTitle")}</span>
           </div>
           {error && <ErrorBox message={error} />}
           {resetSent ? (
             <div className="text-center space-y-4">
               <div className="text-4xl">📧</div>
-              <p className="text-sm text-slate-600">Check your inbox for the password reset link.</p>
+              <p className="text-sm text-slate-600">{t("checkInbox")}</p>
               <button type="button" onClick={() => { setStage("form"); setError(null); setResetSent(false); }} className="text-sm text-slate-500 hover:text-slate-700 transition-colors">
-                Back to sign in
+                {t("backToSignIn")}
               </button>
             </div>
           ) : (
             <form onSubmit={handleResetRequest} className="space-y-4">
-              <Field label="Email" htmlFor="reset-email">
+              <Field label={t("emailLabel")} htmlFor="reset-email">
                 <input id="reset-email" type="email" required autoFocus value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} className={inputCls} />
               </Field>
-              <SubmitButton loading={submitting} label="Send reset link" />
+              <SubmitButton loading={submitting} label={t("sendResetLink")} pleaseWait={t("pleaseWait")} />
               <button type="button" onClick={() => { setStage("form"); setError(null); }} className="w-full text-sm text-slate-500 hover:text-slate-700 transition-colors">
-                Back to sign in
+                {t("backToSignIn")}
               </button>
             </form>
           )}
@@ -140,23 +142,23 @@ function LoginPageContent() {
           <TograIcon className="w-8 h-8" />
           <div>
             <span className="font-bold text-lg text-slate-800 block">Togra</span>
-            <span className="text-xs text-slate-500">Project Planning</span>
+            <span className="text-xs text-slate-500">{t("appTagline")}</span>
           </div>
         </div>
 
         {error && <ErrorBox message={error} />}
 
         <form onSubmit={handleLogin} className="space-y-4">
-          <Field label="Email" htmlFor="login-email">
+          <Field label={t("emailLabel")} htmlFor="login-email">
             <input id="login-email" type="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} />
           </Field>
-          <Field label="Password" htmlFor="login-password">
+          <Field label={t("passwordLabel")} htmlFor="login-password">
             <input id="login-password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className={inputCls} />
           </Field>
-          <SubmitButton loading={submitting} label="Sign in" />
+          <SubmitButton loading={submitting} label={t("signIn")} pleaseWait={t("pleaseWait")} />
           <div className="text-center">
             <button type="button" onClick={() => { setStage("reset-request"); setError(null); }} className="text-sm text-slate-500 hover:text-violet-700 transition-colors">
-              Forgot password?
+              {t("forgotPassword")}
             </button>
           </div>
         </form>

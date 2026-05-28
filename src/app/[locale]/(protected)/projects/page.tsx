@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTranslations } from "next-intl";
 import { listProjects, createProjectWithBacklog, updateProject, deleteProject } from "@/lib/togra-api";
 import { getMyTeams, getTeam } from "@/lib/awe-api";
 import { getObairTeamIds } from "@/lib/auth-api";
@@ -13,6 +14,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 
 export default function ProjectsPage() {
   const { token } = useAuth();
+  const t = useTranslations("projects");
   const [projects, setProjects] = useState<Project[]>([]);
   const [teams, setTeams] = useState<TeamSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,8 +54,8 @@ export default function ProjectsPage() {
         <div className="flex items-center gap-3">
           <TograIcon className="w-9 h-9" />
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">Projects</h1>
-            <p className="text-sm text-slate-500">All projects across your teams</p>
+            <h1 className="text-2xl font-bold text-slate-800">{t("title")}</h1>
+            <p className="text-sm text-slate-500">{t("subtitle")}</p>
           </div>
         </div>
         <button
@@ -62,12 +64,12 @@ export default function ProjectsPage() {
           className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
         >
           <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path d="M8 2a1 1 0 0 1 1 1v4h4a1 1 0 1 1 0 2H9v4a1 1 0 1 1-2 0V9H3a1 1 0 1 1 0-2h4V3a1 1 0 0 1 1-1Z"/></svg>
-          New project
+          {t("newProject")}
         </button>
       </div>
 
       {loading ? (
-        <div className="text-slate-400 text-sm">Loading…</div>
+        <div className="text-slate-400 text-sm">{t("loading")}</div>
       ) : projects.length === 0 ? (
         <EmptyState onCreate={() => setShowCreate(true)} />
       ) : (
@@ -99,6 +101,7 @@ function ProjectCard({
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
 }) {
+  const t = useTranslations("projects");
   const [renaming, setRenaming] = useState(false);
   const [nameValue, setNameValue] = useState(project.name);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -155,13 +158,13 @@ function ProjectCard({
       {project.description && (
         <p className="text-sm text-slate-500 line-clamp-2 mb-3">{project.description}</p>
       )}
-      <p className="text-xs text-slate-400">Created {new Date(project.created_at).toLocaleDateString()}</p>
+      <p className="text-xs text-slate-400">{t("created", { date: new Date(project.created_at).toLocaleDateString() })}</p>
 
       {confirmingDelete && (
         <ConfirmDialog
-          title={`Delete "${project.name}"?`}
-          message="This project and all its data will be permanently deleted."
-          confirmLabel="Delete project"
+          title={t("deleteConfirmTitle", { name: project.name })}
+          message={t("deleteConfirmMessage")}
+          confirmLabel={t("deleteConfirmLabel")}
           onConfirm={() => { setConfirmingDelete(false); onDelete(project.id); }}
           onCancel={() => setConfirmingDelete(false)}
         />
@@ -171,19 +174,20 @@ function ProjectCard({
 }
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
+  const t = useTranslations("projects");
   return (
     <div className="text-center py-20">
       <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-violet-50 flex items-center justify-center">
         <TograIcon className="w-10 h-10" />
       </div>
-      <h2 className="text-lg font-semibold text-slate-700 mb-2">No projects yet</h2>
-      <p className="text-sm text-slate-500 mb-6">Create your first project to get started.</p>
+      <h2 className="text-lg font-semibold text-slate-700 mb-2">{t("emptyTitle")}</h2>
+      <p className="text-sm text-slate-500 mb-6">{t("emptySubtitle")}</p>
       <button
         type="button"
         onClick={onCreate}
         className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
       >
-        Create project
+        {t("createProject")}
       </button>
     </div>
   );
@@ -200,6 +204,7 @@ function CreateProjectModal({
   onCreated: (p: Project) => void;
   onClose: () => void;
 }) {
+  const t = useTranslations("projects");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [teamId, setTeamId] = useState(teams.length === 1 ? teams[0].id : "");
@@ -209,7 +214,6 @@ function CreateProjectModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load active team members whenever the selected team changes
   useEffect(() => {
     if (!teamId) { setMembers([]); setPmId(""); return; }
     setLoadingMembers(true);
@@ -237,7 +241,7 @@ function CreateProjectModal({
       });
       onCreated(p);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create project");
+      setError(err instanceof Error ? err.message : t("modal.error"));
     } finally {
       setSubmitting(false);
     }
@@ -248,38 +252,38 @@ function CreateProjectModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6">
-        <h2 className="text-lg font-semibold text-slate-800 mb-5">New project</h2>
+        <h2 className="text-lg font-semibold text-slate-800 mb-5">{t("modal.title")}</h2>
         {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="flex flex-col gap-1">
-            <label htmlFor="proj-name" className="text-sm font-medium text-slate-700">Project name</label>
+            <label htmlFor="proj-name" className="text-sm font-medium text-slate-700">{t("modal.nameLabel")}</label>
             <input id="proj-name" required autoFocus value={name} onChange={(e) => setName(e.target.value)}
-              className={inputCls} placeholder="e.g. Ullav Portal v2" />
+              className={inputCls} placeholder={t("modal.namePlaceholder")} />
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="proj-desc" className="text-sm font-medium text-slate-700">
-              Description <span className="text-slate-400 font-normal">(optional)</span>
+              {t("modal.descLabel")} <span className="text-slate-400 font-normal">{t("modal.optional")}</span>
             </label>
             <textarea id="proj-desc" rows={2} value={description} onChange={(e) => setDescription(e.target.value)}
               className={`${inputCls} resize-none`} />
           </div>
           <div className="flex flex-col gap-1">
-            <label htmlFor="proj-team" className="text-sm font-medium text-slate-700">Team</label>
+            <label htmlFor="proj-team" className="text-sm font-medium text-slate-700">{t("modal.teamLabel")}</label>
             <select id="proj-team" required value={teamId} onChange={(e) => setTeamId(e.target.value)} className={inputCls}>
-              <option value="">— Select a team —</option>
+              <option value="">{t("modal.teamPlaceholder")}</option>
               {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
           {teamId && (
             <div className="flex flex-col gap-1">
               <label htmlFor="proj-pm" className="text-sm font-medium text-slate-700">
-                Project Manager <span className="text-slate-400 font-normal">(optional)</span>
+                {t("modal.pmLabel")} <span className="text-slate-400 font-normal">{t("modal.optional")}</span>
               </label>
               {loadingMembers ? (
-                <p className="text-xs text-slate-400 py-2">Loading team members…</p>
+                <p className="text-xs text-slate-400 py-2">{t("modal.loadingMembers")}</p>
               ) : (
                 <select id="proj-pm" value={pmId} onChange={(e) => setPmId(e.target.value)} className={inputCls}>
-                  <option value="">— Assign later —</option>
+                  <option value="">{t("modal.assignLater")}</option>
                   {members.map((m) => (
                     <option key={m.id} value={m.user.id}>
                       {m.user.username}{m.user.first_name ? ` (${m.user.first_name} ${m.user.last_name ?? ""})`.trimEnd() : ""}
@@ -291,14 +295,14 @@ function CreateProjectModal({
           )}
           <div className="flex gap-3 justify-end pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-              Cancel
+              {t("modal.cancel")}
             </button>
             <button
               type="submit"
               disabled={submitting || !name.trim() || !teamId}
               className="px-4 py-2 text-sm font-medium bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
             >
-              {submitting ? "Creating…" : "Create"}
+              {submitting ? t("modal.creating") : t("modal.create")}
             </button>
           </div>
         </form>

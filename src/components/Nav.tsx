@@ -3,8 +3,10 @@
 import { useState, useRef, useEffect } from "react";
 import { usePathname, useRouter, Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTranslations } from "next-intl";
 import TograIcon from "@/components/TograIcon";
 import MyDetailsModal from "@/components/MyDetailsModal";
+import LocaleSwitcher from "@/components/LocaleSwitcher";
 
 function NavAvatar({ url, initials }: { url?: string | null; initials: string }) {
   const [broken, setBroken] = useState(false);
@@ -30,6 +32,7 @@ export default function Nav() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoading, logout } = useAuth();
+  const t = useTranslations("nav");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -76,8 +79,10 @@ export default function Nav() {
             {!isLoading && user ? (
               <>
                 <Link href="/projects" className={navLink("/projects")}>
-                  Projects
+                  {t("projects")}
                 </Link>
+
+                <LocaleSwitcher />
 
                 <div className="relative pl-3 border-l border-slate-200" ref={dropdownRef}>
                   <button
@@ -109,7 +114,7 @@ export default function Nav() {
                         onClick={handleMyDetails}
                         className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
                       >
-                        My Details
+                        {t("myDetails")}
                       </button>
                       <div className="my-1 border-t border-slate-100" />
                       <button
@@ -117,7 +122,7 @@ export default function Nav() {
                         onClick={handleLogout}
                         className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
                       >
-                        Sign out
+                        {t("signOut")}
                       </button>
                     </div>
                   )}
@@ -125,9 +130,12 @@ export default function Nav() {
                 {detailsOpen && <MyDetailsModal onClose={() => setDetailsOpen(false)} />}
               </>
             ) : !isLoading ? (
-              <Link href="/login" className="text-sm font-medium text-violet-700 hover:text-violet-800 transition-colors">
-                Sign in
-              </Link>
+              <>
+                <LocaleSwitcher />
+                <Link href="/login" className="text-sm font-medium text-violet-700 hover:text-violet-800 transition-colors">
+                  {t("signIn")}
+                </Link>
+              </>
             ) : null}
           </nav>
         </div>
