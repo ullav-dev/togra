@@ -9,6 +9,8 @@ export interface AuthUser {
   id: string;
   email: string;
   username: string;
+  first_name: string | null;
+  last_name: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

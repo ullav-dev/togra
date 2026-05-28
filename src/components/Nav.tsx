@@ -60,7 +60,9 @@ export default function Nav() {
                     aria-haspopup="true"
                     aria-expanded={dropdownOpen}
                   >
-                    <span className="hidden sm:block">{user.username}</span>
+                    <span className="hidden sm:block">
+                      {`${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() || user.username}
+                    </span>
                     <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3.5 h-3.5 text-slate-400 transition-transform ${dropdownOpen ? "rotate-180" : ""}`}>
                       <path d="M4 6l4 4 4-4H4z" />
                     </svg>
