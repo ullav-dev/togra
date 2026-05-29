@@ -27,6 +27,8 @@ interface Props {
   teamRoles: TeamRole[];
   token: string;
   projectId: string;
+  teamName: string | null;
+  teamAvatarUrl: string | null;
 }
 
 type Selection = { type: "role"; id: string } | { type: "member"; id: string } | null;
@@ -512,7 +514,7 @@ function TaskTable({
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-export default function TeamView({ sprints, teamMembers, teamRoles, token, projectId }: Props) {
+export default function TeamView({ sprints, teamMembers, teamRoles, token, projectId, teamName, teamAvatarUrl }: Props) {
   const t = useTranslations("teamView");
   const [allTasks, setAllTasks] = useState<TaskRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -649,6 +651,21 @@ export default function TeamView({ sprints, teamMembers, teamRoles, token, proje
     <div className="flex flex-1 overflow-hidden">
       {/* Sidebar */}
       <div className="w-52 shrink-0 flex flex-col border-r border-slate-200 bg-white overflow-hidden">
+        {/* Team header */}
+        {teamName && (
+          <div className="flex items-center gap-2.5 px-3 py-3 border-b border-slate-200 shrink-0">
+            {teamAvatarUrl ? (
+              <img src={teamAvatarUrl} alt={teamName}
+                className="w-8 h-8 rounded-full object-cover shrink-0" />
+            ) : (
+              <span className="w-8 h-8 rounded-full bg-violet-100 text-violet-700 text-sm font-semibold flex items-center justify-center shrink-0 select-none">
+                {teamName.charAt(0).toUpperCase()}
+              </span>
+            )}
+            <span className="font-semibold text-sm text-slate-800 truncate">{teamName}</span>
+          </div>
+        )}
+
         {/* Roles section — vertically resizable */}
         <div className="shrink-0 overflow-y-auto px-3 pt-4 pb-2" style={{ height: rolesResize.size }}>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">{t("rolesHeading")}</p>

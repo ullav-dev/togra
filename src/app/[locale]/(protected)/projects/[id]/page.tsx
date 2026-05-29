@@ -52,6 +52,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [pmName, setPmName] = useState<string | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [teamRoles, setTeamRoles] = useState<TeamRole[]>([]);
+  const [teamName, setTeamName] = useState<string | null>(null);
+  const [teamAvatarUrl, setTeamAvatarUrl] = useState<string | null>(null);
 
   const backlogResize = useResize({ initial: 300, min: 200, max: 480, axis: "x" });
   const notesResize = useResize({ initial: 320, min: 200, max: 560, axis: "x", reverse: true });
@@ -69,7 +71,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       const bl = proj.jobs.find((j) => j.job_type === "backlog");
       const [stories, tmpl] = await Promise.all([
         bl ? listWorkflows(token, { job_id: bl.id }) : Promise.resolve([]),
-        listWorkflows(token),
+        proj.team_id ? listWorkflows(token, { team_id: proj.team_id }) : Promise.resolve([]),
         proj.team_id
           ? Promise.all([
               getTeam(token, proj.team_id),
@@ -78,6 +80,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               const active = team.members.filter((m) => m.status === "active");
               setTeamMembers(active);
               setTeamRoles(roles);
+              setTeamName(team.name);
+              setTeamAvatarUrl(team.avatar_url);
               if (proj.project_manager_id) {
                 const member = active.find((m) => m.user.id === proj.project_manager_id);
                 if (member) {
@@ -306,6 +310,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             teamRoles={teamRoles}
             token={token!}
             projectId={id}
+            teamName={teamName}
+            teamAvatarUrl={teamAvatarUrl}
           />
         </div>
       )}

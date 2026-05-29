@@ -6,7 +6,6 @@ import {
   ReactFlow,
   Background,
   Controls,
-  MiniMap,
   useNodesState,
   useEdgesState,
   type Node,
@@ -266,22 +265,10 @@ export default function WorkflowCanvas({
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={true}
+        proOptions={{ hideAttribution: true }}
       >
         <Background gap={16} color="#e5e7eb" />
         <Controls showInteractive={false} position="bottom-left" />
-        <MiniMap
-          position="bottom-right"
-          nodeColor={(node) => {
-            const task = tasks.find((t) => t.id === node.id);
-            if (!task) return "#e5e7eb";
-            if (task.status === "Complete")    return "#10b981";
-            if (task.status === "In Progress") return "#3b82f6";
-            if (task.status === "Ready")       return "#06b6d4";
-            if (task.status === "On Hold")     return "#f59e0b";
-            return "#94a3b8";
-          }}
-          className="!bg-white !border !border-slate-200 !rounded-xl"
-        />
 
         {/* Legend — top-left so it doesn't overlap the Controls */}
         <Panel position="top-left">
