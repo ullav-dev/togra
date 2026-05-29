@@ -103,6 +103,7 @@
     "breadcrumbProjects": "Projekte",
     "pmLabel": "PM",
     "notesTitle": "Notizen",
+    "tabs": { "planning": "Planung", "team": "Team" },
     "deleteProjectTitle": "\"{name}\" löschen?",
     "deleteProjectMessage": "Alle Sprints, Stories und Notizen in diesem Projekt werden dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.",
     "deleteProjectLabel": "Projekt löschen",
@@ -218,6 +219,19 @@
       "In Progress": "In Bearbeitung",
       "On Hold": "Pausiert",
       "Complete": "Abgeschlossen"
+    }
+  },
+  "teamView": {
+    "tabPlanning": "Planung",
+    "tabTeam": "Team",
+    "loading": "Teamaufgaben werden geladen…",
+    "noTeam": "Diesem Projekt ist kein Team zugeordnet.",
+    "noTasks": "Keine Aufgaben zugewiesen",
+    "taskCount": "{count} Aufgaben",
+    "role": {
+      "owner": "Inhaber",
+      "leader": "Leiter",
+      "member": "Mitglied"
     }
   },
   "notes": {

@@ -103,6 +103,7 @@
     "breadcrumbProjects": "Projects",
     "pmLabel": "PM",
     "notesTitle": "Notes",
+    "tabs": { "planning": "Planning", "team": "Team" },
     "deleteProjectTitle": "Delete \"{name}\"?",
     "deleteProjectMessage": "All sprints, stories, and notes in this project will be permanently deleted. This cannot be undone.",
     "deleteProjectLabel": "Delete project",
@@ -218,6 +219,19 @@
       "In Progress": "In Progress",
       "On Hold": "On Hold",
       "Complete": "Complete"
+    }
+  },
+  "teamView": {
+    "tabPlanning": "Planning",
+    "tabTeam": "Team",
+    "loading": "Loading team tasks…",
+    "noTeam": "No team is associated with this project.",
+    "noTasks": "No tasks assigned",
+    "taskCount": "{count} tasks",
+    "role": {
+      "owner": "Owner",
+      "leader": "Leader",
+      "member": "Member"
     }
   },
   "notes": {

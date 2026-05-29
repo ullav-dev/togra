@@ -27,6 +27,7 @@ import StatusPill from "@/components/StatusPill";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import VisibilityToggle from "@/components/VisibilityToggle";
 import NotesPanel from "@/components/notes/NotesPanel";
+import TeamView from "@/components/TeamView";
 
 const BACKLOG_PAGE_SIZE = 20;
 
@@ -52,6 +53,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
   const backlogResize = useResize({ initial: 300, min: 200, max: 480, axis: "x" });
   const notesResize = useResize({ initial: 320, min: 200, max: 560, axis: "x", reverse: true });
+  const [activeTab, setActiveTab] = useState<"planning" | "team">("planning");
 
   const backlogJob = project?.jobs.find((j) => j.job_type === "backlog") ?? null;
   const sprints = (project?.jobs ?? [])
@@ -209,8 +211,26 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         </div>
       </div>
 
-      {/* Three-column pane: Backlog | Sprints | Notes */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* Tab bar */}
+      <div className="bg-white border-b border-slate-200 px-6 shrink-0 flex items-center gap-1">
+        {(["planning", "team"] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              activeTab === tab
+                ? "border-violet-600 text-violet-700"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {tab === "planning" ? t("tabs.planning") : t("tabs.team")}
+          </button>
+        ))}
+      </div>
+
+      {/* Planning tab — Three-column pane: Backlog | Sprints | Notes */}
+      {activeTab === "planning" && <div className="flex flex-1 overflow-hidden">
         {/* Left — Backlog (resizable) */}
         <div className="shrink-0 overflow-hidden flex flex-col" style={{ width: backlogResize.size }}>
           <BacklogPanel
@@ -268,7 +288,19 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             <NotesPanel entityType="project" entityId={id} isTeam={true} />
           </div>
         </div>
-      </div>
+      </div>}
+
+      {/* Team tab */}
+      {activeTab === "team" && (
+        <div className="flex flex-1 overflow-hidden bg-slate-50">
+          <TeamView
+            sprints={sprints}
+            teamMembers={teamMembers}
+            token={token!}
+            projectId={id}
+          />
+        </div>
+      )}
 
       {confirmDeleteProject && project && (
         <ConfirmDialog
