@@ -258,6 +258,7 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
   const [newFolderName, setNewFolderName] = useState("");
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [renameFolderName, setRenameFolderName] = useState("");
+  const listResize = useResize({ initial: 220, min: 140, max: 400, axis: "x" });
 
   const currentUserId = user?.id ?? "";
   const resolveCreator = (id: string) => id === currentUserId ? (user?.username ?? t("you")) : id;
@@ -472,9 +473,6 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
   );
 
   // Full layout — always shows list + content side by side
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const listResize = useResize({ initial: 220, min: 140, max: 400, axis: "x" });
-
   const rightPanel = () => {
     if (mode === "create") return (
       <div className="bg-white rounded-xl border border-slate-200 p-4 h-full overflow-y-auto">
