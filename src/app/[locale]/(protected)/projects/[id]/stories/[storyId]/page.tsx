@@ -215,7 +215,7 @@ export default function StoryDetailPage({
         className="shrink-0 overflow-hidden bg-white border-b border-slate-200 px-6 py-4"
         style={{ height: notesResize.size }}
       >
-        <NotesPanel entityType="workflow" entityId={storyId} isTeam={true} />
+        <NotesPanel entityType="workflow" entityId={storyId} isTeam={true} twoColumn />
       </div>
 
       {/* Resize handle */}
