@@ -73,7 +73,7 @@ export const confirmPasswordReset = (token: string, new_password: string): Promi
     body: JSON.stringify({ token, new_password }),
   });
 
-// ── Team-level product access (piggybacking on obair gate) ───────────────────
+// ── Team-level product access ─────────────────────────────────────────────────
 
 export interface TeamClaim {
   name: string;
@@ -90,16 +90,19 @@ export function getTeamClaims(token: string | null): Record<string, TeamClaim> {
   return (payload.teams ?? {}) as Record<string, TeamClaim>;
 }
 
-/** Togra uses the obair product gate for access control. */
+/** Togra access: `togra` product (or legacy `obair` during transition). */
 export function hasTograAccess(token: string | null): boolean {
   const teams = getTeamClaims(token);
-  return Object.values(teams).some((t) => (t.products ?? []).includes("obair"));
+  return Object.values(teams).some(
+    (t) => (t.products ?? []).includes("togra") || (t.products ?? []).includes("obair"),
+  );
 }
 
-export function getObairTeamIds(token: string | null): string[] {
+/** Returns IDs of teams that grant Togra access. */
+export function getTograTeamIds(token: string | null): string[] {
   const teams = getTeamClaims(token);
   return Object.entries(teams)
-    .filter(([, t]) => (t.products ?? []).includes("obair"))
+    .filter(([, t]) => (t.products ?? []).includes("togra") || (t.products ?? []).includes("obair"))
     .map(([id]) => id);
 }
 
@@ -109,6 +112,97 @@ export function isAdmin(token: string | null): boolean {
   if (!payload) return false;
   return ((payload.roles ?? []) as string[]).includes("admin");
 }
+
+// ── Admin API ─────────────────────────────────────────────────────────────────
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  username: string;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
+  is_active: boolean;
+  roles: string[];
+  created_at: string;
+}
+
+export interface AdminUsersPage {
+  users: AdminUser[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface AdminTeamUser {
+  id: string;
+  username: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
+}
+
+export interface AdminTeamMember {
+  id: string;
+  user: AdminTeamUser;
+  status: string;
+  role: string;
+  joined_at: string | null;
+}
+
+export interface AdminTeam {
+  id: string;
+  name: string;
+  description: string | null;
+  owner: AdminTeamUser;
+  members: AdminTeamMember[];
+}
+
+export interface AdminTeamSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  member_count: number;
+}
+
+export interface AdminTeamsPage {
+  teams: AdminTeamSummary[];
+  total: number;
+}
+
+export interface TeamProductAccess {
+  product_slug: string;
+  product_name: string;
+  granted_at: string;
+}
+
+export const adminListUsers = (token: string, pageSize = 200): Promise<AdminUsersPage> =>
+  authRequest(`/admin/users?page=1&page_size=${pageSize}`, {}, token);
+
+export const adminListTeams = (token: string, pageSize = 200): Promise<AdminTeamsPage> =>
+  authRequest(`/admin/teams?page=1&page_size=${pageSize}`, {}, token);
+
+export const adminGetTeam = (token: string, teamId: string): Promise<AdminTeam> =>
+  authRequest(`/admin/teams/${teamId}`, {}, token);
+
+export const adminListTeamProducts = (token: string, teamId: string): Promise<TeamProductAccess[]> =>
+  authRequest(`/admin/teams/${teamId}/products`, {}, token);
+
+export const adminEnableTeamProduct = (token: string, teamId: string, slug: string): Promise<TeamProductAccess[]> =>
+  authRequest(`/admin/teams/${teamId}/products/${slug}`, { method: "POST" }, token);
+
+export const adminAddTeamMember = (token: string, teamId: string, userId: string): Promise<AdminTeam> =>
+  authRequest(`/admin/teams/${teamId}/members`, { method: "POST", body: JSON.stringify({ user_id: userId }) }, token);
+
+export const adminRemoveTeamMember = (token: string, teamId: string, userId: string): Promise<void> =>
+  authRequest(`/admin/teams/${teamId}/members/${userId}`, { method: "DELETE" }, token);
+
+export const adminAssignProductRole = (token: string, teamId: string, userId: string, slug: string, role: string): Promise<void> =>
+  authRequest(`/admin/teams/${teamId}/members/${userId}/product-roles/${slug}`, { method: "POST", body: JSON.stringify({ role }) }, token);
+
+export const adminRevokeProductRole = (token: string, teamId: string, userId: string, slug: string): Promise<void> =>
+  authRequest(`/admin/teams/${teamId}/members/${userId}/product-roles/${slug}`, { method: "DELETE" }, token);
 
 // ── Profile ───────────────────────────────────────────────────────────────────
 

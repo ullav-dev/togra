@@ -262,6 +262,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         {/* Centre — Sprints (fills remaining space) */}
         <SprintsPanel
           projectId={id}
+          teamId={project?.team_id ?? null}
           sprints={sprints}
           backlogJob={backlogJob}
           token={token!}
@@ -574,6 +575,7 @@ function BacklogStoryCard({
 
 function SprintsPanel({
   projectId,
+  teamId,
   sprints,
   backlogJob,
   token,
@@ -586,6 +588,7 @@ function SprintsPanel({
   sprintRefreshMap,
 }: {
   projectId: string;
+  teamId: string | null;
   sprints: Job[];
   backlogJob: Job | null;
   token: string;
@@ -643,6 +646,7 @@ function SprintsPanel({
       {showCreate && (
         <CreateSprintModal
           projectId={projectId}
+          teamId={teamId}
           token={token}
           onCreated={(s) => { onSprintCreated(s); setShowCreate(false); }}
           onClose={() => setShowCreate(false)}
@@ -1127,11 +1131,13 @@ function CreateStoryModal({
 
 function CreateSprintModal({
   projectId,
+  teamId,
   token,
   onCreated,
   onClose,
 }: {
   projectId: string;
+  teamId: string | null;
   token: string;
   onCreated: (sprint: Job) => void;
   onClose: () => void;
@@ -1152,6 +1158,7 @@ function CreateSprintModal({
       const sprint = await createJob(token, {
         name: name.trim(),
         project_id: projectId,
+        team_id: teamId ?? undefined,
         job_type: "sprint",
         start_date: startDate || undefined,
         end_date: endDate || undefined,

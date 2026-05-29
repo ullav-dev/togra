@@ -242,6 +242,9 @@
     "colStatus": "Status",
     "colAssignee": "Bearbeiter",
     "colRoles": "Rollen",
+    "colStart": "Start",
+    "colEnd": "Ende",
+    "colDuration": "Dauer",
     "unassigned": "Nicht zugewiesen",
     "role": {
       "owner": "Inhaber",

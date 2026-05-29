@@ -592,21 +592,33 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
   // ── Standard full layout (project panel, any other wide context) ─────────────
   return (
     <>
-    <div className="flex gap-4 min-h-0">
-      {folderSidebar}
+    <div className="flex flex-col min-h-0">
+      {/* Full-width header — always visible regardless of panel width */}
+      <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-100 shrink-0">
+        <span className="text-xs font-medium text-slate-500">{noteCount}</span>
+        <button
+          onClick={() => { setSelectedId(null); setMode("create"); }}
+          className="inline-flex items-center gap-1 text-xs font-medium text-violet-700 hover:text-violet-900 transition-colors"
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+            <path d="M8 2a.75.75 0 0 1 .75.75v4.5h4.5a.75.75 0 0 1 0 1.5h-4.5v4.5a.75.75 0 0 1-1.5 0v-4.5h-4.5a.75.75 0 0 1 0-1.5h4.5v-4.5A.75.75 0 0 1 8 2Z"/>
+          </svg>
+          {t("newNote")}
+        </button>
+      </div>
 
-      {/* Right panel */}
-      <div className="flex-1 min-w-0 space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-slate-700">{noteCount}</span>
-          <button onClick={() => { setSelectedId(null); setMode("create"); }} className="text-sm font-medium bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded-lg transition-colors">+ {t("newNote")}</button>
+      <div className="flex gap-4 min-h-0">
+        {folderSidebar}
+
+        {/* Right panel */}
+        <div className="flex-1 min-w-0 space-y-3">
+          {mode !== "list" ? (
+            <div className="space-y-3">
+              <button onClick={() => { setMode("list"); setSelectedId(null); }} className="text-xs text-slate-500 hover:text-slate-700 transition-colors">{t("backToList")}</button>
+              {mainContent()}
+            </div>
+          ) : noteList}
         </div>
-        {mode !== "list" ? (
-          <div className="space-y-3">
-            <button onClick={() => { setMode("list"); setSelectedId(null); }} className="text-xs text-slate-500 hover:text-slate-700 transition-colors">{t("backToList")}</button>
-            {mainContent()}
-          </div>
-        ) : noteList}
       </div>
     </div>
     {confirmDialogs}

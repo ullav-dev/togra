@@ -242,6 +242,9 @@
     "colStatus": "Status",
     "colAssignee": "Assignee",
     "colRoles": "Roles",
+    "colStart": "Start",
+    "colEnd": "End",
+    "colDuration": "Duration",
     "unassigned": "Unassigned",
     "role": {
       "owner": "Owner",

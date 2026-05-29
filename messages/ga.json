@@ -242,6 +242,9 @@
     "colStatus": "Stádas",
     "colAssignee": "Sannaí",
     "colRoles": "Róil",
+    "colStart": "Tús",
+    "colEnd": "Deireadh",
+    "colDuration": "Fad",
     "unassigned": "Gan sannadh",
     "role": {
       "owner": "Úinéir",
