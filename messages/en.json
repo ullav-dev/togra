@@ -274,6 +274,7 @@
     "mAgo": "{count}m ago",
     "hAgo": "{count}h ago",
     "dAgo": "{count}d ago",
+    "selectNote": "Select a note to read it",
     "deleteNoteTitle": "Delete \"{title}\"?",
     "deleteNoteMessage": "This note and all its replies will be permanently deleted.",
     "deleteNoteLabel": "Delete note",

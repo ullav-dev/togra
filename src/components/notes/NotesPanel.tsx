@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useTranslations } from "next-intl";
+import { useResize } from "@/hooks/useResize";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MarkdownEditor from "@/components/MarkdownEditor";
@@ -470,13 +471,43 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
     </>
   );
 
-  // Full layout
+  // Full layout — always shows list + content side by side
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const listResize = useResize({ initial: 220, min: 140, max: 400, axis: "x" });
+
+  const rightPanel = () => {
+    if (mode === "create") return (
+      <div className="bg-white rounded-xl border border-slate-200 p-4 h-full overflow-y-auto">
+        <h3 className="text-sm font-semibold text-slate-700 mb-3">{t("newNoteTitle")}</h3>
+        <NoteEditor saving={saving} showShareToggle={isTeam} onSubmit={handleCreate} onCancel={() => setMode("list")} />
+      </div>
+    );
+    if (mode === "edit" && selectedNote) return (
+      <div className="bg-white rounded-xl border border-slate-200 p-4 h-full overflow-y-auto">
+        <h3 className="text-sm font-semibold text-slate-700 mb-3">{t("editNoteTitle")}</h3>
+        <NoteEditor initial={selectedNote} saving={saving} showShareToggle={isTeam} onSubmit={handleUpdate} onCancel={() => setMode("view")} />
+      </div>
+    );
+    if (mode === "view" && selectedNote) return (
+      <div className="bg-white rounded-xl border border-slate-200 p-4 h-full overflow-y-auto">
+        <NoteView note={selectedNote} folders={folders} currentUserId={currentUserId} resolveCreator={resolveCreator}
+          token={token ?? ""} onEdit={() => setMode("edit")} onDelete={() => setConfirmDeleteNote(selectedNote)}
+          onMove={(folderId) => handleMove(selectedNote.id, folderId)} deleting={deletingId === selectedNote.id} />
+      </div>
+    );
+    return (
+      <div className="flex items-center justify-center h-full text-slate-400 text-sm">
+        {t("selectNote")}
+      </div>
+    );
+  };
+
   return (
     <>
-    <div className="flex gap-4 min-h-0">
-      {/* Folder sidebar */}
-      <div className="w-44 shrink-0 space-y-0.5">
-        <div className="flex items-center justify-between mb-2">
+    <div className="flex h-full min-h-0 overflow-hidden">
+      {/* Folder sidebar — fixed width */}
+      <div className="w-40 shrink-0 flex flex-col gap-0.5 pr-3 border-r border-slate-200 overflow-y-auto">
+        <div className="flex items-center justify-between mb-1.5">
           <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{t("foldersLabel")}</span>
           <button onClick={() => { setCreatingFolder(true); setNewFolderName(""); }} className="text-slate-400 hover:text-violet-700 transition-colors text-base leading-none" title={t("newNote")}>+</button>
         </div>
@@ -518,18 +549,26 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
         )}
       </div>
 
-      {/* Right panel */}
-      <div className="flex-1 min-w-0 space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-slate-700">{noteCount}</span>
-          <button onClick={() => { setSelectedId(null); setMode("create"); }} className="text-sm font-medium bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded-lg transition-colors">+ {t("newNote")}</button>
+      {/* Note list — resizable */}
+      <div className="shrink-0 flex flex-col overflow-hidden border-r border-slate-200" style={{ width: listResize.size }}>
+        <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 shrink-0">
+          <span className="text-xs font-medium text-slate-500">{noteCount}</span>
+          <button onClick={() => { setSelectedId(null); setMode("create"); }} className="text-xs font-medium text-violet-700 hover:text-violet-800 transition-colors">+ {t("newNote")}</button>
         </div>
-        {mode !== "list" ? (
-          <div className="space-y-3">
-            <button onClick={() => { setMode("list"); setSelectedId(null); }} className="text-xs text-slate-500 hover:text-slate-700 transition-colors">{t("backToList")}</button>
-            {mainContent()}
-          </div>
-        ) : noteList}
+        <div className="flex-1 overflow-y-auto px-2 py-2">
+          {noteList}
+        </div>
+      </div>
+
+      {/* Drag handle */}
+      <div
+        onMouseDown={listResize.onMouseDown}
+        className="w-1.5 shrink-0 bg-slate-100 hover:bg-violet-200 cursor-col-resize transition-colors"
+      />
+
+      {/* Note content — fills remaining space */}
+      <div className="flex-1 min-w-0 overflow-hidden pl-3">
+        {rightPanel()}
       </div>
     </div>
     {confirmDialogs}

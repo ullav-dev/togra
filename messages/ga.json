@@ -274,6 +274,7 @@
     "mAgo": "{count} nóim. ó shin",
     "hAgo": "{count} u. ó shin",
     "dAgo": "{count} lá ó shin",
+    "selectNote": "Roghnaigh nóta le léamh",
     "deleteNoteTitle": "\"{title}\" a scriosadh?",
     "deleteNoteMessage": "Scriosfar an nóta seo agus a chuid freagraí go léir go buan.",
     "deleteNoteLabel": "Nóta a scriosadh",
