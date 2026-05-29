@@ -78,7 +78,11 @@ function TaskDetailPanel({
 }) {
   const t = useTranslations("teamView");
   const [saving, setSaving] = useState(false);
+  const [description, setDescription] = useState(row.task.description ?? "");
   const task = row.task;
+
+  // Reset local description if a different task is opened
+  useEffect(() => { setDescription(row.task.description ?? ""); }, [row.task.id, row.task.description]);
 
   const roles = row.roleIds
     .map((id) => teamRoles.find((r) => r.id === id))
@@ -96,6 +100,16 @@ function TaskDetailPanel({
     setSaving(true);
     try {
       const updated = await updateTask(token, task.id, { assigned_to: userId });
+      onTaskUpdated(updated);
+    } finally { setSaving(false); }
+  }
+
+  async function handleDescriptionBlur() {
+    const trimmed = description.trim();
+    if (trimmed === (task.description ?? "")) return;
+    setSaving(true);
+    try {
+      const updated = await updateTask(token, task.id, { description: trimmed || undefined });
       onTaskUpdated(updated);
     } finally { setSaving(false); }
   }
@@ -123,12 +137,18 @@ function TaskDetailPanel({
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
         {/* Description */}
-        {task.description && (
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Description</label>
-            <p className="text-sm text-slate-600 leading-relaxed">{task.description}</p>
-          </div>
-        )}
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Description</label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            onBlur={() => void handleDescriptionBlur()}
+            disabled={saving}
+            rows={3}
+            placeholder="Add a description…"
+            className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 bg-white resize-none disabled:opacity-50 placeholder:text-slate-400"
+          />
+        </div>
 
         {/* Status */}
         <div>
