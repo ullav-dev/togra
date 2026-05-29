@@ -366,7 +366,8 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
     if (activeFolder !== "all") return all.filter((n) => n.folder_id === activeFolder);
     return all;
   };
-  const visibleNotes = filterNotes(topLevel);
+  const visibleNotes = filterNotes(topLevel)
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
   if (loading) return <div className="text-sm text-slate-400 py-6 text-center">{t("loading")}</div>;
   if (error) return (
