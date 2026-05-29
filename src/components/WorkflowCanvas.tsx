@@ -288,8 +288,9 @@ export default function WorkflowCanvas({
         elementsSelectable={true}
       >
         <Background gap={16} color="#e5e7eb" />
-        <Controls showInteractive={false} />
+        <Controls showInteractive={false} position="bottom-left" />
         <MiniMap
+          position="bottom-right"
           nodeColor={(node) => {
             const task = tasks.find((t) => t.id === node.id);
             if (!task) return "#e5e7eb";
@@ -302,12 +303,12 @@ export default function WorkflowCanvas({
           className="!bg-white !border !border-slate-200 !rounded-xl"
         />
 
-        {/* Legend */}
-        <Panel position="bottom-left">
+        {/* Legend — top-left so it doesn't overlap the Controls */}
+        <Panel position="top-left">
           <div className="bg-white/90 backdrop-blur-sm border border-slate-200 rounded-lg px-3 py-1.5 text-[11px] text-slate-500 shadow-sm flex items-center gap-3">
-            <span><span className="inline-block w-3 h-0.5 bg-emerald-500 mr-1 align-middle rounded" style={{ verticalAlign: "middle" }}></span>active path</span>
-            <span><span className="inline-block w-3 h-0.5 bg-slate-400 mr-1 align-middle rounded" style={{ verticalAlign: "middle" }}></span>pending</span>
-            <span className="opacity-50"><span className="inline-block w-3 h-0.5 bg-slate-400 mr-1 align-middle rounded" style={{ verticalAlign: "middle" }}></span>branch</span>
+            <span><span className="inline-block w-3 h-0.5 bg-emerald-500 mr-1 align-middle rounded" /></span>active path
+            <span><span className="inline-block w-3 h-0.5 bg-slate-400 mr-1 align-middle rounded" /></span>pending
+            <span><span className="inline-block w-3 h-0.5 bg-slate-400 mr-1 align-middle rounded" style={{ opacity: 0.4 }} /></span>loop
           </div>
         </Panel>
 
