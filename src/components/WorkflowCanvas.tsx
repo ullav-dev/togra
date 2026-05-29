@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Dagre from "@dagrejs/dagre";
 import {
   ReactFlow,
   Background,
@@ -20,20 +21,19 @@ import StoryTaskNode, { type StoryTaskNodeData } from "@/components/workflow/Sto
 
 const NODE_TYPES = { storyTaskNode: StoryTaskNode };
 
-const COL_WIDTH = 260;
-const ROW_HEIGHT = 130;
+// StoryTaskNode renders at w-48 (192 px); height ~110 px covers most cases.
+const NODE_W = 192;
+const NODE_H = 110;
 
-// ── Layout algorithms (ported from awe-client) ────────────────────────────────
+// ── Layout ────────────────────────────────────────────────────────────────────
 
 function findBackEdges(tasks: Task[], links: TaskLink[]): Set<string> {
   const outEdges = new Map<string, string[]>();
   tasks.forEach((t) => outEdges.set(t.id, []));
   links.forEach((l) => outEdges.get(l.from_task_id)?.push(l.to_task_id));
-
   const visited = new Set<string>();
   const inStack = new Set<string>();
   const back = new Set<string>();
-
   function dfs(id: string) {
     visited.add(id); inStack.add(id);
     for (const next of outEdges.get(id) ?? []) {
@@ -46,52 +46,27 @@ function findBackEdges(tasks: Task[], links: TaskLink[]): Set<string> {
   return back;
 }
 
-function computeDepths(tasks: Task[], links: TaskLink[]): Map<string, number> {
-  const backEdges = findBackEdges(tasks, links);
-  const forwardLinks = links.filter((l) => !backEdges.has(`${l.from_task_id}->${l.to_task_id}`));
-
-  const outEdges = new Map<string, string[]>();
-  const inDegree = new Map<string, number>();
-  tasks.forEach((t) => { outEdges.set(t.id, []); inDegree.set(t.id, 0); });
-  forwardLinks.forEach((l) => {
-    outEdges.get(l.from_task_id)?.push(l.to_task_id);
-    inDegree.set(l.to_task_id, (inDegree.get(l.to_task_id) ?? 0) + 1);
-  });
-
-  const depths = new Map<string, number>(tasks.map((t) => [t.id, 0]));
-  const remaining = new Map(inDegree);
-  const queue = tasks.filter((t) => (remaining.get(t.id) ?? 0) === 0).map((t) => t.id);
-
-  while (queue.length > 0) {
-    const id = queue.shift()!;
-    for (const next of outEdges.get(id) ?? []) {
-      const d = (depths.get(id) ?? 0) + 1;
-      if (d > (depths.get(next) ?? 0)) depths.set(next, d);
-      const deg = (remaining.get(next) ?? 1) - 1;
-      remaining.set(next, deg);
-      if (deg === 0) queue.push(next);
-    }
-  }
-
-  const maxDepth = Math.max(...depths.values(), 0);
-  tasks.forEach((t) => { if (t.is_end) depths.set(t.id, maxDepth); });
-  return depths;
-}
-
 function autoLayout(tasks: Task[], links: TaskLink[]): Map<string, { x: number; y: number }> {
   if (tasks.length === 0) return new Map();
   if (tasks.length === 1) return new Map([[tasks[0].id, { x: 0, y: 0 }]]);
 
-  const depths = computeDepths(tasks, links);
-  const byCol = new Map<number, string[]>();
-  depths.forEach((d, id) => { if (!byCol.has(d)) byCol.set(d, []); byCol.get(d)!.push(id); });
+  const g = new Dagre.graphlib.Graph();
+  g.setDefaultEdgeLabel(() => ({}));
+  g.setGraph({ rankdir: "LR", ranksep: 80, nodesep: 40, marginx: 20, marginy: 20 });
+
+  tasks.forEach((t) => g.setNode(t.id, { width: NODE_W, height: NODE_H }));
+
+  const backEdges = findBackEdges(tasks, links);
+  links
+    .filter((l) => !backEdges.has(`${l.from_task_id}->${l.to_task_id}`))
+    .forEach((l) => g.setEdge(l.from_task_id, l.to_task_id));
+
+  Dagre.layout(g);
 
   const positions = new Map<string, { x: number; y: number }>();
-  byCol.forEach((ids, col) => {
-    const totalH = (ids.length - 1) * ROW_HEIGHT;
-    ids.forEach((id, row) => {
-      positions.set(id, { x: col * COL_WIDTH, y: row * ROW_HEIGHT - totalH / 2 });
-    });
+  tasks.forEach((t) => {
+    const node = g.node(t.id);
+    positions.set(t.id, { x: node.x - NODE_W / 2, y: node.y - NODE_H / 2 });
   });
   return positions;
 }
@@ -184,9 +159,14 @@ export default function WorkflowCanvas({
 
   const nodePositions = useRef<Map<string, { x: number; y: number }>>(new Map());
 
-  // Recompute layout when task list changes
+  // Compute layout: Dagre baseline, then overlay any positions persisted in the DB.
   const layout = useMemo(() => {
     const l = autoLayout(tasks, workflow.links);
+    tasks.forEach((t) => {
+      if (t.canvas_x != null && t.canvas_y != null) {
+        l.set(t.id, { x: t.canvas_x, y: t.canvas_y });
+      }
+    });
     l.forEach((pos, id) => nodePositions.current.set(id, pos));
     return l;
   // eslint-disable-next-line react-hooks/exhaustive-deps
