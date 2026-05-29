@@ -3,122 +3,244 @@
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
-import { listWorkflows, listTasks } from "@/lib/awe-api";
-import type { Job, Task, TeamMember } from "@/lib/types";
+import { listWorkflows, listTasks, listTaskTeamRoles } from "@/lib/awe-api";
+import type { Job, Task, TeamMember, TeamRole } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 
-interface MemberTask {
+// ── Data types ────────────────────────────────────────────────────────────────
+
+interface TaskRow {
   task: Task;
   storyId: string;
   storyName: string;
   sprintId: string;
   sprintName: string;
+  roleIds: string[];
+  assignedMember: TeamMember | null;
 }
 
 interface Props {
   sprints: Job[];
   teamMembers: TeamMember[];
+  teamRoles: TeamRole[];
   token: string;
   projectId: string;
 }
 
-function MemberAvatar({ member, size = "lg" }: { member: TeamMember; size?: "lg" | "sm" }) {
+type Selection = { type: "role"; id: string } | { type: "member"; id: string } | null;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function MemberAvatar({ member, size = "sm" }: { member: TeamMember; size?: "sm" | "xs" }) {
   const [broken, setBroken] = useState(false);
   const initials = (
     `${member.user.first_name?.charAt(0) ?? ""}${member.user.last_name?.charAt(0) ?? ""}`
   ).toUpperCase() || member.user.username.charAt(0).toUpperCase();
   const label = `${member.user.first_name ?? ""} ${member.user.last_name ?? ""}`.trim() || member.user.username;
-  const dim = size === "lg"
-    ? "w-12 h-12 text-lg"
-    : "w-7 h-7 text-xs";
+  const dim = size === "sm" ? "w-7 h-7 text-xs" : "w-5 h-5 text-[9px]";
 
   if (member.user.avatar_url && !broken) {
     return (
-      <img
-        src={member.user.avatar_url}
-        alt={label}
+      <img src={member.user.avatar_url} alt={label} title={label}
         className={`${dim} rounded-full object-cover shrink-0`}
-        onError={() => setBroken(true)}
-      />
+        onError={() => setBroken(true)} />
     );
   }
   return (
-    <span className={`${dim} rounded-full bg-violet-100 text-violet-700 font-semibold flex items-center justify-center select-none shrink-0`}>
+    <span title={label} className={`${dim} rounded-full bg-violet-100 text-violet-700 font-semibold flex items-center justify-center select-none shrink-0`}>
       {initials}
     </span>
   );
 }
 
-function roleBadge(role: TeamMember["role"], t: (k: string) => string) {
-  const map: Record<TeamMember["role"], string> = {
-    owner: "bg-violet-100 text-violet-700",
-    leader: "bg-blue-100 text-blue-700",
-    member: "bg-slate-100 text-slate-600",
-  };
+function memberDisplayName(m: TeamMember): string {
+  return `${m.user.first_name ?? ""} ${m.user.last_name ?? ""}`.trim() || m.user.username;
+}
+
+// ── Task table ────────────────────────────────────────────────────────────────
+
+function TaskTable({
+  rows,
+  projectId,
+  showAssignee,
+  showRoles,
+  teamRoles,
+  emptyKey,
+}: {
+  rows: TaskRow[];
+  projectId: string;
+  showAssignee: boolean;
+  showRoles: boolean;
+  teamRoles: TeamRole[];
+  emptyKey: string;
+}) {
+  const t = useTranslations("teamView");
+
+  if (rows.length === 0) {
+    return (
+      <div className="flex items-center justify-center flex-1 text-slate-400 text-sm">
+        {t(emptyKey as Parameters<typeof t>[0])}
+      </div>
+    );
+  }
+
   return (
-    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${map[role]}`}>
-      {t(`role.${role}`)}
-    </span>
+    <div className="flex-1 overflow-auto">
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
+            <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t("colTask")}</th>
+            <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t("colStory")}</th>
+            <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t("colSprint")}</th>
+            <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap w-36">{t("colStatus")}</th>
+            {showAssignee && <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t("colAssignee")}</th>}
+            {showRoles && <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t("colRoles")}</th>}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {rows.map((row) => {
+            const roles = row.roleIds
+              .map((id) => teamRoles.find((r) => r.id === id))
+              .filter(Boolean) as TeamRole[];
+            return (
+              <tr key={row.task.id} className="hover:bg-slate-50 transition-colors">
+                <td className="px-4 py-2.5">
+                  <Link
+                    href={`/projects/${projectId}/stories/${row.storyId}`}
+                    className="font-medium text-slate-800 hover:text-violet-700 transition-colors line-clamp-1"
+                  >
+                    {row.task.name}
+                  </Link>
+                  {row.task.description && (
+                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{row.task.description}</p>
+                  )}
+                </td>
+                <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap max-w-[180px]">
+                  <span className="truncate block">{row.storyName}</span>
+                </td>
+                <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap text-xs">
+                  {row.sprintName}
+                </td>
+                <td className="px-4 py-2.5">
+                  <StatusPill status={row.task.status} />
+                </td>
+                {showAssignee && (
+                  <td className="px-4 py-2.5">
+                    {row.assignedMember ? (
+                      <div className="flex items-center gap-2">
+                        <MemberAvatar member={row.assignedMember} size="xs" />
+                        <span className="text-slate-700 text-xs">{memberDisplayName(row.assignedMember)}</span>
+                      </div>
+                    ) : (
+                      <span className="text-slate-400 text-xs italic">{t("unassigned")}</span>
+                    )}
+                  </td>
+                )}
+                {showRoles && (
+                  <td className="px-4 py-2.5">
+                    <div className="flex flex-wrap gap-1">
+                      {roles.length > 0 ? roles.map((r) => (
+                        <span key={r.id} className="text-[10px] bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                          {r.name}
+                        </span>
+                      )) : (
+                        <span className="text-slate-400 text-xs">—</span>
+                      )}
+                    </div>
+                  </td>
+                )}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
-export default function TeamView({ sprints, teamMembers, token, projectId }: Props) {
+// ── Main ──────────────────────────────────────────────────────────────────────
+
+export default function TeamView({ sprints, teamMembers, teamRoles, token, projectId }: Props) {
   const t = useTranslations("teamView");
-  const [taskMap, setTaskMap] = useState<Record<string, MemberTask[]>>({});
+  const [allTasks, setAllTasks] = useState<TaskRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selection, setSelection] = useState<Selection>(null);
 
   useEffect(() => {
-    if (!token || sprints.length === 0) {
-      setLoading(false);
-      return;
-    }
-
+    if (!token || sprints.length === 0) { setLoading(false); return; }
     let cancelled = false;
+
     (async () => {
-      // Load all sprint stories in parallel
+      // Load all sprint stories
       const sprintStories = await Promise.all(
-        sprints.map(async (sprint) => {
-          const stories = await listWorkflows(token, { job_id: sprint.id }).catch(() => []);
-          return { sprint, stories };
-        })
+        sprints.map(async (sprint) => ({
+          sprint,
+          stories: await listWorkflows(token, { job_id: sprint.id }).catch(() => []),
+        }))
       );
 
-      // Load tasks for all stories in parallel
-      const allTasks: MemberTask[] = [];
+      // Load tasks + their role assignments in parallel
+      const rows: TaskRow[] = [];
       await Promise.all(
         sprintStories.flatMap(({ sprint, stories }) =>
           stories.map(async (story) => {
             const tasks = await listTasks(token, story.id).catch(() => []);
-            for (const task of tasks) {
-              allTasks.push({
-                task,
-                storyId: story.id,
-                storyName: story.name,
-                sprintId: sprint.id,
-                sprintName: sprint.name,
-              });
-            }
+            await Promise.all(
+              tasks.map(async (task: Task) => {
+                const ttrs = await listTaskTeamRoles(token, task.id).catch(() => []);
+                rows.push({
+                  task,
+                  storyId: story.id,
+                  storyName: story.name,
+                  sprintId: sprint.id,
+                  sprintName: sprint.name,
+                  roleIds: ttrs.map((r) => r.team_role_id),
+                  assignedMember: task.assigned_to
+                    ? (teamMembers.find((m) => m.user.id === task.assigned_to) ?? null)
+                    : null,
+                });
+              })
+            );
           })
         )
       );
 
-      if (cancelled) return;
-
-      // Build per-member map (assigned tasks only)
-      const map: Record<string, MemberTask[]> = {};
-      for (const mt of allTasks) {
-        if (!mt.task.assigned_to) continue;
-        if (!map[mt.task.assigned_to]) map[mt.task.assigned_to] = [];
-        map[mt.task.assigned_to].push(mt);
+      if (!cancelled) {
+        setAllTasks(rows);
+        setLoading(false);
       }
-      setTaskMap(map);
-      setLoading(false);
     })();
 
     return () => { cancelled = true; };
-  }, [token, sprints]);
+  }, [token, sprints, teamMembers]);
 
-  if (teamMembers.length === 0) {
+  // Compute filtered rows for the current selection
+  const selectedRows = (() => {
+    if (!selection) return [];
+    if (selection.type === "role") {
+      return allTasks.filter((r) => r.roleIds.includes(selection.id));
+    }
+    return allTasks.filter((r) => r.task.assigned_to === selection.id);
+  })();
+
+  const selectedRole = selection?.type === "role"
+    ? teamRoles.find((r) => r.id === selection.id) ?? null
+    : null;
+  const selectedMember = selection?.type === "member"
+    ? teamMembers.find((m) => m.user.id === selection.id) ?? null
+    : null;
+
+  // Task counts for sidebar badges
+  const roleTaskCounts = new Map<string, number>();
+  const memberTaskCounts = new Map<string, number>();
+  allTasks.forEach((r) => {
+    r.roleIds.forEach((id) => roleTaskCounts.set(id, (roleTaskCounts.get(id) ?? 0) + 1));
+    if (r.task.assigned_to) {
+      memberTaskCounts.set(r.task.assigned_to, (memberTaskCounts.get(r.task.assigned_to) ?? 0) + 1);
+    }
+  });
+
+  if (teamMembers.length === 0 && teamRoles.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
         {t("noTeam")}
@@ -126,69 +248,125 @@ export default function TeamView({ sprints, teamMembers, token, projectId }: Pro
     );
   }
 
+  const sidebarItemCls = (active: boolean) =>
+    `w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer text-left ${
+      active
+        ? "bg-violet-50 text-violet-700 font-medium"
+        : "text-slate-600 hover:bg-slate-100 hover:text-slate-800"
+    }`;
+
+  // Panel header
+  let panelHeader: string | null = null;
+  if (selectedRole) panelHeader = t("tasksForRole", { name: selectedRole.name });
+  if (selectedMember) panelHeader = t("tasksForMember", { name: memberDisplayName(selectedMember) });
+
   return (
-    <div className="flex-1 overflow-y-auto p-6">
-      {loading && (
-        <p className="text-sm text-slate-400 mb-4">{t("loading")}</p>
-      )}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        {teamMembers.map((member) => {
-          const tasks = taskMap[member.user.id] ?? [];
-          const displayName = `${member.user.first_name ?? ""} ${member.user.last_name ?? ""}`.trim() || member.user.username;
-          const customRoles = member.team_roles.map((r) => r.name);
-
-          return (
-            <div key={member.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              {/* Member header */}
-              <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
-                <MemberAvatar member={member} size="lg" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-slate-800 leading-tight">{displayName}</span>
-                    {roleBadge(member.role, t)}
-                  </div>
-                  {customRoles.length > 0 && (
-                    <p className="text-xs text-slate-400 mt-0.5 truncate">{customRoles.join(" · ")}</p>
-                  )}
-                  <p className="text-xs text-slate-400 mt-0.5">{member.user.username}</p>
-                </div>
-                <span className={`text-xs font-semibold px-2 py-1 rounded-full shrink-0 ${
-                  tasks.length > 0
-                    ? "bg-violet-50 text-violet-700"
-                    : "bg-slate-100 text-slate-400"
-                }`}>
-                  {loading ? "…" : t("taskCount", { count: tasks.length })}
-                </span>
-              </div>
-
-              {/* Task list */}
-              {!loading && tasks.length === 0 ? (
-                <p className="px-5 py-3 text-xs text-slate-400 italic">{t("noTasks")}</p>
-              ) : (
-                <div className="divide-y divide-slate-50">
-                  {tasks.map((mt) => (
-                    <div key={mt.task.id} className="flex items-center gap-3 px-5 py-2.5 hover:bg-slate-50 group">
-                      <StatusPill status={mt.task.status} />
-                      <div className="flex-1 min-w-0">
-                        <Link
-                          href={`/projects/${projectId}/stories/${mt.storyId}`}
-                          className="text-sm text-slate-700 hover:text-violet-700 transition-colors leading-snug line-clamp-1"
-                        >
-                          {mt.task.name}
-                        </Link>
-                        <p className="text-[10px] text-slate-400 truncate mt-0.5">
-                          {mt.storyName}
-                          <span className="mx-1">·</span>
-                          {mt.sprintName}
-                        </p>
-                      </div>
+    <div className="flex flex-1 overflow-hidden">
+      {/* ── Left sidebar ── */}
+      <div className="w-52 shrink-0 flex flex-col border-r border-slate-200 bg-white overflow-y-auto">
+        {/* Roles section */}
+        <div className="px-3 pt-4 pb-1">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">{t("rolesHeading")}</p>
+          {teamRoles.length === 0 ? (
+            <p className="text-xs text-slate-400 px-1 italic">{t("noRoles")}</p>
+          ) : (
+            <div className="space-y-0.5">
+              {teamRoles.map((role) => {
+                const count = roleTaskCounts.get(role.id) ?? 0;
+                const active = selection?.type === "role" && selection.id === role.id;
+                return (
+                  <button
+                    key={role.id}
+                    type="button"
+                    onClick={() => setSelection(active ? null : { type: "role", id: role.id })}
+                    className={sidebarItemCls(active)}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${active ? "bg-violet-500" : "bg-slate-300"}`} />
+                      <span className="truncate">{role.name}</span>
                     </div>
-                  ))}
-                </div>
-              )}
+                    {!loading && count > 0 && (
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${active ? "bg-violet-100 text-violet-700" : "bg-slate-100 text-slate-500"}`}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
-          );
-        })}
+          )}
+        </div>
+
+        <div className="mx-3 my-3 border-t border-slate-200" />
+
+        {/* Members section */}
+        <div className="px-3 pb-4 flex-1">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">{t("membersHeading")}</p>
+          <div className="space-y-0.5">
+            {teamMembers.map((member) => {
+              const count = memberTaskCounts.get(member.user.id) ?? 0;
+              const active = selection?.type === "member" && selection.id === member.user.id;
+              return (
+                <button
+                  key={member.user.id}
+                  type="button"
+                  onClick={() => setSelection(active ? null : { type: "member", id: member.user.id })}
+                  className={sidebarItemCls(active)}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <MemberAvatar member={member} size="xs" />
+                    <span className="truncate">{memberDisplayName(member)}</span>
+                  </div>
+                  {!loading && count > 0 && (
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${active ? "bg-violet-100 text-violet-700" : "bg-slate-100 text-slate-500"}`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Right panel ── */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-white">
+        {/* Panel header */}
+        <div className="px-5 py-3 border-b border-slate-200 shrink-0 flex items-center justify-between">
+          {panelHeader ? (
+            <>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800">{panelHeader}</h3>
+                {!loading && (
+                  <p className="text-xs text-slate-400 mt-0.5">{t("taskCount", { count: selectedRows.length })}</p>
+                )}
+              </div>
+              {loading && <span className="text-xs text-slate-400">{t("loading")}</span>}
+            </>
+          ) : (
+            <p className="text-sm text-slate-400">{t("selectPrompt")}</p>
+          )}
+        </div>
+
+        {/* Table area */}
+        {!selection ? (
+          <div className="flex-1 flex items-center justify-center text-slate-300">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="w-16 h-16">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+            </svg>
+          </div>
+        ) : loading ? (
+          <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">{t("loading")}</div>
+        ) : (
+          <TaskTable
+            rows={selectedRows}
+            projectId={projectId}
+            showAssignee={selection.type === "role"}
+            showRoles={selection.type === "member"}
+            teamRoles={teamRoles}
+            emptyKey={selection.type === "role" ? "noTasksForRole" : "noTasksForMember"}
+          />
+        )}
       </div>
     </div>
   );

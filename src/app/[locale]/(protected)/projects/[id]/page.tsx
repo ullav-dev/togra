@@ -19,10 +19,11 @@ import {
   createTask,
   createNote,
   getTeam,
+  listTeamRoles,
 } from "@/lib/awe-api";
 import MarkdownEditor from "@/components/MarkdownEditor";
 import { useRouter } from "@/i18n/navigation";
-import type { ProjectWithJobs, Job, Workflow, Task, TeamMember } from "@/lib/types";
+import type { ProjectWithJobs, Job, Workflow, Task, TeamMember, TeamRole } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import VisibilityToggle from "@/components/VisibilityToggle";
@@ -50,6 +51,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [sprintRefreshMap, setSprintRefreshMap] = useState<Record<string, number>>({});
   const [pmName, setPmName] = useState<string | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [teamRoles, setTeamRoles] = useState<TeamRole[]>([]);
 
   const backlogResize = useResize({ initial: 300, min: 200, max: 480, axis: "x" });
   const notesResize = useResize({ initial: 320, min: 200, max: 560, axis: "x", reverse: true });
@@ -69,9 +71,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         bl ? listWorkflows(token, { job_id: bl.id }) : Promise.resolve([]),
         listWorkflows(token),
         proj.team_id
-          ? getTeam(token, proj.team_id).then((team) => {
+          ? Promise.all([
+              getTeam(token, proj.team_id),
+              listTeamRoles(token, proj.team_id),
+            ]).then(([team, roles]) => {
               const active = team.members.filter((m) => m.status === "active");
               setTeamMembers(active);
+              setTeamRoles(roles);
               if (proj.project_manager_id) {
                 const member = active.find((m) => m.user.id === proj.project_manager_id);
                 if (member) {
@@ -296,6 +302,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           <TeamView
             sprints={sprints}
             teamMembers={teamMembers}
+            teamRoles={teamRoles}
             token={token!}
             projectId={id}
           />
