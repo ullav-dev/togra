@@ -161,7 +161,7 @@ export interface TaskTeamRole {
 
 // ── Notes ─────────────────────────────────────────────────────────────────────
 
-export type NoteEntityType = "task" | "workflow" | "job";
+export type NoteEntityType = "task" | "workflow" | "job" | "project";
 
 export interface NoteFolder {
   id: string;

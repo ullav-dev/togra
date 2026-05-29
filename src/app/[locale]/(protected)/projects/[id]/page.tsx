@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use, useRef } from "react";
 import { useTranslations } from "next-intl";
+import { useResize } from "@/hooks/useResize";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { getProject, updateProject, deleteProject } from "@/lib/togra-api";
@@ -25,6 +26,7 @@ import type { ProjectWithJobs, Job, Workflow, Task, TeamMember } from "@/lib/typ
 import StatusPill from "@/components/StatusPill";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import VisibilityToggle from "@/components/VisibilityToggle";
+import NotesPanel from "@/components/notes/NotesPanel";
 
 const BACKLOG_PAGE_SIZE = 20;
 
@@ -47,6 +49,9 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [sprintRefreshMap, setSprintRefreshMap] = useState<Record<string, number>>({});
   const [pmName, setPmName] = useState<string | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+
+  const backlogResize = useResize({ initial: 300, min: 200, max: 480, axis: "x" });
+  const notesResize = useResize({ initial: 320, min: 200, max: 560, axis: "x", reverse: true });
 
   const backlogJob = project?.jobs.find((j) => j.job_type === "backlog") ?? null;
   const sprints = (project?.jobs ?? [])
@@ -204,25 +209,31 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         </div>
       </div>
 
-      {/* Split pane */}
+      {/* Three-column pane: Backlog | Sprints | Notes */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left — Backlog */}
-        <BacklogPanel
-          backlogJob={backlogJob}
-          stories={backlogStories}
-          sprints={sprints}
-          templates={templates}
-          token={token!}
-          projectId={id}
-          onStoryCreated={onStoryCreated}
-          onStoryMoved={onStoryMoved}
-          onStoryDeleted={onStoryDeleted}
+        {/* Left — Backlog (resizable) */}
+        <div className="shrink-0 overflow-hidden flex flex-col" style={{ width: backlogResize.size }}>
+          <BacklogPanel
+            backlogJob={backlogJob}
+            stories={backlogStories}
+            sprints={sprints}
+            templates={templates}
+            token={token!}
+            projectId={id}
+            onStoryCreated={onStoryCreated}
+            onStoryMoved={onStoryMoved}
+            onStoryDeleted={onStoryDeleted}
+          />
+        </div>
+
+        {/* Drag handle — Backlog / Sprints */}
+        <div
+          onMouseDown={backlogResize.onMouseDown}
+          className="w-1.5 shrink-0 bg-slate-200 hover:bg-violet-300 cursor-col-resize transition-colors"
+          title="Drag to resize"
         />
 
-        {/* Divider */}
-        <div className="w-px bg-slate-200 shrink-0" />
-
-        {/* Right — Sprints */}
+        {/* Centre — Sprints (fills remaining space) */}
         <SprintsPanel
           projectId={id}
           sprints={sprints}
@@ -240,6 +251,23 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           onStoryMoved={onStoryMoved}
           sprintRefreshMap={sprintRefreshMap}
         />
+
+        {/* Drag handle — Sprints / Notes */}
+        <div
+          onMouseDown={notesResize.onMouseDown}
+          className="w-1.5 shrink-0 bg-slate-200 hover:bg-violet-300 cursor-col-resize transition-colors"
+          title="Drag to resize"
+        />
+
+        {/* Right — Project Notes (resizable) */}
+        <div className="shrink-0 overflow-hidden flex flex-col bg-white" style={{ width: notesResize.size }}>
+          <div className="px-4 py-3 border-b border-slate-200 shrink-0">
+            <h2 className="text-sm font-semibold text-slate-700">{t("notesTitle")}</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4">
+            <NotesPanel entityType="project" entityId={id} isTeam={true} />
+          </div>
+        </div>
       </div>
 
       {confirmDeleteProject && project && (
@@ -321,7 +349,7 @@ function BacklogPanel({
     : t("backlog.storyCount", { count: stories.length });
 
   return (
-    <div className="w-80 shrink-0 flex flex-col bg-slate-50 overflow-hidden">
+    <div className="w-full h-full flex flex-col bg-slate-50 overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-200 bg-white flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold text-slate-700">{t("backlog.title")}</h2>

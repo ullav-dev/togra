@@ -102,6 +102,7 @@
     "notFound": "Project not found.",
     "breadcrumbProjects": "Projects",
     "pmLabel": "PM",
+    "notesTitle": "Notes",
     "deleteProjectTitle": "Delete \"{name}\"?",
     "deleteProjectMessage": "All sprints, stories, and notes in this project will be permanently deleted. This cannot be undone.",
     "deleteProjectLabel": "Delete project",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, use, useRef } from "react";
+import { useResize } from "@/hooks/useResize";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
@@ -120,35 +121,37 @@ export default function StoryDetailPage({
     }));
   }
 
+  const notesResize = useResize({ initial: 360, min: 180, max: 700, axis: "y" });
+
   if (loading) return <div className="p-8 text-slate-400 text-sm">{t("loading")}</div>;
   if (!story) return <div className="p-8 text-slate-500 text-sm">{t("notFound")}</div>;
 
   const parentJobId = story.job_id;
 
   return (
-    <div className="max-w-2xl mx-auto px-6 py-8">
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-sm text-slate-500 mb-6 flex-wrap">
-        <Link href="/projects" className="hover:text-violet-700 transition-colors">{t("breadcrumbProjects")}</Link>
-        <span>/</span>
-        <Link href={`/projects/${projectId}`} className="hover:text-violet-700 transition-colors">{project?.name ?? "…"}</Link>
-        {parentJobId && (
-          <>
-            <span>/</span>
-            <Link href={`/projects/${projectId}/jobs/${parentJobId}`} className="hover:text-violet-700 transition-colors">
-              {project?.jobs?.find((j) => j.id === parentJobId)?.name ?? t("sprintFallback")}
-            </Link>
-          </>
-        )}
-        <span>/</span>
-        <span className="text-slate-700 font-medium truncate max-w-xs">{story.name}</span>
-      </nav>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Sticky header strip */}
+      <div className="bg-white border-b border-slate-200 px-6 py-4 shrink-0">
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-2 text-sm text-slate-500 mb-3 flex-wrap">
+          <Link href="/projects" className="hover:text-violet-700 transition-colors">{t("breadcrumbProjects")}</Link>
+          <span>/</span>
+          <Link href={`/projects/${projectId}`} className="hover:text-violet-700 transition-colors">{project?.name ?? "…"}</Link>
+          {parentJobId && (
+            <>
+              <span>/</span>
+              <Link href={`/projects/${projectId}/jobs/${parentJobId}`} className="hover:text-violet-700 transition-colors">
+                {project?.jobs?.find((j) => j.id === parentJobId)?.name ?? t("sprintFallback")}
+              </Link>
+            </>
+          )}
+          <span>/</span>
+          <span className="text-slate-700 font-medium truncate max-w-xs">{story.name}</span>
+        </nav>
 
-      {/* Story header */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
-        {/* Name */}
-        <div className="flex items-start gap-3 mb-4">
-          <div className="flex-1">
+        {/* Story name + meta */}
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
             {editingName ? (
               <input
                 autoFocus
@@ -160,7 +163,7 @@ export default function StoryDetailPage({
               />
             ) : (
               <h1
-                className="text-xl font-bold text-slate-800 cursor-pointer hover:text-violet-700 transition-colors"
+                className="text-xl font-bold text-slate-800 cursor-pointer hover:text-violet-700 transition-colors leading-snug"
                 onClick={() => setEditingName(true)}
                 title="Click to edit"
               >
@@ -171,8 +174,7 @@ export default function StoryDetailPage({
           <StatusPill status={story.status} />
         </div>
 
-        {/* Story points + visibility */}
-        <div className="flex items-center gap-6 text-sm text-slate-500 flex-wrap">
+        <div className="flex items-center gap-6 text-sm text-slate-500 mt-3 flex-wrap">
           <div className="flex items-center gap-2">
             <span className="font-medium">{t("storyPoints")}</span>
             {editingPoints ? (
@@ -197,7 +199,6 @@ export default function StoryDetailPage({
               </button>
             )}
           </div>
-
           <VisibilityToggle
             isShared={story.is_shared}
             onChange={async (val) => {
@@ -209,36 +210,50 @@ export default function StoryDetailPage({
         </div>
       </div>
 
-      {/* Tasks (workflow steps) */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden mb-6">
-        <div className="px-6 py-4 border-b border-slate-100">
-          <h2 className="text-sm font-semibold text-slate-700">{t("workflowSteps")}</h2>
-          <p className="text-xs text-slate-400 mt-0.5">{t("taskCount", { count: story.tasks.length })}</p>
-        </div>
-        {story.tasks.length === 0 ? (
-          <p className="px-6 py-4 text-sm text-slate-400">{t("noSteps")}</p>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {story.tasks.map((task) => (
-              <TaskRow
-                key={task.id}
-                task={task}
-                taskRoles={taskTeamRoles[task.id] ?? []}
-                teamMembers={teamMembers}
-                teamRoles={teamRoles}
-                onStatusChange={(s) => onTaskStatusChange(task, s)}
-                onAssigneeChange={(userId) => onAssigneeChange(task, userId)}
-                onRoleAdd={(roleId) => onRoleAdd(task.id, roleId)}
-                onRoleRemove={(roleId) => onRoleRemove(task.id, roleId)}
-              />
-            ))}
-          </div>
-        )}
+      {/* Notes — resizable, fills from header down */}
+      <div
+        className="shrink-0 overflow-hidden bg-white border-b border-slate-200 px-6 py-4"
+        style={{ height: notesResize.size }}
+      >
+        <NotesPanel entityType="workflow" entityId={storyId} isTeam={true} />
       </div>
 
-      {/* Notes */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6">
-        <NotesPanel entityType="workflow" entityId={storyId} isTeam={true} />
+      {/* Resize handle */}
+      <div
+        onMouseDown={notesResize.onMouseDown}
+        className="h-2 shrink-0 bg-slate-100 hover:bg-violet-100 cursor-row-resize flex items-center justify-center group transition-colors"
+        title="Drag to resize"
+      >
+        <div className="w-8 h-0.5 bg-slate-300 group-hover:bg-violet-400 rounded-full transition-colors" />
+      </div>
+
+      {/* Workflow steps — fills remaining space, scrollable */}
+      <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h2 className="text-sm font-semibold text-slate-700">{t("workflowSteps")}</h2>
+            <p className="text-xs text-slate-400 mt-0.5">{t("taskCount", { count: story.tasks.length })}</p>
+          </div>
+          {story.tasks.length === 0 ? (
+            <p className="px-6 py-4 text-sm text-slate-400">{t("noSteps")}</p>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {story.tasks.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  taskRoles={taskTeamRoles[task.id] ?? []}
+                  teamMembers={teamMembers}
+                  teamRoles={teamRoles}
+                  onStatusChange={(s) => onTaskStatusChange(task, s)}
+                  onAssigneeChange={(userId) => onAssigneeChange(task, userId)}
+                  onRoleAdd={(roleId) => onRoleAdd(task.id, roleId)}
+                  onRoleRemove={(roleId) => onRoleRemove(task.id, roleId)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
