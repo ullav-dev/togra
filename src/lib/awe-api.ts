@@ -1,7 +1,7 @@
 // AWE API calls (jobs, workflows, tasks, notes, teams) used by Togra.
 // All browser requests go via /api/* rewrite; server-side uses API_URL directly.
 
-import type { Job, JobWithWorkflows, Task, Workflow, WorkflowWithTasks, Note, NoteFolder, TeamSummary, Team, TeamRole, TaskTeamRole } from "./types";
+import type { Job, JobWithWorkflows, Task, TaskLink, Workflow, WorkflowWithTasks, Note, NoteFolder, TeamSummary, Team, TeamRole, TaskTeamRole } from "./types";
 
 const BASE =
   typeof window === "undefined"
@@ -149,19 +149,34 @@ export const listTasks = (token: string, workflowId: string): Promise<Task[]> =>
 
 export const createTask = (
   token: string,
-  payload: { name: string; workflow_id: string; description?: string }
+  payload: { name: string; workflow_id: string; task_type?: string; description?: string; is_start?: boolean; is_end?: boolean }
 ): Promise<Task> =>
   apiRequest("/tasks", token, { method: "POST", body: JSON.stringify(payload) });
 
 export const updateTask = (
   token: string,
   id: string,
-  patch: { name?: string; status?: string; description?: string; assigned_to?: string | null }
+  patch: {
+    name?: string; status?: string; description?: string;
+    assigned_to?: string | null;
+    task_type?: string;
+    is_start?: boolean; is_end?: boolean;
+    canvas_x?: number | null; canvas_y?: number | null;
+  }
 ): Promise<Task> =>
   apiRequest(`/tasks/${id}`, token, { method: "PUT", body: JSON.stringify(patch) });
 
 export const deleteTask = (token: string, id: string): Promise<void> =>
   apiRequest(`/tasks/${id}`, token, { method: "DELETE" });
+
+export const createTaskLink = (
+  token: string,
+  body: { from_task_id: string; to_task_id: string; branch_label?: string | null }
+): Promise<TaskLink> =>
+  apiRequest("/task-links", token, { method: "POST", body: JSON.stringify(body) });
+
+export const deleteTaskLink = (token: string, fromId: string, toId: string): Promise<void> =>
+  apiRequest(`/task-links/${fromId}/${toId}`, token, { method: "DELETE" });
 
 export const listTaskTeamRoles = (token: string, taskId: string): Promise<TaskTeamRole[]> =>
   apiRequest(`/tasks/${taskId}/team-roles`, token);
