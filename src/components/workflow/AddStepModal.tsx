@@ -3,13 +3,14 @@
 import { useState } from "react";
 
 interface Props {
+  defaultType?: "standard" | "decision" | "automated";
   onAdd: (name: string, taskType: "standard" | "decision" | "automated") => Promise<void>;
   onClose: () => void;
 }
 
-export default function AddStepModal({ onAdd, onClose }: Props) {
+export default function AddStepModal({ defaultType = "standard", onAdd, onClose }: Props) {
   const [name, setName] = useState("");
-  const [taskType, setTaskType] = useState<"standard" | "decision" | "automated">("standard");
+  const [taskType, setTaskType] = useState<"standard" | "decision" | "automated">(defaultType);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

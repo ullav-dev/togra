@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { updateTask, assignTaskTeamRole, removeTaskTeamRole } from "@/lib/awe-api";
+import { updateTask, assignTaskTeamRole, removeTaskTeamRole, listTaskPortSpecs, createTaskPortSpec, deleteTaskPortSpec } from "@/lib/awe-api";
 import { useResize } from "@/hooks/useResize";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import AutomatedStepConfig from "@/components/workflow/AutomatedStepConfig";
-import type { Task, TaskLink, TeamMember, TeamRole, TaskTeamRole } from "@/lib/types";
+import type { Task, TaskLink, TeamMember, TeamRole, TaskTeamRole, TaskPortSpec, PortDirection, PortValueType } from "@/lib/types";
 
 interface Props {
   task: Task;
@@ -44,11 +44,6 @@ export default function StepEditDrawer({
 }: Props) {
   const [draftName, setDraftName] = useState(task.name);
   const [draftDesc, setDraftDesc] = useState(task.description ?? "");
-  const [draftType, setDraftType] = useState<"standard" | "decision" | "automated">(
-    task.task_type === "decision" ? "decision" : task.task_type === "automated" ? "automated" : "standard"
-  );
-  const [draftIsStart, setDraftIsStart] = useState(task.is_start);
-  const [draftIsEnd, setDraftIsEnd] = useState(task.is_end);
   const [draftAssignee, setDraftAssignee] = useState<string | null>(task.assigned_to ?? null);
 
   const resize = useResize({ initial: 288, min: 220, max: 560, axis: "x", reverse: true });
@@ -60,23 +55,34 @@ export default function StepEditDrawer({
   const [editingLabelFor, setEditingLabelFor] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState("");
 
+  // Ports state
+  const [ports, setPorts] = useState<TaskPortSpec[]>([]);
+  const [portsLoading, setPortsLoading] = useState(true);
+  const [portsBusy, setPortsBusy] = useState(false);
+  const [addingPort, setAddingPort] = useState<PortDirection | null>(null);
+  const [newPortName, setNewPortName] = useState("");
+  const [newPortType, setNewPortType] = useState<PortValueType>("string");
+  const [newPortRequired, setNewPortRequired] = useState(false);
+
   // Reset draft when a different task is selected
   useEffect(() => {
     setDraftName(task.name);
     setDraftDesc(task.description ?? "");
-    setDraftType(task.task_type === "decision" ? "decision" : "standard");
-    setDraftIsStart(task.is_start);
-    setDraftIsEnd(task.is_end);
     setDraftAssignee(task.assigned_to ?? null);
   }, [task.id]);
 
-  const savedType = task.task_type === "decision" ? "decision" : task.task_type === "automated" ? "automated" : "standard";
+  // Load ports when task changes
+  useEffect(() => {
+    setPortsLoading(true);
+    listTaskPortSpecs(token, task.id)
+      .then(setPorts)
+      .catch(() => setPorts([]))
+      .finally(() => setPortsLoading(false));
+  }, [task.id, token]);
+
   const isDirty =
     draftName.trim() !== task.name ||
     draftDesc.trim() !== (task.description ?? "") ||
-    draftType !== savedType ||
-    draftIsStart !== task.is_start ||
-    draftIsEnd !== task.is_end ||
     draftAssignee !== (task.assigned_to ?? null);
 
   async function handleSave() {
@@ -85,9 +91,6 @@ export default function StepEditDrawer({
       const patch: Parameters<typeof updateTask>[2] = {};
       if (draftName.trim() !== task.name) patch.name = draftName.trim();
       if (draftDesc.trim() !== (task.description ?? "")) patch.description = draftDesc.trim() || undefined;
-      if (draftType !== savedType) patch.task_type = draftType;
-      if (draftIsStart !== task.is_start) patch.is_start = draftIsStart;
-      if (draftIsEnd !== task.is_end) patch.is_end = draftIsEnd;
       if (draftAssignee !== (task.assigned_to ?? null)) patch.assigned_to = draftAssignee;
       const updated = await updateTask(token, task.id, patch);
       onTaskUpdated(updated);
@@ -119,6 +122,30 @@ export default function StepEditDrawer({
       await removeTaskTeamRole(token, task.id, teamRoleId);
       onRolesUpdated(task.id, taskTeamRoles.filter((r) => r.team_role_id !== teamRoleId));
     } finally { setRolesBusy(false); }
+  }
+
+  async function handleAddPort(direction: PortDirection) {
+    if (!newPortName.trim()) return;
+    setPortsBusy(true);
+    try {
+      const port = await createTaskPortSpec(token, task.id, {
+        direction,
+        name: newPortName.trim(),
+        value_type: newPortType,
+        required: direction === "input" ? newPortRequired : false,
+      });
+      setPorts((prev) => [...prev, port]);
+      setAddingPort(null);
+      setNewPortName(""); setNewPortType("string"); setNewPortRequired(false);
+    } finally { setPortsBusy(false); }
+  }
+
+  async function handleDeletePort(portId: string) {
+    setPortsBusy(true);
+    try {
+      await deleteTaskPortSpec(token, task.id, portId);
+      setPorts((prev) => prev.filter((p) => p.id !== portId));
+    } finally { setPortsBusy(false); }
   }
 
   async function handleSaveBranchLabel(toId: string) {
@@ -192,39 +219,21 @@ export default function StepEditDrawer({
             />
           </div>
 
-          {/* Type */}
-          <div className={sectionCls}>
-            <label className={labelCls}>Type</label>
-            <div className="flex gap-2">
-              {([
-                ["standard", "Standard"],
-                ["decision", "Decision ◇"],
-                ["automated", "Automated ⚡"],
-              ] as const).map(([t, label]) => (
-                <button key={t} type="button" onClick={() => setDraftType(t)} disabled={saving}
-                  className={`flex-1 py-1.5 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 ${
-                    draftType === t ? "bg-violet-50 border-violet-400 text-violet-700" : "border-slate-300 text-slate-600 hover:bg-slate-50"
-                  }`}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Start / End flags */}
-          <div className={sectionCls}>
-            <label className={labelCls}>Flags</label>
-            <div className="space-y-1.5">
-              {([["is_start", "Start step", draftIsStart, setDraftIsStart], ["is_end", "End step", draftIsEnd, setDraftIsEnd]] as const).map(
-                ([key, label, val, setter]) => (
-                  <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
-                    <input type="checkbox" checked={val} onChange={(e) => setter(e.target.checked)} disabled={saving}
-                      className="rounded border-slate-300 text-violet-600 focus:ring-violet-500" />
-                    <span className="text-sm text-slate-700">{label}</span>
-                  </label>
-                )
-              )}
-            </div>
+          {/* Type + flags — read-only */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1 text-xs font-medium bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
+              {task.task_type === "decision" ? "Decision ◇" : task.task_type === "automated" ? "Automated ⚡" : "Standard"}
+            </span>
+            {task.is_start && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full">
+                ▶ Start
+              </span>
+            )}
+            {task.is_end && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium bg-slate-100 text-slate-600 border border-slate-300 px-2.5 py-1 rounded-full">
+                ■ End
+              </span>
+            )}
           </div>
 
           {/* Assignee */}
@@ -274,8 +283,84 @@ export default function StepEditDrawer({
             )}
           </div>
 
+          {/* Ports */}
+          <div className={sectionCls}>
+            <div className="border-t border-slate-200 pt-4">
+              <label className={labelCls + " mb-2"}>Ports</label>
+              {portsLoading ? (
+                <p className="text-xs text-slate-400">Loading…</p>
+              ) : (
+                <div className="space-y-3">
+                  {(["input", "output"] as const).map((dir) => {
+                    const dirPorts = ports.filter((p) => p.direction === dir);
+                    const isAddingThis = addingPort === dir;
+                    return (
+                      <div key={dir}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{dir === "input" ? "Inputs" : "Outputs"}</span>
+                          {!isAddingThis && (
+                            <button type="button" onClick={() => setAddingPort(dir)}
+                              className="text-[10px] text-violet-600 hover:text-violet-800 font-medium transition-colors">+ Add</button>
+                          )}
+                        </div>
+                        {dirPorts.length === 0 && !isAddingThis && (
+                          <p className="text-xs text-slate-400 italic">None</p>
+                        )}
+                        <div className="space-y-1">
+                          {dirPorts.map((p) => (
+                            <div key={p.id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-1.5">
+                              <span className="text-xs font-mono text-slate-700 truncate flex-1">{p.name}</span>
+                              <span className="text-[10px] bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded shrink-0">{p.value_type}</span>
+                              {p.required && <span className="text-[10px] text-amber-600 font-medium shrink-0">req</span>}
+                              <button type="button" onClick={() => void handleDeletePort(p.id)} disabled={portsBusy}
+                                className="text-slate-300 hover:text-red-500 disabled:opacity-40 transition-colors shrink-0">
+                                <svg viewBox="0 0 12 12" fill="currentColor" className="w-3 h-3">
+                                  <path d="M2.22 2.22a.75.75 0 0 1 1.06 0L6 4.94l2.72-2.72a.75.75 0 1 1 1.06 1.06L7.06 6l2.72 2.72a.75.75 0 1 1-1.06 1.06L6 7.06 3.28 9.78a.75.75 0 0 1-1.06-1.06L4.94 6 2.22 3.28a.75.75 0 0 1 0-1.06z"/>
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        {isAddingThis && (
+                          <div className="mt-1 bg-slate-50 rounded-lg p-2.5 space-y-2">
+                            <input autoFocus value={newPortName} onChange={(e) => setNewPortName(e.target.value)}
+                              placeholder="Port name" onKeyDown={(e) => e.key === "Escape" && setAddingPort(null)}
+                              className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 focus:border-violet-500 focus:outline-none font-mono" />
+                            <div className="flex items-center gap-2">
+                              <select value={newPortType} onChange={(e) => setNewPortType(e.target.value as PortValueType)}
+                                className="flex-1 text-xs border border-slate-300 rounded px-2 py-1.5 bg-white focus:border-violet-500 focus:outline-none">
+                                {(["string","number","boolean","json","file","dam_asset"] as PortValueType[]).map((t) => (
+                                  <option key={t} value={t}>{t}</option>
+                                ))}
+                              </select>
+                              {dir === "input" && (
+                                <label className="flex items-center gap-1 text-xs text-slate-600 shrink-0">
+                                  <input type="checkbox" checked={newPortRequired} onChange={(e) => setNewPortRequired(e.target.checked)}
+                                    className="rounded border-slate-300 text-violet-600" />
+                                  req
+                                </label>
+                              )}
+                            </div>
+                            <div className="flex gap-2 justify-end">
+                              <button type="button" onClick={() => setAddingPort(null)}
+                                className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1 rounded">Cancel</button>
+                              <button type="button" onClick={() => void handleAddPort(dir)} disabled={portsBusy || !newPortName.trim()}
+                                className="text-xs font-medium bg-violet-600 hover:bg-violet-700 text-white px-3 py-1 rounded disabled:opacity-40">
+                                {portsBusy ? "…" : "Add"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Automated step — script configuration */}
-          {draftType === "automated" && (
+          {task.task_type === "automated" && (
             <div className={sectionCls}>
               <div className="border-t border-slate-200 pt-4">
                 <label className={labelCls + " mb-3"}>Script configuration</label>

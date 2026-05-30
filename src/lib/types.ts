@@ -163,6 +163,20 @@ export interface TaskTeamRole {
 
 export type ScriptType = "webhook" | "shell" | "python" | "mcp_tool";
 
+export type PortDirection = "input" | "output";
+export type PortValueType = "string" | "number" | "boolean" | "json" | "file" | "dam_asset";
+
+export interface TaskPortSpec {
+  id: string;
+  task_id: string;
+  direction: PortDirection;
+  name: string;
+  value_type: PortValueType;
+  required: boolean;
+  description: string | null;
+  sort_order: number;
+}
+
 export interface TaskScript {
   id: string;
   task_id: string;

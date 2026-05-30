@@ -161,6 +161,7 @@ function WorkflowCanvasInner({
   // Modals
   const [showAddStep, setShowAddStep] = useState(false);
   const [showImportTemplate, setShowImportTemplate] = useState(false);
+  const [lastTaskType, setLastTaskType] = useState<"standard" | "decision" | "automated">("standard");
   const [pendingConnection, setPendingConnection] = useState<PendingConnection | null>(null);
 
   const nodePositions = useRef<Map<string, { x: number; y: number }>>(new Map());
@@ -280,6 +281,7 @@ function WorkflowCanvasInner({
   // ── Add step ────────────────────────────────────────────────────────────────
 
   async function handleAddStep(name: string, taskType: "standard" | "decision" | "automated") {
+    setLastTaskType(taskType);
     // Place near centre of viewport
     const centre = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
     const newTask = await createTask(token, { name, workflow_id: workflow.id, task_type: taskType });
@@ -316,8 +318,8 @@ function WorkflowCanvasInner({
         workflow_id: workflow.id,
         task_type: t.task_type,
         description: t.description ?? undefined,
-        is_start: t.is_start,
-        is_end: t.is_end,
+        // is_start / is_end are intentionally not cloned — imported steps are
+        // unconnected fragments; the user wires start/end into the existing flow.
       });
       // Persist canvas position
       await updateTask(token, newTask.id, { canvas_x: pos.x, canvas_y: pos.y });
@@ -609,6 +611,7 @@ function WorkflowCanvasInner({
       {/* Modals */}
       {showAddStep && (
         <AddStepModal
+          defaultType={lastTaskType}
           onAdd={handleAddStep}
           onClose={() => setShowAddStep(false)}
         />

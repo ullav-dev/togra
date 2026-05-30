@@ -1,7 +1,7 @@
 // AWE API calls (jobs, workflows, tasks, notes, teams) used by Togra.
 // All browser requests go via /api/* rewrite; server-side uses API_URL directly.
 
-import type { Job, JobWithWorkflows, Task, TaskLink, TaskScript, ExecutionProfile, ScriptType, Workflow, WorkflowWithTasks, Note, NoteFolder, TeamSummary, Team, TeamRole, TaskTeamRole } from "./types";
+import type { Job, JobWithWorkflows, Task, TaskLink, TaskScript, TaskPortSpec, PortDirection, PortValueType, ExecutionProfile, ScriptType, Workflow, WorkflowWithTasks, Note, NoteFolder, TeamSummary, Team, TeamRole, TaskTeamRole } from "./types";
 
 const BASE =
   typeof window === "undefined"
@@ -189,6 +189,21 @@ export const assignTaskTeamRole = (token: string, taskId: string, teamRoleId: st
 
 export const removeTaskTeamRole = (token: string, taskId: string, teamRoleId: string): Promise<void> =>
   apiRequest(`/tasks/${taskId}/team-roles/${teamRoleId}`, token, { method: "DELETE" });
+
+// ── Task ports ────────────────────────────────────────────────────────────────
+
+export const listTaskPortSpecs = (token: string, taskId: string): Promise<TaskPortSpec[]> =>
+  apiRequest(`/tasks/${taskId}/ports`, token);
+
+export const createTaskPortSpec = (
+  token: string,
+  taskId: string,
+  body: { direction: PortDirection; name: string; value_type: PortValueType; required?: boolean; description?: string }
+): Promise<TaskPortSpec> =>
+  apiRequest(`/tasks/${taskId}/ports`, token, { method: "POST", body: JSON.stringify(body) });
+
+export const deleteTaskPortSpec = (token: string, taskId: string, portId: string): Promise<void> =>
+  apiRequest(`/tasks/${taskId}/ports/${portId}`, token, { method: "DELETE" });
 
 // ── Task scripts (automated steps) ───────────────────────────────────────────
 

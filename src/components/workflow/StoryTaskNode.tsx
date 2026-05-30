@@ -52,6 +52,7 @@ export default function StoryTaskNode({ data }: NodeProps) {
   const { task, selected, isEditMode = false, onSelect, roles = [], assignedMember } = d;
 
   const isDecision = task.task_type === "decision";
+  const isAutomated = task.task_type === "automated";
   const colors = isDecision
     ? DECISION_COLORS
     : (STATUS_COLORS[task.status] ?? STATUS_COLORS["Not Started"]);
@@ -89,6 +90,12 @@ export default function StoryTaskNode({ data }: NodeProps) {
           style={{ top: "-10px", left: "50%", transform: "translateX(-50%) rotate(45deg)" }}
           title="Decision"
         />
+      )}
+      {/* Automated lightning badge */}
+      {isAutomated && (
+        <div className="absolute -top-2.5 z-10 flex items-center justify-center" style={{ left: "50%", transform: "translateX(-50%)" }} title="Automated">
+          <span className="bg-amber-400 border-2 border-white text-white text-[9px] font-bold rounded-full w-5 h-5 flex items-center justify-center">⚡</span>
+        </div>
       )}
 
       {/* Forward handles — visible and interactive in edit mode only */}
