@@ -42,8 +42,8 @@ export default function StepEditDrawer({
 }: Props) {
   const [draftName, setDraftName] = useState(task.name);
   const [draftDesc, setDraftDesc] = useState(task.description ?? "");
-  const [draftType, setDraftType] = useState<"standard" | "decision">(
-    task.task_type === "decision" ? "decision" : "standard"
+  const [draftType, setDraftType] = useState<"standard" | "decision" | "automated">(
+    task.task_type === "decision" ? "decision" : task.task_type === "automated" ? "automated" : "standard"
   );
   const [draftIsStart, setDraftIsStart] = useState(task.is_start);
   const [draftIsEnd, setDraftIsEnd] = useState(task.is_end);
@@ -66,10 +66,11 @@ export default function StepEditDrawer({
     setDraftAssignee(task.assigned_to ?? null);
   }, [task.id]);
 
+  const savedType = task.task_type === "decision" ? "decision" : task.task_type === "automated" ? "automated" : "standard";
   const isDirty =
     draftName.trim() !== task.name ||
     draftDesc.trim() !== (task.description ?? "") ||
-    draftType !== (task.task_type === "decision" ? "decision" : "standard") ||
+    draftType !== savedType ||
     draftIsStart !== task.is_start ||
     draftIsEnd !== task.is_end ||
     draftAssignee !== (task.assigned_to ?? null);
@@ -80,7 +81,7 @@ export default function StepEditDrawer({
       const patch: Parameters<typeof updateTask>[2] = {};
       if (draftName.trim() !== task.name) patch.name = draftName.trim();
       if (draftDesc.trim() !== (task.description ?? "")) patch.description = draftDesc.trim() || undefined;
-      if (draftType !== (task.task_type === "decision" ? "decision" : "standard")) patch.task_type = draftType;
+      if (draftType !== savedType) patch.task_type = draftType;
       if (draftIsStart !== task.is_start) patch.is_start = draftIsStart;
       if (draftIsEnd !== task.is_end) patch.is_end = draftIsEnd;
       if (draftAssignee !== (task.assigned_to ?? null)) patch.assigned_to = draftAssignee;
@@ -185,12 +186,16 @@ export default function StepEditDrawer({
           <div className={sectionCls}>
             <label className={labelCls}>Type</label>
             <div className="flex gap-2">
-              {(["standard", "decision"] as const).map((t) => (
+              {([
+                ["standard", "Standard"],
+                ["decision", "Decision ◇"],
+                ["automated", "Automated ⚡"],
+              ] as const).map(([t, label]) => (
                 <button key={t} type="button" onClick={() => setDraftType(t)} disabled={saving}
                   className={`flex-1 py-1.5 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 ${
                     draftType === t ? "bg-violet-50 border-violet-400 text-violet-700" : "border-slate-300 text-slate-600 hover:bg-slate-50"
                   }`}>
-                  {t === "standard" ? "Standard" : "Decision ◇"}
+                  {label}
                 </button>
               ))}
             </div>

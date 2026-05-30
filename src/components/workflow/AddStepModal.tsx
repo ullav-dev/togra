@@ -3,13 +3,13 @@
 import { useState } from "react";
 
 interface Props {
-  onAdd: (name: string, taskType: "standard" | "decision") => Promise<void>;
+  onAdd: (name: string, taskType: "standard" | "decision" | "automated") => Promise<void>;
   onClose: () => void;
 }
 
 export default function AddStepModal({ onAdd, onClose }: Props) {
   const [name, setName] = useState("");
-  const [taskType, setTaskType] = useState<"standard" | "decision">("standard");
+  const [taskType, setTaskType] = useState<"standard" | "decision" | "automated">("standard");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,7 +19,7 @@ export default function AddStepModal({ onAdd, onClose }: Props) {
     setBusy(true);
     setError(null);
     try {
-      await onAdd(name.trim(), taskType);
+      await onAdd(name.trim(), taskType as "standard" | "decision" | "automated");
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add step");
@@ -52,7 +52,11 @@ export default function AddStepModal({ onAdd, onClose }: Props) {
               Type
             </label>
             <div className="flex gap-2">
-              {(["standard", "decision"] as const).map((t) => (
+              {([
+                ["standard", "Standard"],
+                ["decision", "Decision ◇"],
+                ["automated", "Automated ⚡"],
+              ] as const).map(([t, label]) => (
                 <button
                   key={t}
                   type="button"
@@ -63,7 +67,7 @@ export default function AddStepModal({ onAdd, onClose }: Props) {
                       : "border-slate-300 text-slate-600 hover:bg-slate-50"
                   }`}
                 >
-                  {t === "standard" ? "Standard" : "Decision ◇"}
+                  {label}
                 </button>
               ))}
             </div>

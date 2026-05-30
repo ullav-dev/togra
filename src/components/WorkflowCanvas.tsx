@@ -23,6 +23,7 @@ import type { Task, TaskLink, TeamMember, TeamRole, TaskTeamRole, WorkflowWithTa
 import StoryTaskNode, { type StoryTaskNodeData } from "@/components/workflow/StoryTaskNode";
 import AddStepModal from "@/components/workflow/AddStepModal";
 import BranchLabelModal from "@/components/workflow/BranchLabelModal";
+import ImportTemplateModal from "@/components/workflow/ImportTemplateModal";
 import StepEditDrawer from "@/components/workflow/StepEditDrawer";
 
 const NODE_TYPES = { storyTaskNode: StoryTaskNode };
@@ -159,6 +160,7 @@ function WorkflowCanvasInner({
 
   // Modals
   const [showAddStep, setShowAddStep] = useState(false);
+  const [showImportTemplate, setShowImportTemplate] = useState(false);
   const [pendingConnection, setPendingConnection] = useState<PendingConnection | null>(null);
 
   const nodePositions = useRef<Map<string, { x: number; y: number }>>(new Map());
@@ -277,7 +279,7 @@ function WorkflowCanvasInner({
 
   // ── Add step ────────────────────────────────────────────────────────────────
 
-  async function handleAddStep(name: string, taskType: "standard" | "decision") {
+  async function handleAddStep(name: string, taskType: "standard" | "decision" | "automated") {
     // Place near centre of viewport
     const centre = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
     const newTask = await createTask(token, { name, workflow_id: workflow.id, task_type: taskType });
@@ -288,6 +290,64 @@ function WorkflowCanvasInner({
     setTasks((prev) => [...prev, positioned]);
     setLocalTaskTeamRoles((prev) => ({ ...prev, [newTask.id]: [] }));
     setSelectedTaskId(newTask.id);
+  }
+
+  // ── Import template ─────────────────────────────────────────────────────────
+
+  async function handleImportTemplate(template: WorkflowWithTasks) {
+    if (template.tasks.length === 0) return;
+
+    // Auto-layout the template's tasks to get a tidy arrangement, then offset
+    // everything to top-left (small margin so it doesn't overlap the toolbar).
+    const importLayout = autoLayout(template.tasks, template.links);
+    const OFFSET_X = 40;
+    const OFFSET_Y = 40;
+
+    // Create tasks sequentially so we can build the old→new ID map.
+    const idMap = new Map<string, string>();
+    const createdTasks: Task[] = [];
+
+    for (const t of template.tasks) {
+      const rawPos = importLayout.get(t.id) ?? { x: 0, y: 0 };
+      const pos = { x: rawPos.x + OFFSET_X, y: rawPos.y + OFFSET_Y };
+
+      const newTask = await createTask(token, {
+        name: t.name,
+        workflow_id: workflow.id,
+        task_type: t.task_type,
+        description: t.description ?? undefined,
+        is_start: t.is_start,
+        is_end: t.is_end,
+      });
+      // Persist canvas position
+      await updateTask(token, newTask.id, { canvas_x: pos.x, canvas_y: pos.y });
+
+      idMap.set(t.id, newTask.id);
+      nodePositions.current.set(newTask.id, pos);
+      createdTasks.push({ ...newTask, canvas_x: pos.x, canvas_y: pos.y });
+    }
+
+    // Create links using the remapped IDs.
+    const createdLinks: TaskLink[] = [];
+    for (const link of template.links) {
+      const fromId = idMap.get(link.from_task_id);
+      const toId = idMap.get(link.to_task_id);
+      if (!fromId || !toId) continue;
+      const newLink = await createTaskLink(token, {
+        from_task_id: fromId,
+        to_task_id: toId,
+        branch_label: link.branch_label,
+      });
+      createdLinks.push(newLink);
+    }
+
+    setTasks((prev) => [...prev, ...createdTasks]);
+    setLinks((prev) => [...prev, ...createdLinks]);
+    setLocalTaskTeamRoles((prev) => {
+      const next = { ...prev };
+      createdTasks.forEach((t) => { next[t.id] = []; });
+      return next;
+    });
   }
 
   // ── Delete step ─────────────────────────────────────────────────────────────
@@ -443,6 +503,18 @@ function WorkflowCanvasInner({
                     </svg>
                     Auto-arrange
                   </button>
+                  {workflow.team_id && (
+                    <button
+                      type="button"
+                      onClick={() => setShowImportTemplate(true)}
+                      className="inline-flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-violet-50 hover:border-violet-300 hover:text-violet-700 shadow-sm transition-colors"
+                    >
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                        <path d="M8.75 1.75a.75.75 0 0 0-1.5 0v5.69L5.03 5.22a.75.75 0 0 0-1.06 1.06l3.5 3.5a.75.75 0 0 0 1.06 0l3.5-3.5a.75.75 0 0 0-1.06-1.06L8.75 7.44V1.75ZM3.5 9.75a.75.75 0 0 0-1.5 0v1.5A2.75 2.75 0 0 0 4.75 14h6.5A2.75 2.75 0 0 0 14 11.25v-1.5a.75.75 0 0 0-1.5 0v1.5c0 .69-.56 1.25-1.25 1.25h-6.5c-.69 0-1.25-.56-1.25-1.25v-1.5Z" />
+                      </svg>
+                      Import template
+                    </button>
+                  )}
                 </div>
               </div>
             </Panel>
@@ -539,6 +611,15 @@ function WorkflowCanvasInner({
         <AddStepModal
           onAdd={handleAddStep}
           onClose={() => setShowAddStep(false)}
+        />
+      )}
+      {showImportTemplate && workflow.team_id && (
+        <ImportTemplateModal
+          teamId={workflow.team_id}
+          currentWorkflowId={workflow.id}
+          token={token}
+          onImport={handleImportTemplate}
+          onClose={() => setShowImportTemplate(false)}
         />
       )}
       {pendingConnection && (
