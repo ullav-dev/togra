@@ -298,6 +298,7 @@
     "noteCountPlural": "{count} Notizen",
     "compactTitle": "Notizen ({count})",
     "you": "Sie",
+    "unknown": "Unbekannt",
     "justNow": "gerade eben",
     "mAgo": "vor {count} Min.",
     "hAgo": "vor {count} Std.",

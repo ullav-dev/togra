@@ -298,6 +298,7 @@
     "noteCountPlural": "{count} notes",
     "compactTitle": "Notes ({count})",
     "you": "You",
+    "unknown": "Unknown",
     "justNow": "just now",
     "mAgo": "{count}m ago",
     "hAgo": "{count}h ago",

@@ -233,7 +233,16 @@ function NoteView({ note, folders, currentUserId, token, resolveCreator, onEdit,
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+interface NoteAuthor {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  username: string;
+}
+
 interface NotesPanelProps {
+  /** Optional list of known team members — used to resolve author UUIDs to names. */
+  members?: NoteAuthor[];
   entityType: NoteEntityType;
   entityId: string;
   isTeam: boolean;
@@ -242,7 +251,7 @@ interface NotesPanelProps {
   twoColumn?: boolean;
 }
 
-export default function NotesPanel({ entityType, entityId, isTeam, compact = false, twoColumn = false }: NotesPanelProps) {
+export default function NotesPanel({ entityType, entityId, isTeam, compact = false, twoColumn = false, members = [] }: NotesPanelProps) {
   const { user, token } = useAuth();
   const t = useTranslations("notes");
   const [notes, setNotes] = useState<Note[]>([]);
@@ -263,7 +272,17 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
   const listResize = useResize({ initial: 220, min: 140, max: 400, axis: "x" });
 
   const currentUserId = user?.id ?? "";
-  const resolveCreator = (id: string) => id === currentUserId ? (user?.username ?? t("you")) : id;
+  const resolveCreator = (id: string | null): string => {
+    if (!id) return t("unknown");
+    if (id === currentUserId) {
+      const me = members.find((m) => m.id === id);
+      if (me) return `${me.first_name ?? ""} ${me.last_name ?? ""}`.trim() || me.username;
+      return user?.username ?? t("you");
+    }
+    const member = members.find((m) => m.id === id);
+    if (member) return `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim() || member.username;
+    return id.slice(0, 8) + "…";
+  };
 
   const load = useCallback(async () => {
     if (!token) return;
