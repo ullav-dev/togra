@@ -1,7 +1,7 @@
 // AWE API calls (jobs, workflows, tasks, notes, teams) used by Togra.
 // All browser requests go via /api/* rewrite; server-side uses API_URL directly.
 
-import type { Job, JobWithWorkflows, Task, TaskLink, Workflow, WorkflowWithTasks, Note, NoteFolder, TeamSummary, Team, TeamRole, TaskTeamRole } from "./types";
+import type { Job, JobWithWorkflows, Task, TaskLink, TaskScript, ExecutionProfile, ScriptType, Workflow, WorkflowWithTasks, Note, NoteFolder, TeamSummary, Team, TeamRole, TaskTeamRole } from "./types";
 
 const BASE =
   typeof window === "undefined"
@@ -189,6 +189,31 @@ export const assignTaskTeamRole = (token: string, taskId: string, teamRoleId: st
 
 export const removeTaskTeamRole = (token: string, taskId: string, teamRoleId: string): Promise<void> =>
   apiRequest(`/tasks/${taskId}/team-roles/${teamRoleId}`, token, { method: "DELETE" });
+
+// ── Task scripts (automated steps) ───────────────────────────────────────────
+
+export const getTaskScript = (token: string, taskId: string): Promise<TaskScript> =>
+  apiRequest(`/tasks/${taskId}/script`, token);
+
+export const upsertTaskScript = (
+  token: string,
+  taskId: string,
+  body: {
+    script_type?: ScriptType;
+    endpoint?: string | null;
+    script_body?: string | null;
+    timeout_secs?: number;
+    retry_limit?: number;
+    execution_profile_id?: string | null;
+  }
+): Promise<TaskScript> =>
+  apiRequest(`/tasks/${taskId}/script`, token, { method: "PUT", body: JSON.stringify(body) });
+
+export const deleteTaskScript = (token: string, taskId: string): Promise<void> =>
+  apiRequest(`/tasks/${taskId}/script`, token, { method: "DELETE" });
+
+export const listExecutionProfiles = (token: string): Promise<ExecutionProfile[]> =>
+  apiRequest("/execution-profiles", token);
 
 // ── Notes ─────────────────────────────────────────────────────────────────────
 

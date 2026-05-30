@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { updateTask, assignTaskTeamRole, removeTaskTeamRole } from "@/lib/awe-api";
+import { useResize } from "@/hooks/useResize";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import AutomatedStepConfig from "@/components/workflow/AutomatedStepConfig";
 import type { Task, TaskLink, TeamMember, TeamRole, TaskTeamRole } from "@/lib/types";
 
 interface Props {
@@ -48,6 +50,8 @@ export default function StepEditDrawer({
   const [draftIsStart, setDraftIsStart] = useState(task.is_start);
   const [draftIsEnd, setDraftIsEnd] = useState(task.is_end);
   const [draftAssignee, setDraftAssignee] = useState<string | null>(task.assigned_to ?? null);
+
+  const resize = useResize({ initial: 288, min: 220, max: 560, axis: "x", reverse: true });
 
   const [saving, setSaving] = useState(false);
   const [rolesBusy, setRolesBusy] = useState(false);
@@ -144,7 +148,13 @@ export default function StepEditDrawer({
         />
       )}
 
-      <div className="w-72 shrink-0 border-l border-slate-200 flex flex-col bg-white overflow-hidden">
+      <div
+        onMouseDown={resize.onMouseDown}
+        className="w-1.5 shrink-0 bg-slate-100 hover:bg-violet-200 cursor-col-resize transition-colors"
+        title="Drag to resize"
+      />
+
+      <div className="shrink-0 border-l border-slate-200 flex flex-col bg-white overflow-hidden" style={{ width: resize.size }}>
         {/* Header */}
         <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-200 shrink-0">
           <span className="text-xs font-semibold text-violet-600 uppercase tracking-wide">Edit step</span>
@@ -263,6 +273,16 @@ export default function StepEditDrawer({
               </select>
             )}
           </div>
+
+          {/* Automated step — script configuration */}
+          {draftType === "automated" && (
+            <div className={sectionCls}>
+              <div className="border-t border-slate-200 pt-4">
+                <label className={labelCls + " mb-3"}>Script configuration</label>
+                <AutomatedStepConfig taskId={task.id} token={token} />
+              </div>
+            </div>
+          )}
 
           {/* Outgoing connections */}
           {outgoingLinks.length > 0 && (
