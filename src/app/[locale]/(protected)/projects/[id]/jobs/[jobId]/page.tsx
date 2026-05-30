@@ -112,6 +112,28 @@ export default function SprintBoardPage({
       .catch(() => {});
   }, [storyTasks, token]);
 
+  async function onTaskEffortChange(taskId: string, workflowId: string, effort: number | null) {
+    if (!token) return;
+    const prevTask = storyTasks[workflowId]?.find((t) => t.id === taskId);
+    if (!prevTask) return;
+    setStoryTasks((prev) => ({
+      ...prev,
+      [workflowId]: (prev[workflowId] ?? []).map((t) => t.id === taskId ? { ...t, effort } : t),
+    }));
+    try {
+      const updated = await updateTask(token, taskId, { effort });
+      setStoryTasks((prev) => ({
+        ...prev,
+        [workflowId]: (prev[workflowId] ?? []).map((t) => t.id === updated.id ? updated : t),
+      }));
+    } catch {
+      setStoryTasks((prev) => ({
+        ...prev,
+        [workflowId]: (prev[workflowId] ?? []).map((t) => t.id === taskId ? prevTask : t),
+      }));
+    }
+  }
+
   async function onTaskStatusChange(taskId: string, workflowId: string, newStatus: Status) {
     if (!token) return;
     const prevTask = storyTasks[workflowId]?.find((t) => t.id === taskId);
@@ -237,6 +259,7 @@ export default function SprintBoardPage({
                   onDragStart={setDraggingTaskId}
                   onDragEnd={() => setDraggingTaskId(null)}
                   onTaskStatusChange={onTaskStatusChange}
+                  onTaskEffortChange={onTaskEffortChange}
                 />
               ))
             )
@@ -253,6 +276,7 @@ export default function SprintBoardPage({
                 onDragStart={setDraggingTaskId}
                 onDragEnd={() => setDraggingTaskId(null)}
                 onTaskStatusChange={onTaskStatusChange}
+                onTaskEffortChange={onTaskEffortChange}
               />
             ))
           )}
@@ -274,6 +298,7 @@ function StoryLane({
   onDragStart,
   onDragEnd,
   onTaskStatusChange,
+  onTaskEffortChange,
 }: {
   story: Workflow;
   tasks: Task[];
@@ -284,9 +309,13 @@ function StoryLane({
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
   onTaskStatusChange: (taskId: string, workflowId: string, status: Status) => void;
+  onTaskEffortChange: (taskId: string, workflowId: string, effort: number | null) => void;
 }) {
   const t = useTranslations("board");
   const done = tasks.filter((t) => t.status === "Complete").length;
+  // Derive total effort from task efforts; fall back to story.story_points if no tasks have effort yet
+  const taskEffortTotal = tasks.reduce((s, t) => s + (t.effort ?? 0), 0);
+  const displayPoints = taskEffortTotal > 0 ? taskEffortTotal : story.story_points;
 
   return (
     <div className="flex mb-2 items-stretch">
@@ -299,9 +328,9 @@ function StoryLane({
           {story.name}
         </Link>
         <div className="flex items-center gap-2 mt-1 flex-wrap">
-          {story.story_points != null && (
+          {displayPoints != null && (
             <span className="text-xs bg-violet-100 text-violet-700 font-semibold px-1.5 py-0.5 rounded-full">
-              {story.story_points} pts
+              {displayPoints} pts
             </span>
           )}
           <span className="text-xs text-slate-400">
@@ -324,6 +353,8 @@ function StoryLane({
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
           onDrop={(taskId) => onTaskStatusChange(taskId, story.id, col.status)}
+          onTaskEffortChange={(taskId, effort) => onTaskEffortChange(taskId, story.id, effort)}
+
         />
       ))}
     </div>
@@ -342,6 +373,7 @@ function MemberLane({
   onDragStart,
   onDragEnd,
   onTaskStatusChange,
+  onTaskEffortChange,
 }: {
   member: TeamMember | null;
   allStoryTasks: Record<string, Task[]>;
@@ -352,6 +384,7 @@ function MemberLane({
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
   onTaskStatusChange: (taskId: string, workflowId: string, status: Status) => void;
+  onTaskEffortChange: (taskId: string, workflowId: string, effort: number | null) => void;
 }) {
   const t = useTranslations("board");
   const laneLabel = member
@@ -384,6 +417,7 @@ function MemberLane({
       {/* Column cells */}
       {columns.map((col) => {
         const colItems = memberTasks.filter(({ task }) => task.status === col.status);
+        const wfMap = Object.fromEntries(colItems.map(({ task, workflowId }) => [task.id, workflowId]));
         return (
           <SwimCell
             key={col.status}
@@ -394,14 +428,11 @@ function MemberLane({
             showStoryName
             storyName=""
             storyNameMap={Object.fromEntries(colItems.map(({ task, storyName }) => [task.id, storyName]))}
-            workflowIdMap={Object.fromEntries(colItems.map(({ task, workflowId }) => [task.id, workflowId]))}
             draggingTaskId={draggingTaskId}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
-            onDrop={(taskId) => {
-              const wfId = Object.fromEntries(colItems.map(({ task, workflowId }) => [task.id, workflowId]))[taskId];
-              if (wfId) onTaskStatusChange(taskId, wfId, col.status);
-            }}
+            onDrop={(taskId) => { const wfId = wfMap[taskId]; if (wfId) onTaskStatusChange(taskId, wfId, col.status); }}
+            onTaskEffortChange={(taskId, effort) => { const wfId = wfMap[taskId]; if (wfId) onTaskEffortChange(taskId, wfId, effort); }}
           />
         );
       })}
@@ -419,11 +450,11 @@ function SwimCell({
   showStoryName,
   storyName,
   storyNameMap,
-  workflowIdMap,
   draggingTaskId,
   onDragStart,
   onDragEnd,
   onDrop,
+  onTaskEffortChange,
 }: {
   column: typeof TASK_COLUMNS[number] & { label: string };
   tasks: Task[];
@@ -432,11 +463,11 @@ function SwimCell({
   showStoryName: boolean;
   storyName: string;
   storyNameMap?: Record<string, string>;
-  workflowIdMap?: Record<string, string>;
   draggingTaskId: string | null;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
   onDrop: (taskId: string) => void;
+  onTaskEffortChange: (taskId: string, effort: number | null) => void;
 }) {
   const t = useTranslations("board");
   const [isOver, setIsOver] = useState(false);
@@ -474,6 +505,7 @@ function SwimCell({
           isDraggingActive={draggingTaskId !== null}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
+          onEffortChange={(effort) => onTaskEffortChange(task.id, effort)}
         />
       ))}
       {tasks.length === 0 && isOver && (
@@ -494,6 +526,7 @@ function TaskCard({
   isDraggingActive,
   onDragStart,
   onDragEnd,
+  onEffortChange,
 }: {
   task: Task;
   teamMembers: TeamMember[];
@@ -503,13 +536,32 @@ function TaskCard({
   isDraggingActive: boolean;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
+  onEffortChange: (effort: number | null) => void;
 }) {
+  const [editingEffort, setEditingEffort] = useState(false);
+  const [effortDraft, setEffortDraft] = useState("");
+  const effortInputRef = useRef<HTMLInputElement>(null);
   const assignee = task.assigned_to ? teamMembers.find((m) => m.user.id === task.assigned_to) : null;
 
   function handleDragStart(e: React.DragEvent) {
     e.dataTransfer.setData("taskId", task.id);
     e.dataTransfer.effectAllowed = "move";
     requestAnimationFrame(() => onDragStart(task.id));
+  }
+
+  function startEffortEdit(e: React.MouseEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+    setEffortDraft(task.effort != null ? String(task.effort) : "");
+    setEditingEffort(true);
+    setTimeout(() => effortInputRef.current?.select(), 0);
+  }
+
+  function commitEffort() {
+    setEditingEffort(false);
+    const parsed = parseInt(effortDraft, 10);
+    const newEffort = effortDraft.trim() === "" ? null : isNaN(parsed) || parsed < 0 ? task.effort : parsed;
+    if (newEffort !== task.effort) onEffortChange(newEffort ?? null);
   }
 
   return (
@@ -556,15 +608,45 @@ function TaskCard({
         </div>
       </div>
 
-      {/* Assignee */}
-      {assignee && (
-        <div className="flex items-center gap-1">
-          <MemberAvatar member={assignee} size="sm" />
-          <span className="text-[10px] text-slate-400 truncate">
-            {`${assignee.user.first_name ?? ""} ${assignee.user.last_name ?? ""}`.trim() || assignee.user.username}
-          </span>
-        </div>
-      )}
+      {/* Assignee + effort row */}
+      <div className="flex items-center justify-between gap-1">
+        {assignee ? (
+          <div className="flex items-center gap-1 min-w-0">
+            <MemberAvatar member={assignee} size="sm" />
+            <span className="text-[10px] text-slate-400 truncate">
+              {`${assignee.user.first_name ?? ""} ${assignee.user.last_name ?? ""}`.trim() || assignee.user.username}
+            </span>
+          </div>
+        ) : <span />}
+
+        {/* Effort badge — click to edit */}
+        {editingEffort ? (
+          <input
+            ref={effortInputRef}
+            type="number"
+            min="0"
+            value={effortDraft}
+            onChange={(e) => setEffortDraft(e.target.value)}
+            onBlur={commitEffort}
+            onKeyDown={(e) => { if (e.key === "Enter") commitEffort(); if (e.key === "Escape") setEditingEffort(false); }}
+            onClick={(e) => e.stopPropagation()}
+            className="w-10 text-[10px] font-semibold text-center border border-violet-400 rounded px-1 py-0.5 outline-none bg-white text-violet-700"
+          />
+        ) : (
+          <button
+            type="button"
+            title="Set effort"
+            onClick={startEffortEdit}
+            className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full transition-colors shrink-0 ${
+              task.effort != null
+                ? "bg-violet-100 text-violet-700 hover:bg-violet-200"
+                : "bg-slate-100 text-slate-400 hover:bg-violet-100 hover:text-violet-600"
+            }`}
+          >
+            {task.effort != null ? `${task.effort}p` : "·p"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

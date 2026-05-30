@@ -162,6 +162,7 @@ export const updateTask = (
     task_type?: string;
     is_start?: boolean; is_end?: boolean;
     canvas_x?: number | null; canvas_y?: number | null;
+    effort?: number | null;
   }
 ): Promise<Task> =>
   apiRequest(`/tasks/${id}`, token, { method: "PUT", body: JSON.stringify(patch) });
