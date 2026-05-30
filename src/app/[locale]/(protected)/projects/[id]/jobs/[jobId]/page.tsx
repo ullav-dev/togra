@@ -29,7 +29,7 @@ export default function SprintBoardPage({
   params: Promise<{ id: string; jobId: string }>;
 }) {
   const { id: projectId, jobId } = use(params);
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const router = useRouter();
   const t = useTranslations("board");
 
@@ -46,6 +46,7 @@ export default function SprintBoardPage({
   const [loading, setLoading] = useState(true);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [groupBy, setGroupBy] = useState<"story" | "member">("story");
+  const [myTasksOnly, setMyTasksOnly] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const promotedRef = useRef(false);
 
@@ -168,6 +169,12 @@ export default function SprintBoardPage({
   const totalTasks = Object.values(storyTasks).reduce((n, ts) => n + ts.length, 0);
   const memberLanes: (TeamMember | null)[] = [...teamMembers, null];
 
+  // Filter tasks to current user when "My Tasks" is active
+  function filterTasks(tasks: Task[]): Task[] {
+    if (!myTasksOnly || !user) return tasks;
+    return tasks.filter((t) => t.assigned_to === user.id);
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* ── Header ── */}
@@ -189,7 +196,18 @@ export default function SprintBoardPage({
           <span className="text-xs text-slate-400">{t("stories", { count: stories.length })}</span>
           {tasksLoading && <span className="text-xs text-slate-400">{t("loadingTasks")}</span>}
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setMyTasksOnly((v) => !v)}
+              className={`text-xs px-3 py-1 rounded-full border font-medium transition-colors ${
+                myTasksOnly
+                  ? "bg-violet-600 text-white border-violet-600"
+                  : "bg-white text-slate-500 border-slate-200 hover:border-violet-400 hover:text-violet-700"
+              }`}
+            >
+              {myTasksOnly ? "My Tasks" : "All Tasks"}
+            </button>
             <span className="text-xs text-slate-400 font-medium">{t("groupBy")}</span>
             <div className="flex rounded-full border border-slate-200 overflow-hidden text-xs font-medium">
               <button
@@ -247,12 +265,35 @@ export default function SprintBoardPage({
             stories.length === 0 ? (
               <div className="py-16 text-center text-slate-400 text-sm">{t("noStories")}</div>
             ) : (
-              stories.map((story) => (
-                <StoryLane
-                  key={story.id}
-                  story={story}
-                  tasks={storyTasks[story.id] ?? []}
-                  projectId={projectId}
+              stories.flatMap((story) => {
+                const visibleTasks = filterTasks(storyTasks[story.id] ?? []);
+                if (myTasksOnly && visibleTasks.length === 0) return [];
+                return [(
+                  <StoryLane
+                    key={story.id}
+                    story={story}
+                    tasks={visibleTasks}
+                    projectId={projectId}
+                    teamMembers={teamMembers}
+                    columns={columns}
+                    draggingTaskId={draggingTaskId}
+                    onDragStart={setDraggingTaskId}
+                    onDragEnd={() => setDraggingTaskId(null)}
+                    onTaskStatusChange={onTaskStatusChange}
+                    onTaskEffortChange={onTaskEffortChange}
+                  />
+                )];
+              })
+            )
+          ) : (
+            memberLanes
+              .filter((member) => !myTasksOnly || (member && member.user.id === user?.id))
+              .map((member) => (
+                <MemberLane
+                  key={member ? member.user.id : "__unassigned__"}
+                  member={member}
+                  allStoryTasks={storyTasks}
+                  stories={stories}
                   teamMembers={teamMembers}
                   columns={columns}
                   draggingTaskId={draggingTaskId}
@@ -261,23 +302,6 @@ export default function SprintBoardPage({
                   onTaskStatusChange={onTaskStatusChange}
                   onTaskEffortChange={onTaskEffortChange}
                 />
-              ))
-            )
-          ) : (
-            memberLanes.map((member) => (
-              <MemberLane
-                key={member ? member.user.id : "__unassigned__"}
-                member={member}
-                allStoryTasks={storyTasks}
-                stories={stories}
-                teamMembers={teamMembers}
-                columns={columns}
-                draggingTaskId={draggingTaskId}
-                onDragStart={setDraggingTaskId}
-                onDragEnd={() => setDraggingTaskId(null)}
-                onTaskStatusChange={onTaskStatusChange}
-                onTaskEffortChange={onTaskEffortChange}
-              />
             ))
           )}
         </div>
