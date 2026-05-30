@@ -199,6 +199,12 @@
     "swimlanesOff": "Swimlanes",
     "swimlanesOn": "Swimlanes: Ein",
     "unassigned": "Nicht zugewiesen",
+    "byStory": "Storys",
+    "byMember": "Mitglieder",
+    "groupBy": "Gruppieren:",
+    "noTasks": "Keine Aufgaben",
+    "loadingTasks": "Aufgaben werden geladen…",
+    "taskSummary": "{done}/{total} Aufgaben",
     "columns": {
       "todo": "Zu erledigen",
       "ready": "Bereit",

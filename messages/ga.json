@@ -199,6 +199,12 @@
     "swimlanesOff": "Swimlanes",
     "swimlanesOn": "Swimlanes: Air",
     "unassigned": "Gan sannadh",
+    "byStory": "Scéalta",
+    "byMember": "Baill",
+    "groupBy": "Grúpáil:",
+    "noTasks": "Gan tascanna",
+    "loadingTasks": "Tascanna á luchtú…",
+    "taskSummary": "{done}/{total} tasc",
     "columns": {
       "todo": "Le déanamh",
       "ready": "Réidh",

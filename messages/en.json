@@ -199,6 +199,12 @@
     "swimlanesOff": "Swimlanes",
     "swimlanesOn": "Swimlanes: On",
     "unassigned": "Unassigned",
+    "byStory": "Stories",
+    "byMember": "Members",
+    "groupBy": "Group by:",
+    "noTasks": "No tasks",
+    "loadingTasks": "Loading tasks…",
+    "taskSummary": "{done}/{total} tasks",
     "columns": {
       "todo": "To Do",
       "ready": "Ready",
