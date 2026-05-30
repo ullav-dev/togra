@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, use } from "react";
+import { useState, useEffect, useRef, use, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
@@ -48,6 +48,7 @@ export default function SprintBoardPage({
   const [groupBy, setGroupBy] = useState<"story" | "member">("story");
   const [myTasksOnly, setMyTasksOnly] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+  const [selectedTaskCtx, setSelectedTaskCtx] = useState<{ task: Task; workflowId: string; storyName: string } | null>(null);
   const promotedRef = useRef(false);
 
   // Load project, job, stories, team
@@ -112,6 +113,14 @@ export default function SprintBoardPage({
       })
       .catch(() => {});
   }, [storyTasks, token]);
+
+  const onTaskUpdated = useCallback((updated: Task) => {
+    setStoryTasks((prev) => ({
+      ...prev,
+      [updated.workflow_id]: (prev[updated.workflow_id] ?? []).map((t) => t.id === updated.id ? updated : t),
+    }));
+    setSelectedTaskCtx((prev) => prev?.task.id === updated.id ? { ...prev, task: updated } : prev);
+  }, []);
 
   async function onTaskEffortChange(taskId: string, workflowId: string, effort: number | null) {
     if (!token) return;
@@ -281,6 +290,7 @@ export default function SprintBoardPage({
                     onDragEnd={() => setDraggingTaskId(null)}
                     onTaskStatusChange={onTaskStatusChange}
                     onTaskEffortChange={onTaskEffortChange}
+                    onTaskOpen={(task) => setSelectedTaskCtx({ task, workflowId: story.id, storyName: story.name })}
                   />
                 )];
               })
@@ -301,11 +311,24 @@ export default function SprintBoardPage({
                   onDragEnd={() => setDraggingTaskId(null)}
                   onTaskStatusChange={onTaskStatusChange}
                   onTaskEffortChange={onTaskEffortChange}
+                  onTaskOpen={(task, workflowId, storyName) => setSelectedTaskCtx({ task, workflowId, storyName })}
                 />
             ))
           )}
         </div>
       </div>
+
+      {selectedTaskCtx && (
+        <TaskDetailModal
+          task={selectedTaskCtx.task}
+          workflowId={selectedTaskCtx.workflowId}
+          storyName={selectedTaskCtx.storyName}
+          teamMembers={teamMembers}
+          token={token!}
+          onTaskUpdated={onTaskUpdated}
+          onClose={() => setSelectedTaskCtx(null)}
+        />
+      )}
     </div>
   );
 }
@@ -323,6 +346,7 @@ function StoryLane({
   onDragEnd,
   onTaskStatusChange,
   onTaskEffortChange,
+  onTaskOpen,
 }: {
   story: Workflow;
   tasks: Task[];
@@ -334,6 +358,7 @@ function StoryLane({
   onDragEnd: () => void;
   onTaskStatusChange: (taskId: string, workflowId: string, status: Status) => void;
   onTaskEffortChange: (taskId: string, workflowId: string, effort: number | null) => void;
+  onTaskOpen: (task: Task) => void;
 }) {
   const t = useTranslations("board");
   const done = tasks.filter((t) => t.status === "Complete").length;
@@ -378,6 +403,7 @@ function StoryLane({
           onDragEnd={onDragEnd}
           onDrop={(taskId) => onTaskStatusChange(taskId, story.id, col.status)}
           onTaskEffortChange={(taskId, effort) => onTaskEffortChange(taskId, story.id, effort)}
+          onTaskOpen={onTaskOpen}
 
         />
       ))}
@@ -398,6 +424,7 @@ function MemberLane({
   onDragEnd,
   onTaskStatusChange,
   onTaskEffortChange,
+  onTaskOpen,
 }: {
   member: TeamMember | null;
   allStoryTasks: Record<string, Task[]>;
@@ -409,6 +436,7 @@ function MemberLane({
   onDragEnd: () => void;
   onTaskStatusChange: (taskId: string, workflowId: string, status: Status) => void;
   onTaskEffortChange: (taskId: string, workflowId: string, effort: number | null) => void;
+  onTaskOpen: (task: Task, workflowId: string, storyName: string) => void;
 }) {
   const t = useTranslations("board");
   const laneLabel = member
@@ -457,6 +485,7 @@ function MemberLane({
             onDragEnd={onDragEnd}
             onDrop={(taskId) => { const wfId = wfMap[taskId]; if (wfId) onTaskStatusChange(taskId, wfId, col.status); }}
             onTaskEffortChange={(taskId, effort) => { const wfId = wfMap[taskId]; if (wfId) onTaskEffortChange(taskId, wfId, effort); }}
+            onTaskOpen={(task) => { const wfId = wfMap[task.id]; const sn = Object.fromEntries(colItems.map(({ task: ct, storyName }) => [ct.id, storyName]))[task.id] ?? ""; if (wfId) onTaskOpen(task, wfId, sn); }}
           />
         );
       })}
@@ -479,6 +508,7 @@ function SwimCell({
   onDragEnd,
   onDrop,
   onTaskEffortChange,
+  onTaskOpen,
 }: {
   column: typeof TASK_COLUMNS[number] & { label: string };
   tasks: Task[];
@@ -492,6 +522,7 @@ function SwimCell({
   onDragEnd: () => void;
   onDrop: (taskId: string) => void;
   onTaskEffortChange: (taskId: string, effort: number | null) => void;
+  onTaskOpen: (task: Task) => void;
 }) {
   const t = useTranslations("board");
   const [isOver, setIsOver] = useState(false);
@@ -530,6 +561,7 @@ function SwimCell({
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
           onEffortChange={(effort) => onTaskEffortChange(task.id, effort)}
+          onOpen={() => onTaskOpen(task)}
         />
       ))}
       {tasks.length === 0 && isOver && (
@@ -551,6 +583,7 @@ function TaskCard({
   onDragStart,
   onDragEnd,
   onEffortChange,
+  onOpen,
 }: {
   task: Task;
   teamMembers: TeamMember[];
@@ -561,6 +594,7 @@ function TaskCard({
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
   onEffortChange: (effort: number | null) => void;
+  onOpen: () => void;
 }) {
   const [editingEffort, setEditingEffort] = useState(false);
   const [effortDraft, setEffortDraft] = useState("");
@@ -574,8 +608,7 @@ function TaskCard({
   }
 
   function startEffortEdit(e: React.MouseEvent) {
-    e.stopPropagation();
-    e.preventDefault();
+    e.stopPropagation(); // don't bubble to the card's onClick (open modal)
     setEffortDraft(task.effort != null ? String(task.effort) : "");
     setEditingEffort(true);
     setTimeout(() => effortInputRef.current?.select(), 0);
@@ -593,6 +626,7 @@ function TaskCard({
       draggable
       onDragStart={handleDragStart}
       onDragEnd={onDragEnd}
+      onClick={onOpen}
       className={`bg-white rounded-md border p-2 shadow-sm select-none transition-all cursor-grab
         ${isDragging ? "opacity-40 border-violet-300 shadow-none cursor-grabbing"
           : isDraggingActive ? "border-slate-200 opacity-90"
@@ -670,6 +704,194 @@ function TaskCard({
             {task.effort != null ? `${task.effort}p` : "·p"}
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── Task Detail Modal ─────────────────────────────────────────────────────────
+
+function TaskDetailModal({
+  task, workflowId, storyName, teamMembers, token, onTaskUpdated, onClose,
+}: {
+  task: Task;
+  workflowId: string;
+  storyName: string;
+  teamMembers: TeamMember[];
+  token: string;
+  onTaskUpdated: (t: Task) => void;
+  onClose: () => void;
+}) {
+  const [draftName, setDraftName] = useState(task.name);
+  const [draftDesc, setDraftDesc] = useState(task.description ?? "");
+  const [draftAssignee, setDraftAssignee] = useState<string | null>(task.assigned_to ?? null);
+  const [draftStatus, setDraftStatus] = useState<Status>(task.status);
+  const [draftEffort, setDraftEffort] = useState<string>(task.effort != null ? String(task.effort) : "");
+  const [saving, setSaving] = useState(false);
+
+  // Keep drafts in sync if the task prop changes (e.g. board update while modal is open)
+  useEffect(() => {
+    setDraftName(task.name);
+    setDraftDesc(task.description ?? "");
+    setDraftAssignee(task.assigned_to ?? null);
+    setDraftStatus(task.status);
+    setDraftEffort(task.effort != null ? String(task.effort) : "");
+  }, [task.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  const isDirty =
+    draftName.trim() !== task.name ||
+    draftDesc.trim() !== (task.description ?? "") ||
+    draftAssignee !== (task.assigned_to ?? null) ||
+    draftStatus !== task.status ||
+    (draftEffort.trim() === "" ? null : parseInt(draftEffort, 10)) !== task.effort;
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const patch: Parameters<typeof updateTask>[2] = {};
+      if (draftName.trim() !== task.name) patch.name = draftName.trim();
+      if (draftDesc.trim() !== (task.description ?? "")) patch.description = draftDesc.trim() || undefined;
+      if (draftAssignee !== (task.assigned_to ?? null)) patch.assigned_to = draftAssignee;
+      if (draftStatus !== task.status) patch.status = draftStatus;
+      const parsedEffort = draftEffort.trim() === "" ? null : parseInt(draftEffort, 10);
+      if (parsedEffort !== task.effort) patch.effort = parsedEffort;
+      const updated = await updateTask(token, task.id, patch);
+      onTaskUpdated(updated);
+      onClose();
+    } finally { setSaving(false); }
+  }
+
+  function memberName(m: TeamMember) {
+    return `${m.user.first_name ?? ""} ${m.user.last_name ?? ""}`.trim() || m.user.username;
+  }
+
+  const taskTypeBadge: Record<string, { label: string; cls: string }> = {
+    decision:   { label: "Decision",   cls: "bg-indigo-100 text-indigo-700" },
+    automated:  { label: "Automated",  cls: "bg-amber-100 text-amber-700" },
+    loop_block: { label: "Loop",       cls: "bg-rose-100 text-rose-700" },
+    standard:   { label: "Standard",   cls: "bg-slate-100 text-slate-600" },
+  };
+  const typeBadge = taskTypeBadge[task.task_type] ?? taskTypeBadge.standard;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start gap-3 px-6 pt-5 pb-4 border-b border-slate-100">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-slate-400 mb-1 truncate">{storyName}</p>
+            <input
+              type="text"
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              className="w-full text-lg font-semibold text-slate-800 bg-transparent border-0 outline-none focus:ring-0 p-0 leading-snug"
+              placeholder="Task name"
+            />
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors mt-0.5 shrink-0">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5">
+              <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {/* Row: Status · Type · Start/End badges */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={draftStatus}
+              onChange={(e) => setDraftStatus(e.target.value as Status)}
+              className="text-xs font-medium border border-slate-200 rounded-full px-3 py-1 bg-white text-slate-700 outline-none focus:border-violet-400 cursor-pointer"
+            >
+              {(["Not Started", "Ready", "In Progress", "On Hold", "Complete"] as Status[]).map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${typeBadge.cls}`}>{typeBadge.label}</span>
+            {task.is_start && (
+              <span className="flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                <svg viewBox="0 0 8 8" fill="currentColor" className="w-2 h-2"><polygon points="1,0 7,4 1,8" /></svg>
+                Start
+              </span>
+            )}
+            {task.is_end && (
+              <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">End</span>
+            )}
+          </div>
+
+          {/* Row: Assignee · Effort */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Assignee</label>
+              <select
+                value={draftAssignee ?? ""}
+                onChange={(e) => setDraftAssignee(e.target.value || null)}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 outline-none focus:border-violet-400"
+              >
+                <option value="">Unassigned</option>
+                {teamMembers.map((m) => (
+                  <option key={m.user.id} value={m.user.id}>{memberName(m)}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Effort (pts)</label>
+              <input
+                type="number"
+                min="0"
+                value={draftEffort}
+                onChange={(e) => setDraftEffort(e.target.value)}
+                placeholder="—"
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 outline-none focus:border-violet-400"
+              />
+            </div>
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Description</label>
+            <textarea
+              value={draftDesc}
+              onChange={(e) => setDraftDesc(e.target.value)}
+              rows={4}
+              placeholder="Add a description…"
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white text-slate-700 outline-none focus:border-violet-400 resize-none"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-sm px-4 py-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !isDirty}
+            className="text-sm px-4 py-2 rounded-lg bg-violet-600 text-white font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
       </div>
     </div>
   );
