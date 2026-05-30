@@ -196,8 +196,12 @@
     "noStories": "No stories",
     "dropHere": "Drop here",
     "moveTo": "Move to",
+    "swimlanesOff": "Swimlanes",
+    "swimlanesOn": "Swimlanes: On",
+    "unassigned": "Unassigned",
     "columns": {
       "todo": "To Do",
+      "ready": "Ready",
       "inProgress": "In Progress",
       "onHold": "On Hold",
       "done": "Done"
