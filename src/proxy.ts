@@ -30,7 +30,7 @@ function route(request: NextRequest): NextResponse {
 export function proxy(request: NextRequest) {
   const response = route(request);
   const portalUrl =
-    process.env.PORTAL_URL ?? "https://setanta-portal.ullav.com http://localhost:3000";
+    process.env.PORTAL_URL ?? "https://setanta-portal.ullav.com http://localhost:3003";
   response.headers.set("Content-Security-Policy", `frame-ancestors 'self' ${portalUrl}`);
   return response;
 }
