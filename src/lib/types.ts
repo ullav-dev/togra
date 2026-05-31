@@ -147,6 +147,7 @@ export interface Task {
   end_time: string | null;
   canvas_x: number | null;
   canvas_y: number | null;
+  effort: number | null;
 }
 
 export interface TaskLink {

@@ -18,7 +18,7 @@
     "logoutNow": "Logáil amach anois"
   },
   "footer": {
-    "tagline": "Pleanáil Tionscadal"
+    "tagline": "Bainistiú Tionscadal"
   },
   "status": {
     "Not Started": "Gan tús",
@@ -50,7 +50,7 @@
     "save": "Sábháil athruithe"
   },
   "login": {
-    "appTagline": "Pleanáil Tionscadal",
+    "appTagline": "Bainistiú Tionscadal",
     "emailLabel": "Ríomhphost",
     "passwordLabel": "Pasfhocal",
     "signIn": "Sínigh isteach",
@@ -199,6 +199,12 @@
     "swimlanesOff": "Swimlanes",
     "swimlanesOn": "Swimlanes: Air",
     "unassigned": "Gan sannadh",
+    "byStory": "Scéalta",
+    "byMember": "Baill",
+    "groupBy": "Grúpáil:",
+    "noTasks": "Gan tascanna",
+    "loadingTasks": "Tascanna á luchtú…",
+    "taskSummary": "{done}/{total} tasc",
     "columns": {
       "todo": "Le déanamh",
       "ready": "Réidh",
@@ -292,6 +298,7 @@
     "noteCountPlural": "{count} nóta",
     "compactTitle": "Nótaí ({count})",
     "you": "Tú féin",
+    "unknown": "Anaithnid",
     "justNow": "díreach anois",
     "mAgo": "{count} nóim. ó shin",
     "hAgo": "{count} u. ó shin",

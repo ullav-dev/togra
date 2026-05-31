@@ -13,7 +13,7 @@ const geist = Geist({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Togra",
-  description: "Project Planning",
+  description: "Project Management",
   icons: { icon: "/icon.svg" },
 };
 

@@ -18,7 +18,7 @@
     "logoutNow": "Jetzt abmelden"
   },
   "footer": {
-    "tagline": "Projektplanung"
+    "tagline": "Projektmanagement"
   },
   "status": {
     "Not Started": "Nicht begonnen",
@@ -50,7 +50,7 @@
     "save": "Änderungen speichern"
   },
   "login": {
-    "appTagline": "Projektplanung",
+    "appTagline": "Projektmanagement",
     "emailLabel": "E-Mail",
     "passwordLabel": "Passwort",
     "signIn": "Anmelden",
@@ -199,6 +199,12 @@
     "swimlanesOff": "Swimlanes",
     "swimlanesOn": "Swimlanes: Ein",
     "unassigned": "Nicht zugewiesen",
+    "byStory": "Storys",
+    "byMember": "Mitglieder",
+    "groupBy": "Gruppieren:",
+    "noTasks": "Keine Aufgaben",
+    "loadingTasks": "Aufgaben werden geladen…",
+    "taskSummary": "{done}/{total} Aufgaben",
     "columns": {
       "todo": "Zu erledigen",
       "ready": "Bereit",
@@ -292,6 +298,7 @@
     "noteCountPlural": "{count} Notizen",
     "compactTitle": "Notizen ({count})",
     "you": "Sie",
+    "unknown": "Unbekannt",
     "justNow": "gerade eben",
     "mAgo": "vor {count} Min.",
     "hAgo": "vor {count} Std.",

@@ -233,7 +233,24 @@ function NoteView({ note, folders, currentUserId, token, resolveCreator, onEdit,
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+interface NoteAuthor {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  username: string;
+}
+
 interface NotesPanelProps {
+  /** Optional list of known team members — used to resolve author UUIDs to names. */
+  members?: NoteAuthor[];
+  /**
+   * Controls folder navigator layout in the standard (non-twoColumn) view.
+   * - "horizontal" (default): folders appear as a chip bar above the note list.
+   * - "vertical": folders appear as a sidebar to the left of the note list.
+   */
+  folderOrientation?: "horizontal" | "vertical";
+  /** When true, auto-selects the first note after loading (useful in twoColumn layout). */
+  autoSelectFirst?: boolean;
   entityType: NoteEntityType;
   entityId: string;
   isTeam: boolean;
@@ -242,7 +259,7 @@ interface NotesPanelProps {
   twoColumn?: boolean;
 }
 
-export default function NotesPanel({ entityType, entityId, isTeam, compact = false, twoColumn = false }: NotesPanelProps) {
+export default function NotesPanel({ entityType, entityId, isTeam, compact = false, twoColumn = false, members = [], folderOrientation = "horizontal", autoSelectFirst = false }: NotesPanelProps) {
   const { user, token } = useAuth();
   const t = useTranslations("notes");
   const [notes, setNotes] = useState<Note[]>([]);
@@ -261,9 +278,20 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [renameFolderName, setRenameFolderName] = useState("");
   const listResize = useResize({ initial: 220, min: 140, max: 400, axis: "x" });
+  const [foldersVisible, setFoldersVisible] = useState(true);
 
   const currentUserId = user?.id ?? "";
-  const resolveCreator = (id: string) => id === currentUserId ? (user?.username ?? t("you")) : id;
+  const resolveCreator = (id: string | null): string => {
+    if (!id) return t("unknown");
+    if (id === currentUserId) {
+      const me = members.find((m) => m.id === id);
+      if (me) return `${me.first_name ?? ""} ${me.last_name ?? ""}`.trim() || me.username;
+      return user?.username ?? t("you");
+    }
+    const member = members.find((m) => m.id === id);
+    if (member) return `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim() || member.username;
+    return id.slice(0, 8) + "…";
+  };
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -279,7 +307,12 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
     if (!notesResult.ok) { setError(notesResult.error); return; }
     setNotes(notesResult.data);
     setFolders(foldersData);
-  }, [token, entityType, entityId]);
+    if (autoSelectFirst && notesResult.data.length > 0) {
+      const first = notesResult.data.find((n) => !n.parent_id) ?? notesResult.data[0];
+      setSelectedId(first.id);
+      setMode("view");
+    }
+  }, [token, entityType, entityId, autoSelectFirst]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -590,36 +623,129 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
   }
 
   // ── Standard full layout (project panel, any other wide context) ─────────────
+  // Folder navigation rendered as a horizontal scrollable chip bar above the note list.
+  const folderBar = (
+    <div className="flex items-center gap-1 overflow-x-auto pb-1 shrink-0 scrollbar-none">
+      {(["all", "mine", "shared"] as const).map((key) => (
+        <button
+          key={key}
+          onClick={() => { setActiveFolder(key); setSelectedId(null); setMode("list"); }}
+          className={`shrink-0 text-xs px-2.5 py-1 rounded-full transition-colors whitespace-nowrap ${
+            activeFolder === key
+              ? "bg-violet-100 text-violet-700 font-medium"
+              : "text-slate-500 hover:bg-slate-100"
+          }`}
+        >
+          {key === "all" ? t("allNotesFilter") : key === "mine" ? t("myNotes") : t("sharedFilter")}
+        </button>
+      ))}
+      {folders.length > 0 && <span className="text-slate-200 shrink-0">|</span>}
+      {folders.map((folder) =>
+        renamingFolderId === folder.id ? (
+          <form key={folder.id} onSubmit={(e) => { e.preventDefault(); handleRenameFolder(folder.id, renameFolderName); }} className="shrink-0">
+            <input autoFocus value={renameFolderName} onChange={(e) => setRenameFolderName(e.target.value)}
+              onBlur={() => handleRenameFolder(folder.id, renameFolderName)}
+              className="text-xs border border-violet-300 rounded-full px-2.5 py-1 focus:outline-none w-28" />
+          </form>
+        ) : (
+          <div key={folder.id} className="group shrink-0 flex items-center gap-0.5">
+            <button
+              onClick={() => { setActiveFolder(folder.id); setSelectedId(null); setMode("list"); }}
+              className={`text-xs px-2.5 py-1 rounded-full transition-colors whitespace-nowrap ${
+                activeFolder === folder.id
+                  ? "bg-violet-100 text-violet-700 font-medium"
+                  : "text-slate-500 hover:bg-slate-100"
+              }`}
+            >
+              📁 {folder.name}
+            </button>
+            <div className="hidden group-hover:flex items-center gap-0.5">
+              <button onClick={() => { setRenamingFolderId(folder.id); setRenameFolderName(folder.name); }} className="text-slate-300 hover:text-slate-500 text-xs p-0.5" title="Rename">✏️</button>
+              <button onClick={() => setConfirmDeleteFolder(folder)} className="text-slate-300 hover:text-red-500 text-xs p-0.5" title="Delete">🗑️</button>
+            </div>
+          </div>
+        )
+      )}
+      {creatingFolder ? (
+        <form onSubmit={(e) => { e.preventDefault(); handleCreateFolder(); }} className="shrink-0">
+          <input autoFocus value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)}
+            onBlur={() => { if (!newFolderName.trim()) setCreatingFolder(false); }}
+            placeholder={t("folderNamePlaceholder")}
+            className="text-xs border border-violet-300 rounded-full px-2.5 py-1 focus:outline-none w-28" />
+        </form>
+      ) : (
+        <button onClick={() => { setCreatingFolder(true); setNewFolderName(""); }} className="shrink-0 text-xs px-2 py-1 text-slate-400 hover:text-violet-700 transition-colors" title={t("foldersLabel")}>+ folder</button>
+      )}
+    </div>
+  );
+
+  const newNoteBtn = (
+    <button
+      onClick={() => { setSelectedId(null); setMode("create"); }}
+      className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-violet-700 hover:text-violet-900 transition-colors"
+    >
+      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+        <path d="M8 2a.75.75 0 0 1 .75.75v4.5h4.5a.75.75 0 0 1 0 1.5h-4.5v4.5a.75.75 0 0 1-1.5 0v-4.5h-4.5a.75.75 0 0 1 0-1.5h4.5v-4.5A.75.75 0 0 1 8 2Z"/>
+      </svg>
+      {t("newNote")}
+    </button>
+  );
+
+  const folderToggle = (
+    <button
+      onClick={() => setFoldersVisible((v) => !v)}
+      className={`shrink-0 text-xs px-2.5 py-1 rounded-full border font-medium transition-colors ${
+        foldersVisible
+          ? "bg-violet-50 text-violet-700 border-violet-200"
+          : "text-slate-400 border-slate-200 hover:border-violet-300 hover:text-violet-600"
+      }`}
+      title={foldersVisible ? "Hide folders" : "Show folders"}
+    >
+      📁
+    </button>
+  );
+
+  const notesContent = (
+    <div className="flex-1 min-h-0 overflow-y-auto">
+      {mode !== "list" ? (
+        <div className="space-y-3">
+          <button onClick={() => { setMode("list"); setSelectedId(null); }} className="text-xs text-slate-500 hover:text-slate-700 transition-colors">{t("backToList")}</button>
+          {mainContent()}
+        </div>
+      ) : noteList}
+    </div>
+  );
+
+  if (folderOrientation === "vertical") {
+    return (
+      <>
+      <div className="flex flex-col min-h-0">
+        <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 shrink-0">
+          <div className="flex items-center gap-2">{folderToggle}<span className="text-xs font-medium text-slate-500">{noteCount}</span></div>
+          {newNoteBtn}
+        </div>
+        <div className="flex gap-4 flex-1 min-h-0">
+          {foldersVisible && <div className="w-44 shrink-0 overflow-y-auto">{folderSidebar}</div>}
+          <div className="flex-1 min-w-0">{notesContent}</div>
+        </div>
+      </div>
+      {confirmDialogs}
+      </>
+    );
+  }
+
+  // horizontal (default)
   return (
     <>
     <div className="flex flex-col min-h-0">
-      {/* Full-width header — always visible regardless of panel width */}
-      <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-100 shrink-0">
-        <span className="text-xs font-medium text-slate-500">{noteCount}</span>
-        <button
-          onClick={() => { setSelectedId(null); setMode("create"); }}
-          className="inline-flex items-center gap-1 text-xs font-medium text-violet-700 hover:text-violet-900 transition-colors"
-        >
-          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-            <path d="M8 2a.75.75 0 0 1 .75.75v4.5h4.5a.75.75 0 0 1 0 1.5h-4.5v4.5a.75.75 0 0 1-1.5 0v-4.5h-4.5a.75.75 0 0 1 0-1.5h4.5v-4.5A.75.75 0 0 1 8 2Z"/>
-          </svg>
-          {t("newNote")}
-        </button>
+      {/* Top bar: folder toggle + chip bar + new note */}
+      <div className="flex items-center gap-2 pb-2 mb-2 border-b border-slate-100 shrink-0">
+        {folderToggle}
+        {foldersVisible && <div className="flex-1 min-w-0">{folderBar}</div>}
+        {!foldersVisible && <span className="flex-1 text-xs text-slate-400">{noteCount}</span>}
+        {newNoteBtn}
       </div>
-
-      <div className="flex gap-4 min-h-0">
-        {folderSidebar}
-
-        {/* Right panel */}
-        <div className="flex-1 min-w-0 space-y-3">
-          {mode !== "list" ? (
-            <div className="space-y-3">
-              <button onClick={() => { setMode("list"); setSelectedId(null); }} className="text-xs text-slate-500 hover:text-slate-700 transition-colors">{t("backToList")}</button>
-              {mainContent()}
-            </div>
-          ) : noteList}
-        </div>
-      </div>
+      {notesContent}
     </div>
     {confirmDialogs}
     </>

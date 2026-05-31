@@ -296,7 +296,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             <h2 className="text-sm font-semibold text-slate-700">{t("notesTitle")}</h2>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
-            <NotesPanel entityType="project" entityId={id} isTeam={true} />
+            <NotesPanel entityType="project" entityId={id} isTeam={true} members={teamMembers.map((m) => m.user)} />
           </div>
         </div>
       </div>}

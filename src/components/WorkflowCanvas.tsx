@@ -399,7 +399,7 @@ function WorkflowCanvasInner({
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
   const selectedMember = selectedTask ? resolvedMember(selectedTask.id) : null;
   const activeMembers = teamMembers.filter((m) => m.status === "active");
-  const STATUSES: Status[] = ["Not Started", "Ready", "In Progress", "On Hold", "Complete"];
+  const STATUSES: Status[] = ["Not Started", "Ready", "In Progress", "On Hold", "Complete", "Cancelled"];
 
   async function handleStatusChange(status: Status) {
     if (!selectedTask) return;
