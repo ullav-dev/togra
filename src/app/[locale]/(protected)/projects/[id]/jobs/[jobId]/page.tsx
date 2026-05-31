@@ -11,6 +11,7 @@ import StatusPill from "@/components/StatusPill";
 
 const STORY_COLUMNS: { status: Status; labelKey: string; bg: string; border: string; header: string; overBorder: string }[] = [
   { status: "Not Started", labelKey: "todo",       bg: "bg-slate-50",   border: "border-slate-200",   header: "text-slate-500",   overBorder: "border-violet-400 bg-violet-50" },
+  { status: "Ready",       labelKey: "ready",      bg: "bg-violet-50",  border: "border-violet-200",  header: "text-violet-700",  overBorder: "border-violet-500 bg-violet-100" },
   { status: "In Progress", labelKey: "inProgress", bg: "bg-blue-50",    border: "border-blue-200",    header: "text-blue-700",    overBorder: "border-blue-400 bg-blue-100" },
   { status: "On Hold",     labelKey: "onHold",     bg: "bg-amber-50",   border: "border-amber-200",   header: "text-amber-700",   overBorder: "border-amber-400 bg-amber-100" },
   { status: "Complete",    labelKey: "done",       bg: "bg-emerald-50", border: "border-emerald-200", header: "text-emerald-700", overBorder: "border-emerald-400 bg-emerald-100" },
@@ -34,6 +35,9 @@ export default function SprintBoardPage({
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [swimlanesOn, setSwimlanesOn] = useState(false);
+  const [storyTasks, setStoryTasks] = useState<Record<string, Task[]>>({});
+  const [loadingTasks, setLoadingTasks] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -59,6 +63,23 @@ export default function SprintBoardPage({
     }
   }, [job, projectId, router]);
 
+  // Load all tasks for swimlane grouping when swimlanes are toggled on
+  useEffect(() => {
+    if (!swimlanesOn || !token || stories.length === 0) return;
+    const unloaded = stories.filter((s) => !(s.id in storyTasks));
+    if (unloaded.length === 0) return;
+    setLoadingTasks(true);
+    Promise.all(unloaded.map((s) => listTasks(token, s.id).then((tasks) => ({ id: s.id, tasks }))))
+      .then((results) => {
+        setStoryTasks((prev) => {
+          const next = { ...prev };
+          results.forEach(({ id, tasks }) => { next[id] = tasks; });
+          return next;
+        });
+      })
+      .finally(() => setLoadingTasks(false));
+  }, [swimlanesOn, token, stories, storyTasks]);
+
   async function onStatusChange(storyId: string, newStatus: Status) {
     if (!token) return;
     const story = stories.find((s) => s.id === storyId);
@@ -80,8 +101,23 @@ export default function SprintBoardPage({
     ? ` · ${fmtDate(job.start_date)} – ${fmtDate(job.end_date)}`
     : "";
 
+  // Swimlane lanes: one per team member + null for Unassigned
+  const lanes: (TeamMember | null)[] = [...teamMembers, null];
+
+  function storiesForLane(member: TeamMember | null, colStatus: Status): Workflow[] {
+    return stories.filter((s) => {
+      if (s.status !== colStatus) return false;
+      const tasks = storyTasks[s.id] ?? [];
+      if (member === null) {
+        return tasks.length === 0 || tasks.every((t) => !t.assigned_to);
+      }
+      return tasks.some((t) => t.assigned_to === member.user.id);
+    });
+  }
+
   return (
     <div className="flex flex-col h-full">
+      {/* Header */}
       <div className="bg-white border-b border-slate-200 px-6 py-4 shrink-0">
         <nav className="flex items-center gap-2 text-sm text-slate-500 mb-1">
           <Link href="/projects" className="hover:text-violet-700 transition-colors">{t("breadcrumbProjects")}</Link>
@@ -90,7 +126,7 @@ export default function SprintBoardPage({
           <span>/</span>
           <span className="text-slate-700 font-medium">{job.name}</span>
         </nav>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-xl font-bold text-slate-800">{job.name}</h1>
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
             job.job_type === "sprint" ? "bg-indigo-50 text-indigo-700" :
@@ -98,35 +134,114 @@ export default function SprintBoardPage({
           }`}>{typeLabel}</span>
           {dateRange && <span className="text-xs text-slate-400">{dateRange}</span>}
           <span className="text-xs text-slate-400">{t("stories", { count: stories.length })}</span>
+          <div className="ml-auto flex items-center gap-2">
+            {loadingTasks && <span className="text-xs text-slate-400">Loading…</span>}
+            <button
+              type="button"
+              onClick={() => setSwimlanesOn((v) => !v)}
+              className={`text-xs px-3 py-1 rounded-full border transition-colors font-medium ${
+                swimlanesOn
+                  ? "bg-violet-600 text-white border-violet-600"
+                  : "bg-white text-slate-500 border-slate-200 hover:border-violet-400 hover:text-violet-700"
+              }`}
+            >
+              {swimlanesOn ? t("swimlanesOn") : t("swimlanesOff")}
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-x-auto p-6">
-        <div className="flex gap-4 h-full min-w-max">
-          {columns.map((col) => {
-            const colStories = stories.filter((s) => s.status === col.status);
-            return (
-              <StoryColumn
-                key={col.status}
-                column={col}
-                stories={colStories}
-                projectId={projectId}
-                teamMembers={teamMembers}
-                draggingId={draggingId}
-                onDragStart={setDraggingId}
-                onDragEnd={() => setDraggingId(null)}
-                onDrop={(storyId) => onStatusChange(storyId, col.status)}
-                onStatusChange={(storyId, status) => onStatusChange(storyId, status)}
-              />
-            );
-          })}
-        </div>
+      {/* Board */}
+      <div className="flex-1 overflow-auto p-6">
+        {swimlanesOn ? (
+          /* ── Swimlane layout ── */
+          <div className="min-w-max">
+            {/* Column header row */}
+            <div className="flex gap-0 mb-0">
+              {/* Lane label spacer */}
+              <div className="w-44 shrink-0" />
+              {columns.map((col) => (
+                <div
+                  key={col.status}
+                  className={`w-72 shrink-0 px-4 py-2 mx-1 rounded-t-xl border-t border-x ${col.bg} ${col.border}`}
+                >
+                  <span className={`text-sm font-semibold ${col.header}`}>{col.label}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Lane rows */}
+            {lanes.map((member) => {
+              const laneKey = member ? member.user.id : "__unassigned__";
+              const laneLabel = member
+                ? (`${member.user.first_name ?? ""} ${member.user.last_name ?? ""}`.trim() || member.user.username)
+                : t("unassigned");
+              return (
+                <div key={laneKey} className="flex gap-0 mb-3 items-stretch">
+                  {/* Lane label */}
+                  <div className="w-44 shrink-0 flex items-start gap-2 pt-3 pr-3">
+                    {member ? (
+                      <MemberAvatar member={member} size="md" />
+                    ) : (
+                      <div className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-slate-400">
+                          <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 14s-1 0-1-1 1-4 7-4 7 3 7 4-1 1-1 1H2Z"/>
+                        </svg>
+                      </div>
+                    )}
+                    <span className="text-xs font-medium text-slate-600 leading-tight pt-0.5">{laneLabel}</span>
+                  </div>
+
+                  {/* Column cells */}
+                  {columns.map((col) => {
+                    const cellStories = storiesForLane(member, col.status);
+                    return (
+                      <SwimCell
+                        key={col.status}
+                        column={col}
+                        stories={cellStories}
+                        projectId={projectId}
+                        teamMembers={teamMembers}
+                        draggingId={draggingId}
+                        onDragStart={setDraggingId}
+                        onDragEnd={() => setDraggingId(null)}
+                        onDrop={(storyId) => onStatusChange(storyId, col.status)}
+                        onStatusChange={onStatusChange}
+                      />
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* ── Flat column layout ── */
+          <div className="flex gap-4 h-full min-w-max">
+            {columns.map((col) => {
+              const colStories = stories.filter((s) => s.status === col.status);
+              return (
+                <StoryColumn
+                  key={col.status}
+                  column={col}
+                  stories={colStories}
+                  projectId={projectId}
+                  teamMembers={teamMembers}
+                  draggingId={draggingId}
+                  onDragStart={setDraggingId}
+                  onDragEnd={() => setDraggingId(null)}
+                  onDrop={(storyId) => onStatusChange(storyId, col.status)}
+                  onStatusChange={(storyId, status) => onStatusChange(storyId, status)}
+                />
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// ── Story Column ──────────────────────────────────────────────────────────────
+// ── Story Column (flat mode) ───────────────────────────────────────────────────
 
 function StoryColumn({
   column,
@@ -207,6 +322,75 @@ function StoryColumn({
   );
 }
 
+// ── Swim Cell (swimlane mode) ─────────────────────────────────────────────────
+
+function SwimCell({
+  column,
+  stories,
+  projectId,
+  teamMembers,
+  draggingId,
+  onDragStart,
+  onDragEnd,
+  onDrop,
+  onStatusChange,
+}: {
+  column: (typeof STORY_COLUMNS)[number] & { label: string };
+  stories: Workflow[];
+  projectId: string;
+  teamMembers: TeamMember[];
+  draggingId: string | null;
+  onDragStart: (id: string) => void;
+  onDragEnd: () => void;
+  onDrop: (storyId: string) => void;
+  onStatusChange: (storyId: string, status: Status) => void;
+}) {
+  const t = useTranslations("board");
+  const [isOver, setIsOver] = useState(false);
+  const dragCounter = useRef(0);
+
+  function handleDragEnter(e: React.DragEvent) { e.preventDefault(); dragCounter.current++; setIsOver(true); }
+  function handleDragLeave() { dragCounter.current--; if (dragCounter.current === 0) setIsOver(false); }
+  function handleDragOver(e: React.DragEvent) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault(); dragCounter.current = 0; setIsOver(false);
+    const id = e.dataTransfer.getData("storyId");
+    if (id) onDrop(id);
+  }
+
+  const cellClass = isOver
+    ? `border-2 ${column.overBorder}`
+    : `border ${column.bg} ${column.border}`;
+
+  return (
+    <div
+      className={`w-72 shrink-0 mx-1 rounded-b-xl rounded-tr-xl min-h-24 p-2 space-y-2 transition-colors ${cellClass}`}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {stories.map((story) => (
+        <StoryCard
+          key={story.id}
+          story={story}
+          projectId={projectId}
+          teamMembers={teamMembers}
+          isDragging={draggingId === story.id}
+          isDraggingActive={draggingId !== null}
+          allStatuses={STORY_COLUMNS.map((c) => c.status)}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          onStatusChange={onStatusChange}
+        />
+      ))}
+      {stories.length === 0 && isOver && (
+        <p className="text-xs text-center py-4 text-violet-400">{t("dropHere")}</p>
+      )}
+    </div>
+  );
+}
+
 // ── Story Card ────────────────────────────────────────────────────────────────
 
 function StoryCard({
@@ -235,7 +419,6 @@ function StoryCard({
   const [assignees, setAssignees] = useState<TeamMember[]>([]);
   const { token } = useAuth();
 
-  // Load task progress and derive unique assignees once on first render
   useEffect(() => {
     if (!token) return;
     listTasks(token, story.id).then((tasks) => {
@@ -268,7 +451,6 @@ function StoryCard({
         } group`}
     >
       <div className="flex items-start gap-2">
-        {/* drag handle */}
         <div className="mt-0.5 shrink-0 text-slate-300 group-hover:text-slate-400 transition-colors cursor-grab">
           <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
             <circle cx="5" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/>
@@ -319,14 +501,15 @@ function StoryCard({
   );
 }
 
-// ── Assignee Avatars ──────────────────────────────────────────────────────────
+// ── Avatars ───────────────────────────────────────────────────────────────────
 
-function MemberAvatar({ member }: { member: TeamMember }) {
+function MemberAvatar({ member, size = "sm" }: { member: TeamMember; size?: "sm" | "md" }) {
   const [broken, setBroken] = useState(false);
   const initials = (
     `${member.user.first_name?.charAt(0) ?? ""}${member.user.last_name?.charAt(0) ?? ""}`
   ).toUpperCase() || member.user.username.charAt(0).toUpperCase();
   const label = `${member.user.first_name ?? ""} ${member.user.last_name ?? ""}`.trim() || member.user.username;
+  const dim = size === "md" ? "w-7 h-7 text-[11px]" : "w-5 h-5 text-[9px]";
 
   if (member.user.avatar_url && !broken) {
     return (
@@ -334,7 +517,7 @@ function MemberAvatar({ member }: { member: TeamMember }) {
         src={member.user.avatar_url}
         alt={initials}
         title={label}
-        className="w-5 h-5 rounded-full object-cover"
+        className={`${dim} rounded-full object-cover shrink-0`}
         onError={() => setBroken(true)}
       />
     );
@@ -342,7 +525,7 @@ function MemberAvatar({ member }: { member: TeamMember }) {
   return (
     <span
       title={label}
-      className="w-5 h-5 rounded-full bg-violet-100 text-violet-700 text-[9px] font-semibold flex items-center justify-center select-none"
+      className={`${dim} rounded-full bg-violet-100 text-violet-700 font-semibold flex items-center justify-center select-none shrink-0`}
     >
       {initials}
     </span>

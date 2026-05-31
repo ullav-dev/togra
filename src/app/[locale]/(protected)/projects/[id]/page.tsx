@@ -997,7 +997,7 @@ function CreateStoryModal({
   const [noteBody, setNoteBody] = useState("");
   const [points, setPoints] = useState("");
   const [templateId, setTemplateId] = useState("");
-  const [isShared, setIsShared] = useState(false);
+  const [isShared, setIsShared] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

@@ -196,8 +196,12 @@
     "noStories": "Gan scéalta",
     "dropHere": "Tit anseo",
     "moveTo": "Bog go",
+    "swimlanesOff": "Swimlanes",
+    "swimlanesOn": "Swimlanes: Air",
+    "unassigned": "Gan sannadh",
     "columns": {
       "todo": "Le déanamh",
+      "ready": "Réidh",
       "inProgress": "Ar siúl",
       "onHold": "Ar fionraí",
       "done": "Déanta"

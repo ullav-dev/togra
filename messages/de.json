@@ -196,8 +196,12 @@
     "noStories": "Keine Stories",
     "dropHere": "Hier ablegen",
     "moveTo": "Verschieben nach",
+    "swimlanesOff": "Swimlanes",
+    "swimlanesOn": "Swimlanes: Ein",
+    "unassigned": "Nicht zugewiesen",
     "columns": {
       "todo": "Zu erledigen",
+      "ready": "Bereit",
       "inProgress": "In Bearbeitung",
       "onHold": "Pausiert",
       "done": "Erledigt"

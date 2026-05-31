@@ -161,6 +161,47 @@ export interface TaskTeamRole {
   assigned_at: string;
 }
 
+export type ScriptType = "webhook" | "shell" | "python" | "mcp_tool";
+
+export type PortDirection = "input" | "output";
+export type PortValueType = "string" | "number" | "boolean" | "json" | "file" | "dam_asset";
+
+export interface TaskPortSpec {
+  id: string;
+  task_id: string;
+  direction: PortDirection;
+  name: string;
+  value_type: PortValueType;
+  required: boolean;
+  description: string | null;
+  sort_order: number;
+}
+
+export interface TaskScript {
+  id: string;
+  task_id: string;
+  script_type: ScriptType;
+  endpoint: string | null;
+  script_body: string | null;
+  timeout_secs: number;
+  retry_limit: number;
+  execution_profile_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExecutionProfile {
+  id: string;
+  name: string;
+  image: string;
+  description: string | null;
+  cpu_request: string;
+  cpu_limit: string;
+  memory_request: string;
+  memory_limit: string;
+  image_pull_policy: string;
+}
+
 // ── Notes ─────────────────────────────────────────────────────────────────────
 
 export type NoteEntityType = "task" | "workflow" | "job" | "project";

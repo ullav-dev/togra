@@ -17,6 +17,7 @@ const DECISION_COLORS = { border: "border-indigo-400", bg: "bg-indigo-50", text:
 export type StoryTaskNodeData = {
   task: Task;
   selected: boolean;
+  isEditMode: boolean;
   onSelect: (id: string) => void;
   roles: TeamRole[];
   assignedMember: TeamMember | null;
@@ -48,9 +49,10 @@ function MemberAvatar({ member }: { member: TeamMember }) {
 
 export default function StoryTaskNode({ data }: NodeProps) {
   const d = data as unknown as StoryTaskNodeData;
-  const { task, selected, onSelect, roles = [], assignedMember } = d;
+  const { task, selected, isEditMode = false, onSelect, roles = [], assignedMember } = d;
 
   const isDecision = task.task_type === "decision";
+  const isAutomated = task.task_type === "automated";
   const colors = isDecision
     ? DECISION_COLORS
     : (STATUS_COLORS[task.status] ?? STATUS_COLORS["Not Started"]);
@@ -89,11 +91,19 @@ export default function StoryTaskNode({ data }: NodeProps) {
           title="Decision"
         />
       )}
+      {/* Automated lightning badge */}
+      {isAutomated && (
+        <div className="absolute -top-2.5 z-10 flex items-center justify-center" style={{ left: "50%", transform: "translateX(-50%)" }} title="Automated">
+          <span className="bg-amber-400 border-2 border-white text-white text-[9px] font-bold rounded-full w-5 h-5 flex items-center justify-center">⚡</span>
+        </div>
+      )}
 
-      {/* Forward handles */}
-      <Handle id="forward-target" type="target" position={Position.Left}  className="!bg-violet-500 !w-3 !h-3 !border-2 !border-white" />
-      <Handle id="forward-source" type="source" position={Position.Right} className="!bg-violet-500 !w-3 !h-3 !border-2 !border-white" />
-      {/* Loop-back handles (invisible, for curved back-edges) */}
+      {/* Forward handles — visible and interactive in edit mode only */}
+      <Handle id="forward-target" type="target" position={Position.Left}
+        className={isEditMode ? "!bg-violet-500 !w-4 !h-4 !border-2 !border-white" : "!bg-violet-500 !w-3 !h-3 !border-2 !border-white !opacity-0 !pointer-events-none"} />
+      <Handle id="forward-source" type="source" position={Position.Right}
+        className={isEditMode ? "!bg-violet-500 !w-4 !h-4 !border-2 !border-white" : "!bg-violet-500 !w-3 !h-3 !border-2 !border-white !opacity-0 !pointer-events-none"} />
+      {/* Loop-back handles (always invisible, for curved back-edges) */}
       <Handle id="loop-source" type="source" position={Position.Bottom} style={{ left: "62%", opacity: 0, pointerEvents: "none" }} isConnectable={false} />
       <Handle id="loop-target" type="target" position={Position.Bottom} style={{ left: "38%", opacity: 0, pointerEvents: "none" }} isConnectable={false} />
 
