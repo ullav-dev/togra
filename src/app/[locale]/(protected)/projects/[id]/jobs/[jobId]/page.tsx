@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getJob, listWorkflows, listTasks, updateTask, getTeam } from "@/lib/awe-api";
 import { getProject } from "@/lib/togra-api";
 import type { Job, Workflow, Task, Project, Status, TeamMember } from "@/lib/types";
+import NotesPanel from "@/components/notes/NotesPanel";
 
 const TASK_COLUMNS: {
   status: Status;
@@ -46,7 +47,8 @@ export default function SprintBoardPage({
   const [loading, setLoading] = useState(true);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [groupBy, setGroupBy] = useState<"story" | "member">("story");
-  const [myTasksOnly, setMyTasksOnly] = useState(false);
+  // "all" | "mine" | a team member's user ID
+  const [taskFilter, setTaskFilter] = useState<"all" | "mine" | string>("all");
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [selectedTaskCtx, setSelectedTaskCtx] = useState<{ task: Task; workflowId: string; storyName: string } | null>(null);
   const promotedRef = useRef(false);
@@ -178,11 +180,13 @@ export default function SprintBoardPage({
   const totalTasks = Object.values(storyTasks).reduce((n, ts) => n + ts.length, 0);
   const memberLanes: (TeamMember | null)[] = [...teamMembers, null];
 
-  // Filter tasks to current user when "My Tasks" is active
   function filterTasks(tasks: Task[]): Task[] {
-    if (!myTasksOnly || !user) return tasks;
-    return tasks.filter((t) => t.assigned_to === user.id);
+    if (taskFilter === "all") return tasks;
+    if (taskFilter === "mine") return tasks.filter((t) => t.assigned_to === (user?.id ?? ""));
+    return tasks.filter((t) => t.assigned_to === taskFilter);
   }
+
+  const isFiltered = taskFilter !== "all";
 
   return (
     <div className="flex flex-col h-full">
@@ -206,17 +210,27 @@ export default function SprintBoardPage({
           {tasksLoading && <span className="text-xs text-slate-400">{t("loadingTasks")}</span>}
 
           <div className="ml-auto flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setMyTasksOnly((v) => !v)}
-              className={`text-xs px-3 py-1 rounded-full border font-medium transition-colors ${
-                myTasksOnly
-                  ? "bg-violet-600 text-white border-violet-600"
-                  : "bg-white text-slate-500 border-slate-200 hover:border-violet-400 hover:text-violet-700"
-              }`}
-            >
-              {myTasksOnly ? "My Tasks" : "All Tasks"}
-            </button>
+            {/* Task filter: All / My Tasks / any team member */}
+            <div className="flex items-center gap-1 bg-slate-100 rounded-full p-0.5">
+              <button type="button" onClick={() => setTaskFilter("all")}
+                className={`text-xs px-3 py-1 rounded-full font-medium transition-colors ${taskFilter === "all" ? "bg-white text-slate-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                All
+              </button>
+              <button type="button" onClick={() => setTaskFilter("mine")}
+                className={`text-xs px-3 py-1 rounded-full font-medium transition-colors ${taskFilter === "mine" ? "bg-white text-violet-700 shadow-sm" : "text-slate-500 hover:text-violet-700"}`}>
+                My Tasks
+              </button>
+              {teamMembers.map((m) => {
+                const name = `${m.user.first_name ?? ""} ${m.user.last_name ?? ""}`.trim() || m.user.username;
+                const active = taskFilter === m.user.id;
+                return (
+                  <button key={m.user.id} type="button" title={name} onClick={() => setTaskFilter(active ? "all" : m.user.id)}
+                    className={`rounded-full transition-all ${active ? "ring-2 ring-violet-500 ring-offset-1" : "opacity-60 hover:opacity-100"}`}>
+                    <MemberAvatar member={m} size="sm" />
+                  </button>
+                );
+              })}
+            </div>
             <span className="text-xs text-slate-400 font-medium">{t("groupBy")}</span>
             <div className="flex rounded-full border border-slate-200 overflow-hidden text-xs font-medium">
               <button
@@ -276,7 +290,7 @@ export default function SprintBoardPage({
             ) : (
               stories.flatMap((story) => {
                 const visibleTasks = filterTasks(storyTasks[story.id] ?? []);
-                if (myTasksOnly && visibleTasks.length === 0) return [];
+                if (isFiltered && visibleTasks.length === 0) return [];
                 return [(
                   <StoryLane
                     key={story.id}
@@ -297,7 +311,11 @@ export default function SprintBoardPage({
             )
           ) : (
             memberLanes
-              .filter((member) => !myTasksOnly || (member && member.user.id === user?.id))
+              .filter((member) => {
+                if (taskFilter === "all") return true;
+                if (taskFilter === "mine") return member !== null && member.user.id === user?.id;
+                return member !== null && member.user.id === taskFilter;
+              })
               .map((member) => (
                 <MemberLane
                   key={member ? member.user.id : "__unassigned__"}
@@ -728,6 +746,7 @@ function TaskDetailModal({
   const [draftStatus, setDraftStatus] = useState<Status>(task.status);
   const [draftEffort, setDraftEffort] = useState<string>(task.effort != null ? String(task.effort) : "");
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<"details" | "notes">("details");
 
   // Keep drafts in sync if the task prop changes (e.g. board update while modal is open)
   useEffect(() => {
@@ -736,6 +755,7 @@ function TaskDetailModal({
     setDraftAssignee(task.assigned_to ?? null);
     setDraftStatus(task.status);
     setDraftEffort(task.effort != null ? String(task.effort) : "");
+    setActiveTab("details");
   }, [task.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close on Escape
@@ -790,26 +810,51 @@ function TaskDetailModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start gap-3 px-6 pt-5 pb-4 border-b border-slate-100">
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-slate-400 mb-1 truncate">{storyName}</p>
-            <input
-              type="text"
-              value={draftName}
-              onChange={(e) => setDraftName(e.target.value)}
-              className="w-full text-lg font-semibold text-slate-800 bg-transparent border-0 outline-none focus:ring-0 p-0 leading-snug"
-              placeholder="Task name"
-            />
+        <div className="px-6 pt-5 pb-0 border-b border-slate-100">
+          <div className="flex items-start gap-3 mb-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-slate-400 mb-1 truncate">{storyName}</p>
+              <input
+                type="text"
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                className="w-full text-lg font-semibold text-slate-800 bg-transparent border-0 outline-none focus:ring-0 p-0 leading-snug"
+                placeholder="Task name"
+              />
+            </div>
+            <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors mt-0.5 shrink-0">
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5">
+                <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
+              </svg>
+            </button>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors mt-0.5 shrink-0">
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5">
-              <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
-            </svg>
-          </button>
+          {/* Tabs */}
+          <div className="flex gap-0">
+            {(["details", "notes"] as const).map((tab) => (
+              <button key={tab} type="button" onClick={() => setActiveTab(tab)}
+                className={`text-sm px-4 py-2 font-medium border-b-2 transition-colors capitalize ${
+                  activeTab === tab
+                    ? "border-violet-600 text-violet-700"
+                    : "border-transparent text-slate-500 hover:text-slate-700"
+                }`}>
+                {tab === "details" ? "Details" : "Notes"}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {activeTab === "notes" ? (
+            <div className="h-64">
+              <NotesPanel
+                entityType="task"
+                entityId={task.id}
+                isTeam={true}
+                members={teamMembers.map((m) => m.user)}
+              />
+            </div>
+          ) : (<>
           {/* Row: Status · Type · Start/End badges */}
           <div className="flex items-center gap-2 flex-wrap">
             <select
@@ -817,7 +862,7 @@ function TaskDetailModal({
               onChange={(e) => setDraftStatus(e.target.value as Status)}
               className="text-xs font-medium border border-slate-200 rounded-full px-3 py-1 bg-white text-slate-700 outline-none focus:border-violet-400 cursor-pointer"
             >
-              {(["Not Started", "Ready", "In Progress", "On Hold", "Complete"] as Status[]).map((s) => (
+              {(["Not Started", "Ready", "In Progress", "On Hold", "Complete", "Cancelled"] as Status[]).map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
@@ -872,9 +917,11 @@ function TaskDetailModal({
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white text-slate-700 outline-none focus:border-violet-400 resize-none"
             />
           </div>
+          </>)}
         </div>
 
-        {/* Footer */}
+        {/* Footer — only show save/cancel when on Details tab */}
+        {activeTab === "details" && (
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100">
           <button
             type="button"
@@ -892,6 +939,7 @@ function TaskDetailModal({
             {saving ? "Saving…" : "Save"}
           </button>
         </div>
+        )}
       </div>
     </div>
   );
