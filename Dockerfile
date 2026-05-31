@@ -22,6 +22,9 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# @swc/helpers is not always traced into the standalone output; copy it explicitly.
+# Without this, Node throws MODULE_NOT_FOUND for @swc/helpers/esm/* at startup.
+COPY --from=builder /app/node_modules/@swc/helpers ./node_modules/@swc/helpers
 
 USER nextjs
 
