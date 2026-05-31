@@ -9,7 +9,7 @@
 import { useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { AuthUser } from "@/lib/auth-api";
-import { hasTograAccess } from "@/lib/auth-api";
+import { hasTograAccess, isAdmin } from "@/lib/auth-api";
 import { useAuth } from "@/contexts/AuthContext";
 
 function SsoHandler() {
@@ -23,7 +23,7 @@ function SsoHandler() {
     try {
       const session = JSON.parse(decodeURIComponent(raw)) as { token: string; user: AuthUser; roles: string[] };
       if (!session.token || !session.user || !session.roles) throw new Error("invalid");
-      if (!hasTograAccess(session.token)) { router.replace("/login?error=no_togra_access"); return; }
+      if (!hasTograAccess(session.token) && !isAdmin(session.token)) { router.replace("/login?error=no_togra_access"); return; }
       setSession(session);
       router.replace("/projects");
     } catch {
