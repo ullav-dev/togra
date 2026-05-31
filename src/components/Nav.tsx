@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { usePathname, useRouter, Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTranslations } from "next-intl";
+import { isAdmin } from "@/lib/auth-api";
 import TograIcon from "@/components/TograIcon";
 import MyDetailsModal from "@/components/MyDetailsModal";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
@@ -31,7 +32,8 @@ function NavAvatar({ url, initials }: { url?: string | null; initials: string })
 export default function Nav() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, isLoading, logout } = useAuth();
+  const { user, token, isLoading, logout } = useAuth();
+  const userIsAdmin = isAdmin(token);
   const t = useTranslations("nav");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -116,6 +118,21 @@ export default function Nav() {
                       >
                         {t("myDetails")}
                       </button>
+                      {userIsAdmin && (
+                        <>
+                          <div className="my-1 border-t border-slate-100" />
+                          <Link
+                            href="/admin/access"
+                            onClick={() => setDropdownOpen(false)}
+                            className="flex items-center gap-2 px-4 py-2 text-sm text-violet-700 hover:bg-violet-50 transition-colors"
+                          >
+                            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                              <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Zm4.879-2.773 4.264 2.559a.25.25 0 0 1 0 .428l-4.264 2.559A.25.25 0 0 1 6 10.559V5.442a.25.25 0 0 1 .379-.215Z"/>
+                            </svg>
+                            Access management
+                          </Link>
+                        </>
+                      )}
                       <div className="my-1 border-t border-slate-100" />
                       <button
                         type="button"

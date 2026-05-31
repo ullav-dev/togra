@@ -145,6 +145,8 @@ export interface Task {
   assigned_to: string | null;
   start_time: string | null;
   end_time: string | null;
+  canvas_x: number | null;
+  canvas_y: number | null;
 }
 
 export interface TaskLink {

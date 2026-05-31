@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTranslations } from "next-intl";
 import { listProjects, createProjectWithBacklog, updateProject, deleteProject } from "@/lib/togra-api";
 import { getMyTeams, getTeam } from "@/lib/awe-api";
-import { getObairTeamIds } from "@/lib/auth-api";
+import { getTograTeamIds } from "@/lib/auth-api";
 import type { Project, TeamSummary, TeamMember } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 import TograIcon from "@/components/TograIcon";
@@ -25,7 +25,7 @@ export default function ProjectsPage() {
     Promise.all([listProjects(token), getMyTeams(token)])
       .then(([ps, ts]) => {
         setProjects(ps);
-        const eligibleIds = getObairTeamIds(token);
+        const eligibleIds = getTograTeamIds(token);
         setTeams(ts.filter((t) => eligibleIds.includes(t.id)));
       })
       .finally(() => setLoading(false));
