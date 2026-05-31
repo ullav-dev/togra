@@ -249,6 +249,8 @@ interface NotesPanelProps {
    * - "vertical": folders appear as a sidebar to the left of the note list.
    */
   folderOrientation?: "horizontal" | "vertical";
+  /** When true, auto-selects the first note after loading (useful in twoColumn layout). */
+  autoSelectFirst?: boolean;
   entityType: NoteEntityType;
   entityId: string;
   isTeam: boolean;
@@ -257,7 +259,7 @@ interface NotesPanelProps {
   twoColumn?: boolean;
 }
 
-export default function NotesPanel({ entityType, entityId, isTeam, compact = false, twoColumn = false, members = [], folderOrientation = "horizontal" }: NotesPanelProps) {
+export default function NotesPanel({ entityType, entityId, isTeam, compact = false, twoColumn = false, members = [], folderOrientation = "horizontal", autoSelectFirst = false }: NotesPanelProps) {
   const { user, token } = useAuth();
   const t = useTranslations("notes");
   const [notes, setNotes] = useState<Note[]>([]);
@@ -305,7 +307,12 @@ export default function NotesPanel({ entityType, entityId, isTeam, compact = fal
     if (!notesResult.ok) { setError(notesResult.error); return; }
     setNotes(notesResult.data);
     setFolders(foldersData);
-  }, [token, entityType, entityId]);
+    if (autoSelectFirst && notesResult.data.length > 0) {
+      const first = notesResult.data.find((n) => !n.parent_id) ?? notesResult.data[0];
+      setSelectedId(first.id);
+      setMode("view");
+    }
+  }, [token, entityType, entityId, autoSelectFirst]);
 
   useEffect(() => { load(); }, [load]);
 

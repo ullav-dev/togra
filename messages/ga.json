@@ -18,7 +18,7 @@
     "logoutNow": "Logáil amach anois"
   },
   "footer": {
-    "tagline": "Pleanáil Tionscadal"
+    "tagline": "Bainistiú Tionscadal"
   },
   "status": {
     "Not Started": "Gan tús",
@@ -50,7 +50,7 @@
     "save": "Sábháil athruithe"
   },
   "login": {
-    "appTagline": "Pleanáil Tionscadal",
+    "appTagline": "Bainistiú Tionscadal",
     "emailLabel": "Ríomhphost",
     "passwordLabel": "Pasfhocal",
     "signIn": "Sínigh isteach",

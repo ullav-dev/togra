@@ -18,7 +18,7 @@
     "logoutNow": "Jetzt abmelden"
   },
   "footer": {
-    "tagline": "Projektplanung"
+    "tagline": "Projektmanagement"
   },
   "status": {
     "Not Started": "Nicht begonnen",
@@ -50,7 +50,7 @@
     "save": "Änderungen speichern"
   },
   "login": {
-    "appTagline": "Projektplanung",
+    "appTagline": "Projektmanagement",
     "emailLabel": "E-Mail",
     "passwordLabel": "Passwort",
     "signIn": "Anmelden",
