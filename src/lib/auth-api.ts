@@ -106,6 +106,20 @@ export function getTograTeamIds(token: string | null): string[] {
     .map(([id]) => id);
 }
 
+/** Returns true if the user has the `obair` product on any team. */
+export function hasObairAccess(token: string | null): boolean {
+  return Object.values(getTeamClaims(token)).some(
+    (t) => (t.products ?? []).includes("obair"),
+  );
+}
+
+/** Returns true if the user has the `comad` product on any team. */
+export function hasComadAccess(token: string | null): boolean {
+  return Object.values(getTeamClaims(token)).some(
+    (t) => (t.products ?? []).includes("comad"),
+  );
+}
+
 export function isAdmin(token: string | null): boolean {
   if (!token) return false;
   const payload = decodePayload(token);

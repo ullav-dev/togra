@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { usePathname, useRouter, Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTranslations } from "next-intl";
-import { isAdmin } from "@/lib/auth-api";
+import { isAdmin, hasObairAccess, hasComadAccess } from "@/lib/auth-api";
 import TograIcon from "@/components/TograIcon";
 import MyDetailsModal from "@/components/MyDetailsModal";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
@@ -34,6 +34,10 @@ export default function Nav() {
   const router = useRouter();
   const { user, token, isLoading, logout } = useAuth();
   const userIsAdmin = isAdmin(token);
+  const obairUrl = process.env.NEXT_PUBLIC_OBAIR_URL ?? "";
+  const damUrl = process.env.NEXT_PUBLIC_DAM_URL ?? "";
+  const showObair = !!obairUrl && hasObairAccess(token);
+  const showComad = !!damUrl && hasComadAccess(token);
   const t = useTranslations("nav");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -83,6 +87,45 @@ export default function Nav() {
                 <Link href="/projects" className={navLink("/projects")}>
                   {t("projects")}
                 </Link>
+
+                {(showObair || showComad) && (
+                  <div className="flex items-center gap-1 pl-3 border-l border-slate-200">
+                    {showObair && (
+                      <a
+                        href={obairUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Open Obair (AWE)"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-violet-700 hover:bg-violet-50 px-2.5 py-1.5 rounded-lg transition-colors"
+                      >
+                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                          <path d="M0 11.5A3.5 3.5 0 0 0 3.5 15h9a3.5 3.5 0 0 0 3.5-3.5V6.5L9.5 1H3.5A3.5 3.5 0 0 0 0 4.5v7Zm3.5-8.75h5.25V6a.75.75 0 0 0 .75.75h3.25v4.75a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2V4.5a2 2 0 0 1 2-2Zm5.75 0L14 6H9.25V2.75Z"/>
+                        </svg>
+                        Obair
+                        <svg viewBox="0 0 12 12" fill="currentColor" className="w-2.5 h-2.5 text-slate-400">
+                          <path d="M3.5 1H1.75A.75.75 0 0 0 1 1.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75V9M7 1h4m0 0v4M11 1 5.5 6.5"/>
+                        </svg>
+                      </a>
+                    )}
+                    {showComad && (
+                      <a
+                        href={damUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Open Comad (DAM)"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-violet-700 hover:bg-violet-50 px-2.5 py-1.5 rounded-lg transition-colors"
+                      >
+                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                          <path d="M1.75 2.5a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h.94l6.077-6.077a1.75 1.75 0 0 1 2.474 0l2.159 2.158V5.25a.25.25 0 0 0-.25-.25H10a.75.75 0 0 1 0-1.5h4A1.75 1.75 0 0 1 15.75 5.25v8.5A1.75 1.75 0 0 1 14 15.5H2A1.75 1.75 0 0 1 .25 13.75v-9A1.75 1.75 0 0 1 2 3h.5a.75.75 0 0 1 0 1.5H2a.25.25 0 0 0-.25.25Z"/>
+                        </svg>
+                        Comad
+                        <svg viewBox="0 0 12 12" fill="currentColor" className="w-2.5 h-2.5 text-slate-400">
+                          <path d="M3.5 1H1.75A.75.75 0 0 0 1 1.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75V9M7 1h4m0 0v4M11 1 5.5 6.5"/>
+                        </svg>
+                      </a>
+                    )}
+                  </div>
+                )}
 
                 <LocaleSwitcher />
 
