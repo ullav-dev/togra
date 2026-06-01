@@ -145,7 +145,7 @@ export default function StickyCard({
   return (
     <div
       ref={cardRef}
-      className={`group absolute border rounded-xl shadow-md overflow-hidden flex flex-col select-none
+      className={`group absolute border rounded-xl shadow-md flex flex-col select-none
         ${theme.bg} ${theme.border} ${ring}
         ${!editing && !isLinking ? "cursor-grab active:cursor-grabbing" : ""}
       `}
@@ -286,6 +286,32 @@ export default function StickyCard({
           <path d="M6 2 L2 6 M8 4 L4 8 M8 7 L7 8"/>
         </svg>
       </div>
+
+      {/* Connection points — visible on target stickies during linking */}
+      {isLinking && !isLinkSource && (
+        <>
+          {[
+            { style: { top: "-7px",  left: "50%",  transform: "translateX(-50%)" } },
+            { style: { bottom: "-7px", left: "50%", transform: "translateX(-50%)" } },
+            { style: { left: "-7px", top: "50%",   transform: "translateY(-50%)" } },
+            { style: { right: "-7px", top: "50%",  transform: "translateY(-50%)" } },
+          ].map((pos, i) => (
+            <div
+              key={i}
+              data-no-drag
+              className="absolute w-3.5 h-3.5 rounded-full bg-violet-500 border-2 border-white shadow-md
+                         cursor-crosshair animate-pulse hover:bg-violet-600 hover:scale-125 transition-transform z-10"
+              style={pos.style}
+              onPointerDown={(e) => { e.stopPropagation(); onFinishLink(sticky.id); }}
+            />
+          ))}
+        </>
+      )}
+
+      {/* Source indicator — ring on the sticky that started the link */}
+      {isLinkSource && (
+        <div className="absolute inset-0 rounded-xl ring-2 ring-violet-500 ring-offset-1 pointer-events-none animate-pulse" />
+      )}
     </div>
   );
 }
