@@ -165,7 +165,21 @@ export default function IdeaBoard({ boardId, token, initialStickies, initialLink
     await updateSticky(token, boardId, id, { x, y }).catch(() => {});
   }, [token, boardId]);
 
+  const resizeRafRef = useRef<number | null>(null);
+
+  const handleResizeMove = useCallback((id: string, width: number, height: number) => {
+    if (resizeRafRef.current !== null) cancelAnimationFrame(resizeRafRef.current);
+    resizeRafRef.current = requestAnimationFrame(() => {
+      setStickies((prev) => prev.map((s) => s.id === id ? { ...s, width, height } : s));
+      resizeRafRef.current = null;
+    });
+  }, []);
+
   const handleResizeEnd = useCallback(async (id: string, width: number, height: number) => {
+    if (resizeRafRef.current !== null) {
+      cancelAnimationFrame(resizeRafRef.current);
+      resizeRafRef.current = null;
+    }
     setStickies((prev) => prev.map((s) => s.id === id ? { ...s, width, height } : s));
     await updateSticky(token, boardId, id, { width, height }).catch(() => {});
   }, [token, boardId]);
@@ -394,6 +408,7 @@ export default function IdeaBoard({ boardId, token, initialStickies, initialLink
             isLinkTarget={!!linkingFrom && linkingFrom !== s.id}
             onDragMove={handleDragMove}
             onDragEnd={handleDragEnd}
+            onResizeMove={handleResizeMove}
             onResizeEnd={handleResizeEnd}
             onUpdate={handleUpdate}
             onDelete={(id) => setConfirmDeleteId(id)}

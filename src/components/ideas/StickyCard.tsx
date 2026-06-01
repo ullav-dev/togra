@@ -33,6 +33,7 @@ interface Props {
   isLinkTarget: boolean;
   onDragMove: (id: string, x: number, y: number) => void;
   onDragEnd: (id: string, x: number, y: number) => void;
+  onResizeMove: (id: string, width: number, height: number) => void;
   onResizeEnd: (id: string, width: number, height: number) => void;
   onUpdate: (id: string, patch: { title?: string; body?: string; color?: StickyColor }) => void;
   onDelete: (id: string) => void;
@@ -47,6 +48,7 @@ export default function StickyCard({
   isLinkTarget,
   onDragMove,
   onDragEnd,
+  onResizeMove,
   onResizeEnd,
   onUpdate,
   onDelete,
@@ -115,7 +117,8 @@ export default function StickyCard({
     const w = Math.max(160, resizeStart.current.ow + (e.clientX - resizeStart.current.px));
     const h = Math.max(120, resizeStart.current.oh + (e.clientY - resizeStart.current.py));
     setLocalSize({ w, h });
-  }, []);
+    onResizeMove(sticky.id, w, h);
+  }, [sticky.id, onResizeMove]);
 
   const onResizePointerUp = useCallback((e: React.PointerEvent) => {
     if (!resizeStart.current) return;
