@@ -57,7 +57,12 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
   const backlogResize = useResize({ initial: 300, min: 200, max: 480, axis: "x" });
   const notesResize = useResize({ initial: 320, min: 200, max: 560, axis: "x", reverse: true });
-  const [activeTab, setActiveTab] = useState<"planning" | "team" | "ideas">("planning");
+  const initialTab = (typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("tab")
+    : null) as "planning" | "team" | "ideas" | null;
+  const [activeTab, setActiveTab] = useState<"planning" | "team" | "ideas">(
+    initialTab === "ideas" || initialTab === "team" ? initialTab : "planning"
+  );
   const [ideaBoards, setIdeaBoards] = useState<IdeaBoard[]>([]);
 
   const backlogJob = project?.jobs.find((j) => j.job_type === "backlog") ?? null;
