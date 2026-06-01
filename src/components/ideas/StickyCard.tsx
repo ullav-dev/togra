@@ -32,6 +32,7 @@ interface Props {
   isLinkSource: boolean;
   isLinkTarget: boolean;
   onDragEnd: (id: string, x: number, y: number) => void;
+  onResizeEnd: (id: string, width: number, height: number) => void;
   onUpdate: (id: string, patch: { title?: string; body?: string; color?: StickyColor }) => void;
   onDelete: (id: string) => void;
   onStartLink: (id: string) => void;
@@ -44,6 +45,7 @@ export default function StickyCard({
   isLinkSource,
   isLinkTarget,
   onDragEnd,
+  onResizeEnd,
   onUpdate,
   onDelete,
   onStartLink,
@@ -53,8 +55,10 @@ export default function StickyCard({
   const [title, setTitle] = useState(sticky.title);
   const [body, setBody] = useState(sticky.body ?? "");
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [localSize, setLocalSize] = useState({ w: sticky.width, h: sticky.height });
 
-  const dragStart = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
+  const dragStart  = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
+  const resizeStart = useRef<{ px: number; py: number; ow: number; oh: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
   const theme = STICKY_COLORS[sticky.color];
@@ -93,6 +97,30 @@ export default function StickyCard({
     onDragEnd(sticky.id, newX, newY);
   }, [sticky.id, onDragEnd]);
 
+  // ── Resizing via pointer events ───────────────────────────────────────────
+
+  const onResizePointerDown = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    resizeStart.current = { px: e.clientX, py: e.clientY, ow: localSize.w, oh: localSize.h };
+  }, [localSize]);
+
+  const onResizePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!resizeStart.current) return;
+    const w = Math.max(160, resizeStart.current.ow + (e.clientX - resizeStart.current.px));
+    const h = Math.max(120, resizeStart.current.oh + (e.clientY - resizeStart.current.py));
+    setLocalSize({ w, h });
+  }, []);
+
+  const onResizePointerUp = useCallback((e: React.PointerEvent) => {
+    if (!resizeStart.current) return;
+    const w = Math.max(160, resizeStart.current.ow + (e.clientX - resizeStart.current.px));
+    const h = Math.max(120, resizeStart.current.oh + (e.clientY - resizeStart.current.py));
+    resizeStart.current = null;
+    setLocalSize({ w, h });
+    onResizeEnd(sticky.id, w, h);
+  }, [sticky.id, onResizeEnd]);
+
   // ── Editing ───────────────────────────────────────────────────────────────
 
   function saveEdit() {
@@ -121,7 +149,7 @@ export default function StickyCard({
         ${theme.bg} ${theme.border} ${ring}
         ${!editing && !isLinking ? "cursor-grab active:cursor-grabbing" : ""}
       `}
-      style={{ left: sticky.x, top: sticky.y, width: sticky.width, height: sticky.height, minWidth: 160, minHeight: 120 }}
+      style={{ left: sticky.x, top: sticky.y, width: localSize.w, height: localSize.h, minWidth: 160, minHeight: 120 }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -219,22 +247,22 @@ export default function StickyCard({
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-hidden p-2" data-no-drag onDoubleClick={() => setEditing(true)}>
+      <div className="flex-1 overflow-y-auto p-2 min-h-0" data-no-drag onDoubleClick={() => setEditing(true)}>
         {editing ? (
-          <div className="h-full flex flex-col gap-1">
+          <div className="flex flex-col gap-1">
             <MarkdownEditor
               value={body}
               onChange={setBody}
               placeholder="Add content…"
-              height={Math.max(60, sticky.height - 80)}
+              height={Math.max(60, localSize.h - 100)}
             />
-            <div className="flex justify-end gap-1.5 shrink-0">
+            <div className="flex justify-end gap-1.5">
               <button type="button" onClick={() => setEditing(false)} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-0.5 rounded transition-colors">Cancel</button>
               <button type="button" onClick={saveEdit} className="text-xs bg-violet-600 hover:bg-violet-700 text-white px-2 py-0.5 rounded transition-colors">Save</button>
             </div>
           </div>
         ) : (
-          <div className="text-xs text-slate-700 leading-relaxed overflow-hidden prose prose-xs max-w-none">
+          <div className="text-xs text-slate-700 leading-relaxed prose prose-xs max-w-none">
             {sticky.body ? (
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{sticky.body}</ReactMarkdown>
             ) : (
@@ -242,6 +270,19 @@ export default function StickyCard({
             )}
           </div>
         )}
+      </div>
+
+      {/* Resize handle — bottom-right corner */}
+      <div
+        data-no-drag
+        className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize flex items-end justify-end pb-0.5 pr-0.5 opacity-30 hover:opacity-70 transition-opacity"
+        onPointerDown={onResizePointerDown}
+        onPointerMove={onResizePointerMove}
+        onPointerUp={onResizePointerUp}
+      >
+        <svg viewBox="0 0 8 8" fill="currentColor" className="w-3 h-3 text-slate-500">
+          <path d="M6 2 L2 6 M8 4 L4 8 M8 7 L7 8"/>
+        </svg>
       </div>
     </div>
   );
