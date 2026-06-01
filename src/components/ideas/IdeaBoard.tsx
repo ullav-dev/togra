@@ -67,13 +67,19 @@ function buildConnector(from: StickyNote, to: StickyNote, bidir: boolean) {
   let p2x = tgt.x + c2.dx, p2y = tgt.y + c2.dy;
 
   // For bidirectional pairs, offset the two curves perpendicularly so they
-  // diverge rather than overlapping. Use ID comparison for stable direction.
+  // diverge rather than overlapping.
+  // IMPORTANT: compute the perpendicular from a *fixed* reference direction
+  // (lower-ID → higher-ID center) so both curves use the same axis and
+  // the sign flip gives truly opposite arcs.
   if (bidir) {
     const sign = from.id < to.id ? 1 : -1;
-    const perp = 44 * sign;
-    const dx = tgt.x - src.x, dy = tgt.y - src.y;
+    const refFrom = from.id < to.id ? from : to;
+    const refTo   = from.id < to.id ? to   : from;
+    const dx = (refTo.x + refTo.width / 2)   - (refFrom.x + refFrom.width / 2);
+    const dy = (refTo.y + refTo.height / 2)  - (refFrom.y + refFrom.height / 2);
     const len = Math.hypot(dx, dy) || 1;
-    const px = (-dy / len) * perp, py = (dx / len) * perp;
+    const px = (-dy / len) * 44 * sign;
+    const py = ( dx / len) * 44 * sign;
     p1x += px; p1y += py;
     p2x += px; p2y += py;
   }
