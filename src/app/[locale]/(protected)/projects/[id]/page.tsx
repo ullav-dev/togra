@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, use, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useResize } from "@/hooks/useResize";
 import { Link } from "@/i18n/navigation";
@@ -57,11 +58,10 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
   const backlogResize = useResize({ initial: 300, min: 200, max: 480, axis: "x" });
   const notesResize = useResize({ initial: 320, min: 200, max: 560, axis: "x", reverse: true });
-  const initialTab = (typeof window !== "undefined"
-    ? new URLSearchParams(window.location.search).get("tab")
-    : null) as "planning" | "team" | "ideas" | null;
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<"planning" | "team" | "ideas">(
-    initialTab === "ideas" || initialTab === "team" ? initialTab : "planning"
+    tabParam === "ideas" || tabParam === "team" ? tabParam : "planning"
   );
   const [ideaBoards, setIdeaBoards] = useState<IdeaBoard[]>([]);
 
