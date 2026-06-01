@@ -113,11 +113,14 @@ export function hasObairAccess(token: string | null): boolean {
   );
 }
 
-/** Returns true if the user has the `comad` product on any team. */
+/** Returns true if the user has an active/trialing Comad subscription (subscription model, not team product). */
 export function hasComadAccess(token: string | null): boolean {
-  return Object.values(getTeamClaims(token)).some(
-    (t) => (t.products ?? []).includes("comad"),
-  );
+  if (!token) return false;
+  const payload = decodePayload(token);
+  if (!payload) return false;
+  if (((payload.roles ?? []) as string[]).includes("admin")) return true;
+  const sub = (payload.subscriptions as Record<string, { status?: string }> | undefined)?.comad;
+  return sub?.status === "active" || sub?.status === "trialing";
 }
 
 export function isAdmin(token: string | null): boolean {

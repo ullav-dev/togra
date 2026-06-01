@@ -32,12 +32,31 @@ function NavAvatar({ url, initials }: { url?: string | null; initials: string })
 export default function Nav() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, token, isLoading, logout } = useAuth();
+  const { user, token, roles, isLoading, logout } = useAuth();
   const userIsAdmin = isAdmin(token);
   const obairUrl = process.env.NEXT_PUBLIC_OBAIR_URL ?? "";
   const damUrl = process.env.NEXT_PUBLIC_DAM_URL ?? "";
   const showObair = !!obairUrl && hasObairAccess(token);
   const showComad = !!damUrl && hasComadAccess(token);
+
+  const obairWindowRef = useRef<Window | null>(null);
+  const comadWindowRef = useRef<Window | null>(null);
+
+  function ssoUrl(appBase: string): string {
+    if (!token || !user) return appBase;
+    const t = encodeURIComponent(JSON.stringify({ token, user, roles }));
+    return `${appBase}/en/auth/sso?t=${t}`;
+  }
+
+  function openApp(windowRef: React.MutableRefObject<Window | null>, url: string) {
+    if (windowRef.current && !windowRef.current.closed) {
+      windowRef.current.focus();
+    } else {
+      // No noopener — we need the window reference to focus it later.
+      // These are trusted first-party apps so reverse-tabnapping is not a concern.
+      windowRef.current = window.open(url, "_blank") ?? null;
+    }
+  }
   const t = useTranslations("nav");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -91,38 +110,26 @@ export default function Nav() {
                 {(showObair || showComad) && (
                   <div className="flex items-center gap-1 pl-3 border-l border-slate-200">
                     {showObair && (
-                      <a
-                        href={obairUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => openApp(obairWindowRef, ssoUrl(obairUrl))}
                         title="Open Obair (AWE)"
-                        className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-violet-700 hover:bg-violet-50 px-2.5 py-1.5 rounded-lg transition-colors"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-100 px-2 py-1.5 rounded-lg transition-colors"
                       >
-                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                          <path d="M0 11.5A3.5 3.5 0 0 0 3.5 15h9a3.5 3.5 0 0 0 3.5-3.5V6.5L9.5 1H3.5A3.5 3.5 0 0 0 0 4.5v7Zm3.5-8.75h5.25V6a.75.75 0 0 0 .75.75h3.25v4.75a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2V4.5a2 2 0 0 1 2-2Zm5.75 0L14 6H9.25V2.75Z"/>
-                        </svg>
+                        <ObairIcon className="w-4 h-4 shrink-0" />
                         Obair
-                        <svg viewBox="0 0 12 12" fill="currentColor" className="w-2.5 h-2.5 text-slate-400">
-                          <path d="M3.5 1H1.75A.75.75 0 0 0 1 1.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75V9M7 1h4m0 0v4M11 1 5.5 6.5"/>
-                        </svg>
-                      </a>
+                      </button>
                     )}
                     {showComad && (
-                      <a
-                        href={damUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => openApp(comadWindowRef, ssoUrl(damUrl))}
                         title="Open Comad (DAM)"
-                        className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-violet-700 hover:bg-violet-50 px-2.5 py-1.5 rounded-lg transition-colors"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-100 px-2 py-1.5 rounded-lg transition-colors"
                       >
-                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                          <path d="M1.75 2.5a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h.94l6.077-6.077a1.75 1.75 0 0 1 2.474 0l2.159 2.158V5.25a.25.25 0 0 0-.25-.25H10a.75.75 0 0 1 0-1.5h4A1.75 1.75 0 0 1 15.75 5.25v8.5A1.75 1.75 0 0 1 14 15.5H2A1.75 1.75 0 0 1 .25 13.75v-9A1.75 1.75 0 0 1 2 3h.5a.75.75 0 0 1 0 1.5H2a.25.25 0 0 0-.25.25Z"/>
-                        </svg>
+                        <ComadIcon className="w-4 h-4 shrink-0" />
                         Comad
-                        <svg viewBox="0 0 12 12" fill="currentColor" className="w-2.5 h-2.5 text-slate-400">
-                          <path d="M3.5 1H1.75A.75.75 0 0 0 1 1.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75V9M7 1h4m0 0v4M11 1 5.5 6.5"/>
-                        </svg>
-                      </a>
+                      </button>
                     )}
                   </div>
                 )}
@@ -201,5 +208,38 @@ export default function Nav() {
         </div>
       </div>
     </header>
+  );
+}
+
+// ── App icons (match each app's own icon.svg, scaled for nav) ─────────────────
+
+function ObairIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+      <circle cx="32" cy="32" r="32" fill="#c2410c"/>
+      <rect x="4" y="24" width="16" height="10" rx="2.5" fill="white" opacity="0.95"/>
+      <circle cx="12" cy="29" r="3" fill="#4ade80" opacity="0.85"/>
+      <line x1="21" y1="29" x2="27" y2="29" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+      <path d="M25 26.5 L28.5 29 L25 31.5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+      <rect x="28" y="24" width="16" height="10" rx="2.5" fill="#fef3c7"/>
+      <circle cx="36" cy="29" r="3" fill="#f97316" opacity="0.85"/>
+      <line x1="45" y1="29" x2="51" y2="29" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+      <path d="M49 26.5 L52.5 29 L49 31.5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+      <rect x="52" y="24" width="10" height="10" rx="2.5" fill="white" opacity="0.95"/>
+      <path d="M54 29 L56.5 31.5 L60 26.5" stroke="#c2410c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+    </svg>
+  );
+}
+
+function ComadIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+      <circle cx="32" cy="32" r="32" fill="#1d4ed8"/>
+      <rect x="10" y="22" width="44" height="30" rx="4" fill="#93c5fd"/>
+      <path d="M10 22 L10 18 Q10 15 13 15 L26 15 Q29 15 30 18 L31 22 Z" fill="#bfdbfe"/>
+      <rect x="16" y="28" width="32" height="18" rx="2" fill="#1e40af"/>
+      <path d="M20 42 L28 32 L34 38 L38 34 L44 42 Z" fill="#60a5fa"/>
+      <circle cx="38" cy="32" r="3" fill="#fbbf24"/>
+    </svg>
   );
 }
