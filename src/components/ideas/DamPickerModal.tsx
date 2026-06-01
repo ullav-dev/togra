@@ -71,23 +71,31 @@ export default function DamPickerModal({ token, onSelect, onClose }: Props) {
 
   const onTitlePointerUp = useCallback(() => { dragRef.current = null; }, []);
 
-  // ── Resize bottom-right corner ────────────────────────────────────────────
+  // ── Resize handles ────────────────────────────────────────────────────────
 
-  const onResizePointerDown = useCallback((e: React.PointerEvent) => {
-    e.stopPropagation();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    resizeRef.current = { px: e.clientX, py: e.clientY, ow: size.w, oh: size.h };
-  }, [size]);
+  type ResizeDir = "e" | "s" | "se";
+  const resizeDirRef = useRef<ResizeDir>("se");
 
-  const onResizePointerMove = useCallback((e: React.PointerEvent) => {
-    if (!resizeRef.current) return;
-    setSize({
-      w: Math.max(380, resizeRef.current.ow + (e.clientX - resizeRef.current.px)),
-      h: Math.max(300, resizeRef.current.oh + (e.clientY - resizeRef.current.py)),
-    });
-  }, []);
-
-  const onResizePointerUp = useCallback(() => { resizeRef.current = null; }, []);
+  function makeResizeHandlers(dir: ResizeDir) {
+    return {
+      onPointerDown(e: React.PointerEvent) {
+        e.stopPropagation();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        resizeDirRef.current = dir;
+        resizeRef.current = { px: e.clientX, py: e.clientY, ow: size.w, oh: size.h };
+      },
+      onPointerMove(e: React.PointerEvent) {
+        if (!resizeRef.current) return;
+        const dx = e.clientX - resizeRef.current.px;
+        const dy = e.clientY - resizeRef.current.py;
+        setSize({
+          w: dir === "s" ? size.w : Math.max(380, resizeRef.current.ow + dx),
+          h: dir === "e" ? size.h : Math.max(300, resizeRef.current.oh + dy),
+        });
+      },
+      onPointerUp() { resizeRef.current = null; },
+    };
+  }
 
   if (!mounted) return null;
 
@@ -135,15 +143,23 @@ export default function DamPickerModal({ token, onSelect, onClose }: Props) {
         />
       </div>
 
-      {/* Resize handle — larger grab area for easier dragging */}
+      {/* Right edge — horizontal resize */}
       <div
-        className="absolute bottom-0 right-0 w-7 h-7 cursor-nwse-resize flex items-end justify-end pb-1.5 pr-1.5 opacity-40 hover:opacity-80 transition-opacity z-10"
-        onPointerDown={onResizePointerDown}
-        onPointerMove={onResizePointerMove}
-        onPointerUp={onResizePointerUp}
+        className="absolute top-8 bottom-4 right-0 w-2 cursor-ew-resize hover:bg-blue-400/30 transition-colors z-10"
+        {...makeResizeHandlers("e")}
+      />
+      {/* Bottom edge — vertical resize */}
+      <div
+        className="absolute left-4 right-4 bottom-0 h-2 cursor-ns-resize hover:bg-blue-400/30 transition-colors z-10"
+        {...makeResizeHandlers("s")}
+      />
+      {/* Bottom-right corner — both */}
+      <div
+        className="absolute bottom-0 right-0 w-5 h-5 cursor-nwse-resize flex items-end justify-end pb-1 pr-1 opacity-40 hover:opacity-90 transition-opacity z-20"
+        {...makeResizeHandlers("se")}
       >
-        <svg viewBox="0 0 10 10" fill="currentColor" className="w-3.5 h-3.5 text-slate-500">
-          <path d="M8 2 L2 8 M10 5 L5 10 M10 8.5 L8.5 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+        <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="w-3 h-3 text-slate-400">
+          <path d="M9 3 L3 9 M9 6 L6 9 M9 9"/>
         </svg>
       </div>
     </div>,
