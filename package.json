@@ -10,7 +10,7 @@
     "test": "jest"
   },
   "dependencies": {
-    "@ullav/dam-picker": "file:../clann-webapp/packages/dam-picker",
+    "@ullav/dam-picker": "file:./packages/dam-picker",
     "@dagrejs/dagre": "^3.0.0",
     "@tailwindcss/typography": "^0.5.19",
     "@uiw/react-md-editor": "^4.1.1",
