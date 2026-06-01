@@ -145,7 +145,7 @@ export default function StickyCard({
   return (
     <div
       ref={cardRef}
-      className={`absolute border rounded-xl shadow-md overflow-hidden flex flex-col select-none
+      className={`group absolute border rounded-xl shadow-md overflow-hidden flex flex-col select-none
         ${theme.bg} ${theme.border} ${ring}
         ${!editing && !isLinking ? "cursor-grab active:cursor-grabbing" : ""}
       `}
