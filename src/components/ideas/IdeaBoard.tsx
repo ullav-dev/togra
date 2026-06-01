@@ -10,8 +10,70 @@ import {
   updateNoteLink,
   deleteNoteLink,
 } from "@/lib/notes-api";
-import StickyCard, { STICKY_COLORS } from "./StickyCard";
+import StickyCard from "./StickyCard";
 import ConfirmDialog from "@/components/ConfirmDialog";
+
+// ── Connector routing helpers ─────────────────────────────────────────────────
+
+type Port = "top" | "right" | "bottom" | "left";
+
+const CONNECTOR_COLORS: Record<StickyColor, string> = {
+  yellow: "#d97706",
+  pink:   "#db2777",
+  blue:   "#2563eb",
+  green:  "#059669",
+  purple: "#7c3aed",
+  orange: "#ea580c",
+};
+
+function portPos(s: StickyNote, port: Port) {
+  switch (port) {
+    case "top":    return { x: s.x + s.width / 2,  y: s.y };
+    case "bottom": return { x: s.x + s.width / 2,  y: s.y + s.height };
+    case "left":   return { x: s.x,                 y: s.y + s.height / 2 };
+    case "right":  return { x: s.x + s.width,       y: s.y + s.height / 2 };
+  }
+}
+
+function bestPortTo(from: StickyNote, toX: number, toY: number): Port {
+  const dx = toX - (from.x + from.width / 2);
+  const dy = toY - (from.y + from.height / 2);
+  const a = Math.atan2(dy, dx) * (180 / Math.PI);
+  if (a > -45 && a <= 45)   return "right";
+  if (a > 45  && a <= 135)  return "bottom";
+  if (a > 135 || a <= -135) return "left";
+  return "top";
+}
+
+function cpOffset(port: Port, dist: number): { dx: number; dy: number } {
+  const d = Math.min(Math.max(dist * 0.45, 60), 180);
+  switch (port) {
+    case "top":    return { dx: 0,  dy: -d };
+    case "bottom": return { dx: 0,  dy:  d };
+    case "left":   return { dx: -d, dy:  0 };
+    case "right":  return { dx:  d, dy:  0 };
+  }
+}
+
+function buildConnector(from: StickyNote, to: StickyNote) {
+  const srcPort = bestPortTo(from, to.x + to.width / 2, to.y + to.height / 2);
+  const tgtPort = bestPortTo(to,   from.x + from.width / 2, from.y + from.height / 2);
+  const src  = portPos(from, srcPort);
+  const tgt  = portPos(to,   tgtPort);
+  const dist = Math.hypot(tgt.x - src.x, tgt.y - src.y);
+  const c1   = cpOffset(srcPort, dist);
+  const c2   = cpOffset(tgtPort, dist);
+  const p1x = src.x + c1.dx, p1y = src.y + c1.dy;
+  const p2x = tgt.x + c2.dx, p2y = tgt.y + c2.dy;
+  // Approximate bezier midpoint at t=0.5
+  const midX = 0.125*src.x + 0.375*p1x + 0.375*p2x + 0.125*tgt.x;
+  const midY = 0.125*src.y + 0.375*p1y + 0.375*p2y + 0.125*tgt.y;
+  return {
+    d: `M ${src.x} ${src.y} C ${p1x} ${p1y} ${p2x} ${p2y} ${tgt.x} ${tgt.y}`,
+    midX, midY,
+    color: CONNECTOR_COLORS[from.color] ?? "#7c3aed",
+  };
+}
 
 interface LinkLabelModal {
   linkId: string;
@@ -37,7 +99,8 @@ export default function IdeaBoard({ boardId, token, initialStickies, initialLink
   const [stickies, setStickies] = useState<StickyNote[]>(initialStickies);
   const [links, setLinks] = useState<NoteLink[]>(initialLinks);
   const [linkingFrom, setLinkingFrom] = useState<string | null>(null);
-  const [pendingLine, setPendingLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const [pendingLine, setPendingLine] = useState<{ x1: number; y1: number; x2: number; y2: number; port: Port } | null>(null);
+  const [hoveredLinkId, setHoveredLinkId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmDeleteLinkId, setConfirmDeleteLinkId] = useState<string | null>(null);
   const [labelModal, setLabelModal] = useState<LinkLabelModal | null>(null);
@@ -56,12 +119,11 @@ export default function IdeaBoard({ boardId, token, initialStickies, initialLink
       const rect = canvas.getBoundingClientRect();
       const src = stickies.find((s) => s.id === linkingFrom);
       if (!src) return;
-      setPendingLine({
-        x1: src.x + src.width / 2,
-        y1: src.y + src.height / 2,
-        x2: e.clientX - rect.left,
-        y2: e.clientY - rect.top,
-      });
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const port = bestPortTo(src, mouseX, mouseY);
+      const pp = portPos(src, port);
+      setPendingLine({ x1: pp.x, y1: pp.y, x2: mouseX, y2: mouseY, port });
     }
 
     function onKeyDown(e: KeyboardEvent) {
@@ -138,25 +200,6 @@ export default function IdeaBoard({ boardId, token, initialStickies, initialLink
     setLabelModal(null);
   }
 
-  // ── Render helpers ────────────────────────────────────────────────────────
-
-  function stickyCenter(id: string) {
-    const s = stickies.find((s) => s.id === id);
-    return s ? { x: s.x + s.width / 2, y: s.y + s.height / 2 } : { x: 0, y: 0 };
-  }
-
-  function arrowPath(x1: number, y1: number, x2: number, y2: number) {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const len = Math.sqrt(dx * dx + dy * dy) || 1;
-    // Shorten line to avoid overlap with card edge
-    const offset = 12;
-    const ex = x2 - (dx / len) * offset;
-    const ey = y2 - (dy / len) * offset;
-    return `M${x1},${y1} L${ex},${ey}`;
-  }
-
-  const canvasColor = "rgba(148,163,184,0.06)"; // very subtle dot grid via CSS
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-slate-50">
@@ -223,83 +266,108 @@ export default function IdeaBoard({ boardId, token, initialStickies, initialLink
           style={{ overflow: "visible" }}
         >
           <defs>
-            <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-              <polygon points="0 0, 8 3, 0 6" fill="#94a3b8" />
+            {/* Single arrowhead — inherits stroke color via context-stroke */}
+            <marker id="arrow" markerWidth="4" markerHeight="3" refX="3.5" refY="1.5"
+              orient="auto" markerUnits="strokeWidth">
+              <polygon points="0,0 4,1.5 0,3" fill="context-stroke" />
             </marker>
-            <marker id="arrowhead-hover" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-              <polygon points="0 0, 8 3, 0 6" fill="#7c3aed" />
+            <marker id="arrow-pending" markerWidth="4" markerHeight="3" refX="3.5" refY="1.5"
+              orient="auto" markerUnits="strokeWidth">
+              <polygon points="0,0 4,1.5 0,3" fill="#7c3aed" />
             </marker>
+            <filter id="connector-glow">
+              <feGaussianBlur stdDeviation="2" result="blur" />
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
           </defs>
 
           {links.map((link) => {
-            const from = stickyCenter(link.from_note_id);
-            const to   = stickyCenter(link.to_note_id);
-            const midX = (from.x + to.x) / 2;
-            const midY = (from.y + to.y) / 2;
-            const d    = arrowPath(from.x, from.y, to.x, to.y);
+            const fromSticky = stickies.find((s) => s.id === link.from_note_id);
+            const toSticky   = stickies.find((s) => s.id === link.to_note_id);
+            if (!fromSticky || !toSticky) return null;
+            const { d, midX, midY, color } = buildConnector(fromSticky, toSticky);
+            const hovered = hoveredLinkId === link.id;
+            const labelW = link.label ? Math.max(link.label.length * 6.5 + 16, 44) : 0;
             return (
-              <g key={link.id} className="group" style={{ pointerEvents: "all" }}>
-                {/* Invisible wide hit area */}
-                <path d={d} stroke="transparent" strokeWidth={16} fill="none" />
+              <g
+                key={link.id}
+                style={{ pointerEvents: "all" }}
+                onMouseEnter={() => setHoveredLinkId(link.id)}
+                onMouseLeave={() => setHoveredLinkId(null)}
+              >
+                {/* Wide invisible hit area */}
+                <path d={d} stroke="transparent" strokeWidth={18} fill="none" />
+                {/* Glow on hover */}
+                {hovered && (
+                  <path d={d} stroke={color} strokeWidth={6} fill="none"
+                    strokeLinecap="round" opacity={0.2}
+                    filter="url(#connector-glow)" />
+                )}
+                {/* Main connector */}
                 <path
                   d={d}
-                  stroke="#94a3b8"
-                  strokeWidth={1.5}
+                  stroke={hovered ? color : color}
+                  strokeWidth={hovered ? 3 : 2.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                   fill="none"
-                  markerEnd="url(#arrowhead)"
-                  className="group-hover:stroke-violet-500 transition-colors"
+                  opacity={hovered ? 1 : 0.75}
+                  markerEnd="url(#arrow)"
                 />
+                {/* Label pill */}
                 {link.label && (
-                  <text
-                    x={midX}
-                    y={midY - 4}
-                    textAnchor="middle"
-                    className="text-[10px] fill-slate-500 select-none group-hover:fill-violet-600"
-                    style={{ fontSize: 10, userSelect: "none" }}
-                  >
-                    {link.label}
-                  </text>
+                  <g transform={`translate(${midX - labelW / 2}, ${midY - 11})`}>
+                    <rect width={labelW} height={20} rx={10} fill="white"
+                      stroke={color} strokeWidth={1.5} />
+                    <text x={labelW / 2} y={14} textAnchor="middle"
+                      style={{ fontSize: 10.5, fontWeight: 600, userSelect: "none", fill: color }}>
+                      {link.label}
+                    </text>
+                  </g>
                 )}
-                {/* Delete / label buttons on hover */}
-                <g
-                  transform={`translate(${midX}, ${midY})`}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <rect x={-22} y={4} width={44} height={16} rx={4} fill="white" stroke="#e2e8f0" strokeWidth={1} />
-                  <text
-                    x={-8} y={15}
-                    textAnchor="middle"
-                    style={{ fontSize: 10, cursor: "pointer", userSelect: "none" }}
-                    fill="#6b7280"
-                    onClick={() => { setLabelDraft(link.label ?? ""); setLabelModal({ linkId: link.id, currentLabel: link.label }); }}
-                  >
-                    ✏︎
-                  </text>
-                  <text
-                    x={10} y={15}
-                    textAnchor="middle"
-                    style={{ fontSize: 10, cursor: "pointer", userSelect: "none" }}
-                    fill="#ef4444"
-                    onClick={() => setConfirmDeleteLinkId(link.id)}
-                  >
-                    ✕
-                  </text>
-                </g>
+                {/* Edit / delete controls — appear on hover */}
+                {hovered && (
+                  <g transform={`translate(${midX}, ${midY + (link.label ? 18 : 0)})`}
+                    style={{ pointerEvents: "all" }}>
+                    <rect x={-24} y={4} width={48} height={20} rx={6}
+                      fill="white" stroke={color} strokeWidth={1.5} />
+                    <text x={-10} y={17} textAnchor="middle"
+                      style={{ fontSize: 11, cursor: "pointer", userSelect: "none" }}
+                      fill="#6b7280"
+                      onClick={() => { setLabelDraft(link.label ?? ""); setLabelModal({ linkId: link.id, currentLabel: link.label }); }}>
+                      ✏︎
+                    </text>
+                    <line x1={2} y1={6} x2={2} y2={18} stroke="#e2e8f0" strokeWidth={1} />
+                    <text x={14} y={17} textAnchor="middle"
+                      style={{ fontSize: 11, cursor: "pointer", userSelect: "none" }}
+                      fill="#ef4444"
+                      onClick={() => setConfirmDeleteLinkId(link.id)}>
+                      ✕
+                    </text>
+                  </g>
+                )}
               </g>
             );
           })}
 
-          {/* In-progress link */}
-          {pendingLine && (
-            <path
-              d={`M${pendingLine.x1},${pendingLine.y1} L${pendingLine.x2},${pendingLine.y2}`}
-              stroke="#7c3aed"
-              strokeWidth={1.5}
-              strokeDasharray="6 3"
-              fill="none"
-              markerEnd="url(#arrowhead-hover)"
-            />
-          )}
+          {/* In-progress link — bezier from departure port */}
+          {pendingLine && (() => {
+            const dist = Math.hypot(pendingLine.x2 - pendingLine.x1, pendingLine.y2 - pendingLine.y1);
+            const cp = cpOffset(pendingLine.port, dist);
+            const pendingD = `M ${pendingLine.x1} ${pendingLine.y1} C ${pendingLine.x1 + cp.dx} ${pendingLine.y1 + cp.dy} ${pendingLine.x2} ${pendingLine.y2} ${pendingLine.x2} ${pendingLine.y2}`;
+            return (
+              <path
+                d={pendingD}
+                stroke="#7c3aed"
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeDasharray="7 4"
+                fill="none"
+                opacity={0.7}
+                markerEnd="url(#arrow-pending)"
+              />
+            );
+          })()}
         </svg>
 
         {/* Sticky cards */}
