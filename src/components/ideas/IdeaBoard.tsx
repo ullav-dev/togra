@@ -406,7 +406,7 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
     await createNote(token, {
       entity_type: "workflow",
       entity_id: sticky.workflow_id,
-      title: `${sticky.title} — updated ${timestamp}`,
+      title: `${sticky.title} — ${timestamp}`,
       body: sticky.body ?? undefined,
       is_shared: true,
     }).catch(() => {});
