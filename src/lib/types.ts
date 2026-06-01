@@ -226,6 +226,7 @@ export interface IdeaBoard {
 }
 
 export type StickyColor = "yellow" | "pink" | "blue" | "green" | "purple" | "orange";
+export type Port = "top" | "right" | "bottom" | "left";
 
 export interface StickyNote {
   id: string;
@@ -246,6 +247,8 @@ export interface NoteLink {
   from_note_id: string;
   to_note_id: string;
   label: string | null;
+  from_port: Port | null;
+  to_port: Port | null;
   created_by: string;
   created_at: string;
 }

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
-import type { StickyNote, StickyColor } from "@/lib/types";
+import type { StickyNote, StickyColor, Port } from "@/lib/types";
 import MarkdownEditor from "@/components/MarkdownEditor";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -66,8 +66,8 @@ interface Props {
   onResizeEnd: (id: string, width: number, height: number) => void;
   onUpdate: (id: string, patch: { title?: string; body?: string; color?: StickyColor }) => void;
   onDelete: (id: string) => void;
-  onStartLink: (id: string) => void;
-  onFinishLink: (id: string) => void;
+  onStartLink: (id: string, port?: Port) => void;
+  onFinishLink: (id: string, port?: Port) => void;
 }
 
 export default function StickyCard({
@@ -392,24 +392,40 @@ export default function StickyCard({
         </svg>
       </div>
 
-      {/* Connection points — visible on target stickies during linking */}
-      {isLinking && !isLinkSource && (
+      {/* Connection points — hover on any sticky to see ports; click to start or complete a link */}
+      {!editing && (
         <>
-          {[
-            { style: { top: "-7px",  left: "50%",  transform: "translateX(-50%)" } },
-            { style: { bottom: "-7px", left: "50%", transform: "translateX(-50%)" } },
-            { style: { left: "-7px", top: "50%",   transform: "translateY(-50%)" } },
-            { style: { right: "-7px", top: "50%",  transform: "translateY(-50%)" } },
-          ].map((pos, i) => (
-            <div
-              key={i}
-              data-no-drag
-              className="absolute w-3.5 h-3.5 rounded-full bg-violet-500 border-2 border-white shadow-md
-                         cursor-crosshair animate-pulse hover:bg-violet-600 hover:scale-125 transition-transform z-10"
-              style={pos.style}
-              onPointerDown={(e) => { e.stopPropagation(); onFinishLink(sticky.id); }}
-            />
-          ))}
+          {([
+            { port: "top"    as Port, style: { top: "-7px",    left: "50%", transform: "translateX(-50%)" } },
+            { port: "bottom" as Port, style: { bottom: "-7px", left: "50%", transform: "translateX(-50%)" } },
+            { port: "left"   as Port, style: { left: "-7px",   top: "50%",  transform: "translateY(-50%)" } },
+            { port: "right"  as Port, style: { right: "-7px",  top: "50%",  transform: "translateY(-50%)" } },
+          ] as { port: Port; style: React.CSSProperties }[]).map(({ port, style }) => {
+            const isTarget = isLinking && !isLinkSource;
+            return (
+              <div
+                key={port}
+                data-no-drag
+                className={`absolute w-3.5 h-3.5 rounded-full border-2 border-white shadow-md
+                  cursor-crosshair z-10 transition-all
+                  ${isTarget
+                    ? "bg-violet-500 opacity-100 animate-pulse hover:bg-emerald-500 hover:scale-125"
+                    : isLinkSource
+                    ? "bg-violet-400 opacity-80"
+                    : "bg-violet-400 opacity-0 group-hover:opacity-70 hover:!opacity-100 hover:scale-110"
+                  }`}
+                style={style}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  if (isLinking && !isLinkSource) {
+                    onFinishLink(sticky.id, port);
+                  } else if (!isLinking) {
+                    onStartLink(sticky.id, port);
+                  }
+                }}
+              />
+            );
+          })}
         </>
       )}
 

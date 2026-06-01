@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import type { StickyNote, NoteLink, StickyColor } from "@/lib/types";
+import type { StickyNote, NoteLink, StickyColor, Port } from "@/lib/types";
 import {
   createSticky,
   updateSticky,
@@ -14,8 +14,6 @@ import StickyCard from "./StickyCard";
 import ConfirmDialog from "@/components/ConfirmDialog";
 
 // ── Connector routing helpers ─────────────────────────────────────────────────
-
-type Port = "top" | "right" | "bottom" | "left";
 
 const CONNECTOR_COLORS: Record<StickyColor, string> = {
   yellow: "#d97706",
@@ -60,30 +58,35 @@ const ROTATE_CW: Record<Port, Port> = {
   right: "bottom", bottom: "left", left: "top", top: "right",
 };
 
-function buildConnector(from: StickyNote, to: StickyNote, bidir: boolean) {
+function buildConnector(
+  from: StickyNote, to: StickyNote,
+  bidir: boolean,
+  fromPort?: Port | null,
+  toPort?: Port | null,
+) {
   let srcPort: Port, tgtPort: Port;
 
-  if (!bidir) {
-    srcPort = bestPortTo(from, to.x + to.width / 2,   to.y + to.height / 2);
-    tgtPort = bestPortTo(to,   from.x + from.width / 2, from.y + from.height / 2);
+  if (fromPort && toPort) {
+    // User picked exact ports — honour them, skip all auto-routing.
+    srcPort = fromPort;
+    tgtPort = toPort;
+  } else if (!bidir) {
+    srcPort = fromPort ?? bestPortTo(from, to.x + to.width / 2,   to.y + to.height / 2);
+    tgtPort = toPort   ?? bestPortTo(to,   from.x + from.width / 2, from.y + from.height / 2);
   } else {
-    // Primary link (lower-ID → higher-ID): natural port routing.
-    // Return link (higher-ID → lower-ID): rotate both ports 90° CW so it
-    // departs and arrives on orthogonal sides, giving a clearly separate arc.
+    // Bidirectional legacy links (no stored ports): rotate return link 90° CW.
     const primarySrc = bestPortTo(from.id < to.id ? from : to,
       (from.id < to.id ? to : from).x + (from.id < to.id ? to : from).width / 2,
       (from.id < to.id ? to : from).y + (from.id < to.id ? to : from).height / 2);
     const primaryTgt = bestPortTo(from.id < to.id ? to : from,
       (from.id < to.id ? from : to).x + (from.id < to.id ? from : to).width / 2,
       (from.id < to.id ? from : to).y + (from.id < to.id ? from : to).height / 2);
-
     if (from.id < to.id) {
       srcPort = primarySrc;
       tgtPort = primaryTgt;
     } else {
-      // Return: rotate the primary ports CW so this link uses orthogonal sides
-      srcPort = ROTATE_CW[primaryTgt]; // depart from B on a rotated side
-      tgtPort = ROTATE_CW[primarySrc]; // arrive at A on a rotated side
+      srcPort = ROTATE_CW[primaryTgt];
+      tgtPort = ROTATE_CW[primarySrc];
     }
   }
 
@@ -128,6 +131,7 @@ export default function IdeaBoard({ boardId, token, initialStickies, initialLink
   const [stickies, setStickies] = useState<StickyNote[]>(initialStickies);
   const [links, setLinks] = useState<NoteLink[]>(initialLinks);
   const [linkingFrom, setLinkingFrom] = useState<string | null>(null);
+  const [linkingFromPort, setLinkingFromPort] = useState<Port | null>(null);
   const [pendingLine, setPendingLine] = useState<{ x1: number; y1: number; x2: number; y2: number; port: Port } | null>(null);
   const [hoveredLinkId, setHoveredLinkId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -150,7 +154,8 @@ export default function IdeaBoard({ boardId, token, initialStickies, initialLink
       if (!src) return;
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
-      const port = bestPortTo(src, mouseX, mouseY);
+      // Use exact clicked port if known, otherwise auto-compute from cursor direction
+      const port = linkingFromPort ?? bestPortTo(src, mouseX, mouseY);
       const pp = portPos(src, port);
       setPendingLine({ x1: pp.x, y1: pp.y, x2: mouseX, y2: mouseY, port });
     }
@@ -227,22 +232,28 @@ export default function IdeaBoard({ boardId, token, initialStickies, initialLink
 
   // ── Link actions ──────────────────────────────────────────────────────────
 
-  const handleStartLink = useCallback((id: string) => {
+  const handleStartLink = useCallback((id: string, port?: Port) => {
     setLinkingFrom(id);
+    setLinkingFromPort(port ?? null);
     setPendingLine(null);
   }, []);
 
-  const handleFinishLink = useCallback(async (targetId: string) => {
+  const handleFinishLink = useCallback(async (targetId: string, targetPort?: Port) => {
     if (!linkingFrom || linkingFrom === targetId) {
       setLinkingFrom(null);
+      setLinkingFromPort(null);
       setPendingLine(null);
       return;
     }
-    const link = await createNoteLink(token, boardId, linkingFrom, targetId).catch(() => null);
+    const link = await createNoteLink(
+      token, boardId, linkingFrom, targetId,
+      undefined, linkingFromPort ?? undefined, targetPort
+    ).catch(() => null);
     if (link) setLinks((prev) => [...prev, link]);
     setLinkingFrom(null);
+    setLinkingFromPort(null);
     setPendingLine(null);
-  }, [linkingFrom, token, boardId]);
+  }, [linkingFrom, linkingFromPort, token, boardId]);
 
   async function handleDeleteLink(id: string) {
     await deleteNoteLink(token, id);
@@ -342,10 +353,13 @@ export default function IdeaBoard({ boardId, token, initialStickies, initialLink
             const fromSticky = stickies.find((s) => s.id === link.from_note_id);
             const toSticky   = stickies.find((s) => s.id === link.to_note_id);
             if (!fromSticky || !toSticky) return null;
-            const bidir = links.some(
+            const bidir = !link.from_port && !link.to_port && links.some(
               (l) => l.from_note_id === link.to_note_id && l.to_note_id === link.from_note_id
+                && !l.from_port && !l.to_port
             );
-            const { d, midX, midY, color } = buildConnector(fromSticky, toSticky, bidir);
+            const { d, midX, midY, color } = buildConnector(
+              fromSticky, toSticky, bidir, link.from_port, link.to_port
+            );
             const hovered = hoveredLinkId === link.id;
             const labelW = link.label ? Math.max(link.label.length * 6.5 + 16, 44) : 0;
             return (

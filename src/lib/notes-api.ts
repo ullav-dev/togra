@@ -142,11 +142,13 @@ export const createNoteLink = (
   boardId: string,
   fromNoteId: string,
   toNoteId: string,
-  label?: string
+  label?: string,
+  fromPort?: string,
+  toPort?: string,
 ): Promise<NoteLink> =>
   apiRequest(`/idea-boards/${boardId}/links`, token, {
     method: "POST",
-    body: JSON.stringify({ from_note_id: fromNoteId, to_note_id: toNoteId, label }),
+    body: JSON.stringify({ from_note_id: fromNoteId, to_note_id: toNoteId, label, from_port: fromPort, to_port: toPort }),
   });
 
 export const updateNoteLink = (token: string, linkId: string, label: string | null): Promise<NoteLink> =>
