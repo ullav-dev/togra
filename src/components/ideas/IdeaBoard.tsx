@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import type { StickyNote, NoteLink, StickyColor, Port } from "@/lib/types";
+import type { StickyNote, NoteLink, StickyColor, Port, Workflow } from "@/lib/types";
 import {
   createSticky,
   updateSticky,
@@ -10,8 +10,16 @@ import {
   updateNoteLink,
   deleteNoteLink,
 } from "@/lib/notes-api";
+import {
+  createWorkflow,
+  updateWorkflow,
+  cloneWorkflowFromTemplate,
+  createTask,
+} from "@/lib/awe-api";
+import { createNote } from "@/lib/notes-api";
 import StickyCard from "./StickyCard";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import MarkdownEditor from "@/components/MarkdownEditor";
 
 // ── Connector routing helpers ─────────────────────────────────────────────────
 
@@ -113,6 +121,9 @@ interface LinkLabelModal {
 interface Props {
   boardId: string;
   token: string;
+  projectId: string;
+  backlogJobId: string | null;
+  templates: Workflow[];
   initialStickies: StickyNote[];
   initialLinks: NoteLink[];
 }
@@ -129,7 +140,7 @@ function checkDamAccess(token: string): boolean {
   } catch { return false; }
 }
 
-export default function IdeaBoard({ boardId, token, initialStickies, initialLinks }: Props) {
+export default function IdeaBoard({ boardId, token, projectId, backlogJobId, templates, initialStickies, initialLinks }: Props) {
   const [stickies, setStickies] = useState<StickyNote[]>(initialStickies);
   const [links, setLinks] = useState<NoteLink[]>(initialLinks);
   const [linkingFrom, setLinkingFrom] = useState<string | null>(null);
@@ -141,6 +152,7 @@ export default function IdeaBoard({ boardId, token, initialStickies, initialLink
   const [labelModal, setLabelModal] = useState<LinkLabelModal | null>(null);
   const [labelDraft, setLabelDraft] = useState("");
   const [addingColor, setAddingColor] = useState<StickyColor>("yellow");
+  const [createStoryStickyId, setCreateStoryStickyId] = useState<string | null>(null);
 
   // ── Zoom / pan ────────────────────────────────────────────────────────────
 
@@ -366,6 +378,12 @@ export default function IdeaBoard({ boardId, token, initialStickies, initialLink
     const updated = await updateNoteLink(token, labelModal.linkId, labelDraft.trim() || null);
     setLinks((prev) => prev.map((l) => l.id === updated.id ? updated : l));
     setLabelModal(null);
+  }
+
+  async function handleStoryCreated(stickyId: string, workflowId: string) {
+    await updateSticky(token, boardId, stickyId, { workflow_id: workflowId }).catch(() => {});
+    setStickies((prev) => prev.map((s) => s.id === stickyId ? { ...s, workflow_id: workflowId } : s));
+    setCreateStoryStickyId(null);
   }
 
 
@@ -623,6 +641,8 @@ export default function IdeaBoard({ boardId, token, initialStickies, initialLink
               isLinking={!!linkingFrom}
               isLinkSource={linkingFrom === s.id}
               isLinkTarget={!!linkingFrom && linkingFrom !== s.id}
+              projectId={projectId}
+              storyHref={s.workflow_id ? `/projects/${projectId}/stories/${s.workflow_id}` : null}
               onDragMove={handleDragMove}
               onDragEnd={handleDragEnd}
               onResizeMove={handleResizeMove}
@@ -631,6 +651,7 @@ export default function IdeaBoard({ boardId, token, initialStickies, initialLink
               onDelete={(id) => setConfirmDeleteId(id)}
               onStartLink={handleStartLink}
               onFinishLink={handleFinishLink}
+              onCreateStory={(id) => backlogJobId ? setCreateStoryStickyId(id) : undefined}
             />
           ))}
         </div>
@@ -667,6 +688,22 @@ export default function IdeaBoard({ boardId, token, initialStickies, initialLink
         />
       )}
 
+      {/* Create story from idea */}
+      {createStoryStickyId && backlogJobId && (() => {
+        const sticky = stickies.find((s) => s.id === createStoryStickyId);
+        if (!sticky) return null;
+        return (
+          <CreateStoryFromIdeaModal
+            sticky={sticky}
+            jobId={backlogJobId}
+            templates={templates}
+            token={token}
+            onCreated={(workflowId) => handleStoryCreated(createStoryStickyId, workflowId)}
+            onClose={() => setCreateStoryStickyId(null)}
+          />
+        );
+      })()}
+
       {/* Edit link label */}
       {labelModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -687,6 +724,219 @@ export default function IdeaBoard({ boardId, token, initialStickies, initialLink
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Create Story from Idea modal ──────────────────────────────────────────────
+
+function CreateStoryFromIdeaModal({
+  sticky,
+  jobId,
+  templates,
+  token,
+  onCreated,
+  onClose,
+}: {
+  sticky: StickyNote;
+  jobId: string;
+  templates: Workflow[];
+  token: string;
+  onCreated: (workflowId: string) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(sticky.title || "");
+  const [description, setDescription] = useState("");
+  const [noteBody, setNoteBody] = useState(sticky.body ?? "");
+  const [points, setPoints] = useState("");
+  const [search, setSearch] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState<Workflow | null>(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const sortedTemplates = [...templates].sort((a, b) => a.name.localeCompare(b.name));
+  const filteredTemplates = sortedTemplates.filter((t) =>
+    t.name.toLowerCase().includes(search.toLowerCase()) ||
+    (t.description ?? "").toLowerCase().includes(search.toLowerCase())
+  );
+
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    function handler(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [dropdownOpen]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      const pts = points ? parseInt(points, 10) : undefined;
+      let story: Workflow;
+
+      if (selectedTemplate) {
+        story = await cloneWorkflowFromTemplate(token, jobId, selectedTemplate.id);
+        story = await updateWorkflow(token, story.id, {
+          name: name.trim(),
+          description: description.trim() || undefined,
+          story_points: pts,
+          is_shared: true,
+        });
+      } else {
+        story = await createWorkflow(token, {
+          name: name.trim(),
+          job_id: jobId,
+          description: description.trim() || undefined,
+          story_points: pts,
+          is_shared: true,
+        });
+        await createTask(token, { name: "Define", workflow_id: story.id });
+      }
+
+      if (noteBody.trim()) {
+        await createNote(token, {
+          entity_type: "workflow",
+          entity_id: story.id,
+          title: name.trim(),
+          body: noteBody.trim(),
+          is_shared: true,
+        });
+      }
+
+      onCreated(story.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create story");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 my-4">
+        <h2 className="text-lg font-semibold text-slate-800 mb-1">Create story from idea</h2>
+        <p className="text-sm text-slate-400 mb-5">
+          The story will be added to the project backlog. A link back to this idea will appear on the sticky.
+        </p>
+        {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">{error}</div>}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-slate-700">Story name</label>
+            <input
+              required
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-slate-700">
+              Description <span className="text-slate-400 font-normal">(optional)</span>
+            </label>
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="One-line summary"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-slate-700">
+              Notes <span className="text-slate-400 font-normal">(optional, Markdown)</span>
+            </label>
+            <MarkdownEditor value={noteBody} onChange={setNoteBody} placeholder="Idea content…" height={160} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-slate-700">
+              Story points <span className="text-slate-400 font-normal">(optional)</span>
+            </label>
+            <input
+              type="number"
+              min="0"
+              value={points}
+              onChange={(e) => setPoints(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 w-28"
+              placeholder="e.g. 3"
+            />
+          </div>
+          {templates.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-slate-700">
+                Workflow template <span className="text-slate-400 font-normal">(optional)</span>
+              </label>
+              <div ref={dropdownRef} className="relative">
+                <div className={`flex items-center gap-2 border rounded-lg px-3 py-2.5 transition-colors ${dropdownOpen ? "border-violet-500 ring-1 ring-violet-500" : "border-slate-300"}`}>
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-slate-400 shrink-0">
+                    <path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"/>
+                  </svg>
+                  <input
+                    ref={searchRef}
+                    value={search}
+                    onChange={(e) => { setSearch(e.target.value); setSelectedTemplate(null); setDropdownOpen(true); }}
+                    onFocus={() => setDropdownOpen(true)}
+                    placeholder="Search templates…"
+                    className="flex-1 text-sm bg-transparent outline-none text-slate-800 placeholder:text-slate-400"
+                  />
+                  {selectedTemplate && (
+                    <button type="button" onClick={() => { setSelectedTemplate(null); setSearch(""); setDropdownOpen(true); searchRef.current?.focus(); }}
+                      className="text-slate-300 hover:text-slate-500 transition-colors shrink-0">
+                      <svg viewBox="0 0 12 12" fill="currentColor" className="w-3.5 h-3.5">
+                        <path d="M2.22 2.22a.75.75 0 0 1 1.06 0L6 4.94l2.72-2.72a.75.75 0 1 1 1.06 1.06L7.06 6l2.72 2.72a.75.75 0 1 1-1.06 1.06L6 7.06 3.28 9.78a.75.75 0 0 1-1.06-1.06L4.94 6 2.22 3.28a.75.75 0 0 1 0-1.06z"/>
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                {dropdownOpen && (
+                  <div className="absolute z-10 top-full mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden max-h-56 overflow-y-auto">
+                    {filteredTemplates.length === 0 ? (
+                      <p className="text-sm text-slate-400 px-4 py-3">No matches.</p>
+                    ) : (
+                      filteredTemplates.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); setSelectedTemplate(t); setSearch(t.name); setDropdownOpen(false); }}
+                          className="w-full text-left px-4 py-2.5 hover:bg-violet-50 transition-colors border-b border-slate-50 last:border-0"
+                        >
+                          <p className="text-sm font-medium text-slate-800">{t.name}</p>
+                          {t.description && <p className="text-xs text-slate-400 mt-0.5 truncate">{t.description}</p>}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+              {selectedTemplate?.description && (
+                <div className="mt-1 bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-xs text-slate-500">{selectedTemplate.description}</p>
+                </div>
+              )}
+            </div>
+          )}
+          <div className="flex gap-3 justify-end pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || !name.trim()}
+              className="px-4 py-2 text-sm font-medium bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+            >
+              {submitting ? "Creating…" : "Create story"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

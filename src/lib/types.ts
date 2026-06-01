@@ -240,6 +240,14 @@ export interface StickyNote {
   created_by: string;
   created_at: string;
   updated_at: string;
+  /** Soft reference to a backlog story. Set when the sticky was promoted to a story. */
+  workflow_id: string | null;
+}
+
+export interface StickyOrigin {
+  board_id: string;
+  board_name: string;
+  sticky: StickyNote;
 }
 
 export interface NoteLink {

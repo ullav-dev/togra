@@ -4,7 +4,9 @@ import { use, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "@/i18n/navigation";
 import { getIdeaBoard, listStickies, listNoteLinks } from "@/lib/notes-api";
-import type { IdeaBoard, StickyNote, NoteLink } from "@/lib/types";
+import { getProject, } from "@/lib/togra-api";
+import { listWorkflows } from "@/lib/awe-api";
+import type { IdeaBoard, StickyNote, NoteLink, Job, Workflow } from "@/lib/types";
 import IdeaBoardCanvas from "@/components/ideas/IdeaBoard";
 
 export default function IdeaBoardPage({
@@ -18,6 +20,8 @@ export default function IdeaBoardPage({
   const [board, setBoard] = useState<IdeaBoard | null>(null);
   const [stickies, setStickies] = useState<StickyNote[]>([]);
   const [links, setLinks] = useState<NoteLink[]>([]);
+  const [backlogJob, setBacklogJob] = useState<Job | null>(null);
+  const [templates, setTemplates] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,14 +30,21 @@ export default function IdeaBoardPage({
       getIdeaBoard(token, boardId),
       listStickies(token, boardId),
       listNoteLinks(token, boardId),
+      getProject(token, projectId),
     ])
-      .then(([b, s, l]) => {
+      .then(async ([b, s, l, proj]) => {
         setBoard(b);
         setStickies(s);
         setLinks(l);
+        const bl = proj.jobs.find((j: Job) => j.job_type === "backlog") ?? null;
+        setBacklogJob(bl);
+        if (proj.team_id) {
+          const tmpl = await listWorkflows(token, { team_id: proj.team_id }).catch(() => []);
+          setTemplates(tmpl.filter((w: Workflow) => w.is_template));
+        }
       })
       .finally(() => setLoading(false));
-  }, [token, boardId]);
+  }, [token, boardId, projectId]);
 
   if (loading) return <div className="p-8 text-slate-400 text-sm">Loading board…</div>;
   if (!board) return <div className="p-8 text-slate-500 text-sm">Board not found.</div>;
@@ -68,6 +79,9 @@ export default function IdeaBoardPage({
         <IdeaBoardCanvas
           boardId={boardId}
           token={token!}
+          projectId={projectId}
+          backlogJobId={backlogJob?.id ?? null}
+          templates={templates}
           initialStickies={stickies}
           initialLinks={links}
         />

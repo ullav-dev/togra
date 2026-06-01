@@ -57,6 +57,8 @@ interface Props {
   isLinking: boolean;
   isLinkSource: boolean;
   isLinkTarget: boolean;
+  projectId: string;
+  storyHref: string | null;
   onDragMove: (id: string, x: number, y: number) => void;
   onDragEnd: (id: string, x: number, y: number) => void;
   onResizeMove: (id: string, width: number, height: number) => void;
@@ -65,6 +67,7 @@ interface Props {
   onDelete: (id: string) => void;
   onStartLink: (id: string, port?: Port) => void;
   onFinishLink: (id: string, port?: Port) => void;
+  onCreateStory: (id: string) => void;
 }
 
 export default function StickyCard({
@@ -75,6 +78,7 @@ export default function StickyCard({
   isLinking,
   isLinkSource,
   isLinkTarget,
+  storyHref,
   onDragMove,
   onDragEnd,
   onResizeMove,
@@ -83,6 +87,7 @@ export default function StickyCard({
   onDelete,
   onStartLink,
   onFinishLink,
+  onCreateStory,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(sticky.title);
@@ -228,6 +233,22 @@ export default function StickyCard({
           </span>
         )}
 
+        {/* Story link — always visible when linked */}
+        {sticky.workflow_id && storyHref && (
+          <a
+            href={storyHref}
+            data-no-drag
+            onClick={(e) => e.stopPropagation()}
+            title="Open linked story"
+            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-violet-600 text-white hover:bg-violet-700 transition-colors shrink-0"
+          >
+            <svg viewBox="0 0 12 12" fill="currentColor" className="w-2 h-2">
+              <path d="M7 1a1 1 0 1 1 0 2H5a1 1 0 1 1 0-2h2ZM2 3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H8.5A2.5 2.5 0 0 1 6 5.5 2.5 2.5 0 0 1 3.5 3H2Z"/>
+            </svg>
+            Story
+          </a>
+        )}
+
         {/* Action buttons */}
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
           {/* Color picker */}
@@ -258,6 +279,21 @@ export default function StickyCard({
               </div>
             )}
           </div>
+
+          {/* Create story (only when not yet linked) */}
+          {!sticky.workflow_id && (
+            <button
+              type="button"
+              data-no-drag
+              onClick={() => onCreateStory(sticky.id)}
+              className="p-0.5 rounded hover:bg-black/10 transition-colors"
+              title="Create backlog story from this idea"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-violet-600">
+                <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.708A2.486 2.486 0 0 1 4.5 9h8V1.5Z"/>
+              </svg>
+            </button>
+          )}
 
           {/* Link */}
           <button

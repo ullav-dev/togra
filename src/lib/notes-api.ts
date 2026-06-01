@@ -7,6 +7,7 @@ import type {
   NoteFolder,
   IdeaBoard,
   StickyNote,
+  StickyOrigin,
   NoteLink,
 } from "./types";
 
@@ -125,9 +126,13 @@ export const updateSticky = (
     y?: number;
     width?: number;
     height?: number;
+    workflow_id?: string;
   }
 ): Promise<StickyNote> =>
   apiRequest(`/idea-boards/${boardId}/stickies/${noteId}`, token, { method: "PUT", body: JSON.stringify(patch) });
+
+export const getStickyByWorkflow = (token: string, workflowId: string): Promise<StickyOrigin> =>
+  apiRequest(`/stickies/by-workflow/${workflowId}`, token);
 
 export const deleteSticky = (token: string, boardId: string, noteId: string): Promise<void> =>
   apiRequest(`/idea-boards/${boardId}/stickies/${noteId}`, token, { method: "DELETE" });
