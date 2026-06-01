@@ -17,13 +17,13 @@ import {
   deleteWorkflow,
   cloneWorkflowFromTemplate,
   createTask,
-  createNote,
   getTeam,
   listTeamRoles,
 } from "@/lib/awe-api";
+import { createNote, listIdeaBoards, createIdeaBoard, deleteIdeaBoard } from "@/lib/notes-api";
 import MarkdownEditor from "@/components/MarkdownEditor";
 import { useRouter } from "@/i18n/navigation";
-import type { ProjectWithJobs, Job, Workflow, Task, TeamMember, TeamRole } from "@/lib/types";
+import type { ProjectWithJobs, Job, Workflow, Task, TeamMember, TeamRole, IdeaBoard } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import VisibilityToggle from "@/components/VisibilityToggle";
@@ -57,7 +57,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
   const backlogResize = useResize({ initial: 300, min: 200, max: 480, axis: "x" });
   const notesResize = useResize({ initial: 320, min: 200, max: 560, axis: "x", reverse: true });
-  const [activeTab, setActiveTab] = useState<"planning" | "team">("planning");
+  const [activeTab, setActiveTab] = useState<"planning" | "team" | "ideas">("planning");
+  const [ideaBoards, setIdeaBoards] = useState<IdeaBoard[]>([]);
 
   const backlogJob = project?.jobs.find((j) => j.job_type === "backlog") ?? null;
   const sprints = (project?.jobs ?? [])
@@ -98,6 +99,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       ]);
       setBacklogStories(stories);
       setTemplates(tmpl.filter((w) => w.is_template));
+      listIdeaBoards(token, id).then(setIdeaBoards).catch(() => {});
     }).finally(() => setLoading(false));
   }, [token, id]);
 
@@ -223,7 +225,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       {/* Tab bar */}
       <div className="bg-white border-b border-slate-200 px-6 shrink-0 flex items-center gap-1">
-        {(["planning", "team"] as const).map((tab) => (
+        {(["planning", "ideas", "team"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -234,7 +236,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 : "border-transparent text-slate-500 hover:text-slate-800"
             }`}
           >
-            {tab === "planning" ? t("tabs.planning") : t("tabs.team")}
+            {tab === "planning" ? t("tabs.planning") : tab === "ideas" ? t("tabs.ideas") : t("tabs.team")}
           </button>
         ))}
       </div>
@@ -300,6 +302,17 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           </div>
         </div>
       </div>}
+
+      {/* Ideas tab */}
+      {activeTab === "ideas" && (
+        <IdeasPanel
+          projectId={id}
+          boards={ideaBoards}
+          token={token!}
+          onBoardCreated={(b) => setIdeaBoards((prev) => [...prev, b])}
+          onBoardDeleted={(boardId) => setIdeaBoards((prev) => prev.filter((b) => b.id !== boardId))}
+        />
+      )}
 
       {/* Team tab */}
       {activeTab === "team" && (
@@ -1281,6 +1294,164 @@ function AssigneeAvatars({ members }: { members: TeamMember[] }) {
           <span className="text-[9px] font-semibold text-slate-600">+{extra}</span>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Ideas Panel ───────────────────────────────────────────────────────────────
+
+function IdeasPanel({
+  projectId,
+  boards,
+  token,
+  onBoardCreated,
+  onBoardDeleted,
+}: {
+  projectId: string;
+  boards: IdeaBoard[];
+  token: string;
+  onBoardCreated: (b: IdeaBoard) => void;
+  onBoardDeleted: (id: string) => void;
+}) {
+  const [showCreate, setShowCreate] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    setCreating(true);
+    try {
+      const board = await createIdeaBoard(token, projectId, newName.trim());
+      onBoardCreated(board);
+      setNewName("");
+      setShowCreate(false);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleDelete(boardId: string) {
+    await deleteIdeaBoard(token, boardId);
+    onBoardDeleted(boardId);
+    setConfirmDeleteId(null);
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+      <div className="max-w-2xl mx-auto">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h2 className="text-base font-semibold text-slate-800">Ideas Boards</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Whiteboard surfaces for capturing and connecting early-stage ideas</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+              <path d="M8 2a1 1 0 0 1 1 1v4h4a1 1 0 1 1 0 2H9v4a1 1 0 1 1-2 0V9H3a1 1 0 1 1 0-2h4V3a1 1 0 0 1 1-1Z"/>
+            </svg>
+            New Board
+          </button>
+        </div>
+
+        {boards.length === 0 && !showCreate ? (
+          <div className="text-center py-16 text-slate-400">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-10 h-10 mx-auto mb-3 text-slate-300">
+              <rect x="3" y="3" width="18" height="18" rx="3"/>
+              <path d="M8 12h8M12 8v8"/>
+            </svg>
+            <p className="text-sm font-medium mb-1">No idea boards yet</p>
+            <p className="text-xs">Create your first board to start mapping out concepts</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {boards.map((board) => (
+              <BoardCard
+                key={board.id}
+                board={board}
+                projectId={projectId}
+                onDelete={() => setConfirmDeleteId(board.id)}
+              />
+            ))}
+          </div>
+        )}
+
+        {showCreate && (
+          <div className="mt-4 bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <h3 className="text-sm font-semibold text-slate-700 mb-3">New Ideas Board</h3>
+            <form onSubmit={handleCreate} className="flex gap-2">
+              <input
+                autoFocus
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Board name…"
+                className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              />
+              <button type="button" onClick={() => setShowCreate(false)} className="px-3 py-2 text-sm text-slate-500 hover:text-slate-700 rounded-lg transition-colors">Cancel</button>
+              <button type="submit" disabled={creating || !newName.trim()} className="px-3 py-2 text-sm bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg transition-colors">
+                {creating ? "Creating…" : "Create"}
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
+
+      {confirmDeleteId && (
+        <ConfirmDialog
+          title="Delete board?"
+          message="This will permanently delete this Ideas Board and all stickies on it."
+          confirmLabel="Delete"
+          onConfirm={() => handleDelete(confirmDeleteId)}
+          onCancel={() => setConfirmDeleteId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function BoardCard({
+  board,
+  projectId,
+  onDelete,
+}: {
+  board: IdeaBoard;
+  projectId: string;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-4 hover:border-violet-200 hover:shadow-sm transition-all group">
+      <div className="flex items-start justify-between gap-2">
+        <Link
+          href={`/projects/${projectId}/boards/${board.id}`}
+          className="flex-1 min-w-0"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-violet-400 shrink-0">
+              <path d="M0 3.75C0 2.784.784 2 1.75 2h12.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 14H1.75A1.75 1.75 0 0 1 0 12.25Zm1.75-.25a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25Z"/>
+            </svg>
+            <span className="text-sm font-medium text-slate-800 group-hover:text-violet-700 transition-colors truncate">
+              {board.name}
+            </span>
+          </div>
+          <p className="text-xs text-slate-400">
+            Created {new Date(board.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+          </p>
+        </Link>
+        <button
+          type="button"
+          onClick={(e) => { e.preventDefault(); onDelete(); }}
+          className="p-1 rounded text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+          title="Delete board"
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+            <path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75Zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.559a.75.75 0 1 0-1.492.14l.62 6.498A1.75 1.75 0 0 0 5.365 14.8h5.27a1.75 1.75 0 0 0 1.741-1.603l.62-6.498a.75.75 0 1 0-1.492-.14l-.62 6.498a.25.25 0 0 1-.249.229H5.365a.25.25 0 0 1-.249-.229l-.62-6.498Z"/>
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }

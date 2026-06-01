@@ -210,6 +210,42 @@ export type NoteEntityType = "task" | "workflow" | "job" | "project";
 export interface NoteFolder {
   id: string;
   name: string;
+  folder_type: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface IdeaBoard {
+  id: string;
+  name: string;
+  project_id: string;
+  created_by: string;
+  created_at: string;
+}
+
+export type StickyColor = "yellow" | "pink" | "blue" | "green" | "purple" | "orange";
+
+export interface StickyNote {
+  id: string;
+  title: string;
+  body: string | null;
+  color: StickyColor;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NoteLink {
+  id: string;
+  from_note_id: string;
+  to_note_id: string;
+  label: string | null;
   created_by: string;
   created_at: string;
 }
