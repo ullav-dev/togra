@@ -16,6 +16,13 @@ interface Props {
   onClose: () => void;
 }
 
+function usernameFromToken(token: string): string | undefined {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return payload.username as string | undefined;
+  } catch { return undefined; }
+}
+
 const DEFAULT_W = 560;
 const DEFAULT_H = 440;
 
@@ -122,6 +129,7 @@ export default function DamPickerModal({ token, onSelect, onClose }: Props) {
         <DamPicker
           apiBase="/api/dam"
           token={token}
+          username={usernameFromToken(token)}
           onSelect={(asset) => { onSelect(asset); onClose(); }}
           filter={(a) => a.asset_type.startsWith("image/")}
         />
