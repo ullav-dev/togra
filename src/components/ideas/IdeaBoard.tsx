@@ -55,7 +55,7 @@ function cpOffset(port: Port, dist: number): { dx: number; dy: number } {
   }
 }
 
-function buildConnector(from: StickyNote, to: StickyNote) {
+function buildConnector(from: StickyNote, to: StickyNote, bidir: boolean) {
   const srcPort = bestPortTo(from, to.x + to.width / 2, to.y + to.height / 2);
   const tgtPort = bestPortTo(to,   from.x + from.width / 2, from.y + from.height / 2);
   const src  = portPos(from, srcPort);
@@ -63,9 +63,21 @@ function buildConnector(from: StickyNote, to: StickyNote) {
   const dist = Math.hypot(tgt.x - src.x, tgt.y - src.y);
   const c1   = cpOffset(srcPort, dist);
   const c2   = cpOffset(tgtPort, dist);
-  const p1x = src.x + c1.dx, p1y = src.y + c1.dy;
-  const p2x = tgt.x + c2.dx, p2y = tgt.y + c2.dy;
-  // Approximate bezier midpoint at t=0.5
+  let p1x = src.x + c1.dx, p1y = src.y + c1.dy;
+  let p2x = tgt.x + c2.dx, p2y = tgt.y + c2.dy;
+
+  // For bidirectional pairs, offset the two curves perpendicularly so they
+  // diverge rather than overlapping. Use ID comparison for stable direction.
+  if (bidir) {
+    const sign = from.id < to.id ? 1 : -1;
+    const perp = 44 * sign;
+    const dx = tgt.x - src.x, dy = tgt.y - src.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const px = (-dy / len) * perp, py = (dx / len) * perp;
+    p1x += px; p1y += py;
+    p2x += px; p2y += py;
+  }
+
   const midX = 0.125*src.x + 0.375*p1x + 0.375*p2x + 0.125*tgt.x;
   const midY = 0.125*src.y + 0.375*p1y + 0.375*p2y + 0.125*tgt.y;
   return {
@@ -313,7 +325,10 @@ export default function IdeaBoard({ boardId, token, initialStickies, initialLink
             const fromSticky = stickies.find((s) => s.id === link.from_note_id);
             const toSticky   = stickies.find((s) => s.id === link.to_note_id);
             if (!fromSticky || !toSticky) return null;
-            const { d, midX, midY, color } = buildConnector(fromSticky, toSticky);
+            const bidir = links.some(
+              (l) => l.from_note_id === link.to_note_id && l.to_note_id === link.from_note_id
+            );
+            const { d, midX, midY, color } = buildConnector(fromSticky, toSticky, bidir);
             const hovered = hoveredLinkId === link.id;
             const labelW = link.label ? Math.max(link.label.length * 6.5 + 16, 44) : 0;
             return (
@@ -403,6 +418,7 @@ export default function IdeaBoard({ boardId, token, initialStickies, initialLink
           <StickyCard
             key={s.id}
             sticky={s}
+            token={token}
             isLinking={!!linkingFrom}
             isLinkSource={linkingFrom === s.id}
             isLinkTarget={!!linkingFrom && linkingFrom !== s.id}

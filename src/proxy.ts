@@ -24,6 +24,14 @@ function route(request: NextRequest): NextResponse {
     );
   }
 
+  // Proxy /api/dam/* → ullav-dam-server (strips /api/dam prefix)
+  if (pathname.startsWith("/api/dam/")) {
+    const damUrl = process.env.DAM_URL ?? "http://localhost:8080";
+    return NextResponse.rewrite(
+      new URL(pathname.slice("/api/dam".length) + search, damUrl)
+    );
+  }
+
   return intlMiddleware(request) as NextResponse;
 }
 

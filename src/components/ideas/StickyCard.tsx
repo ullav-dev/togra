@@ -1,10 +1,38 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import dynamic from "next/dynamic";
 import type { StickyNote, StickyColor } from "@/lib/types";
 import MarkdownEditor from "@/components/MarkdownEditor";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import type { PickedAsset } from "@ullav/dam-picker";
+
+const DamPicker = dynamic(
+  () => import("@ullav/dam-picker").then((m) => m.DamPicker),
+  { ssr: false }
+);
+
+// ── Auth-gated DAM image ───────────────────────────────────────────────────────
+
+function AuthImage({ src, alt, token }: { src: string; alt: string; token: string }) {
+  const [blobSrc, setBlobSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    const url = src.endsWith("/thumbnail") ? src : `${src}/thumbnail`;
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => { if (!r.ok) throw new Error(); return r.blob(); })
+      .then((blob) => { objectUrl = URL.createObjectURL(blob); setBlobSrc(objectUrl); })
+      .catch(() => setFailed(true));
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [src, token]);
+
+  if (failed)  return <span className="text-xs text-red-400 italic">Image unavailable</span>;
+  if (!blobSrc) return <span className="text-xs text-slate-400 animate-pulse">Loading image…</span>;
+  return <img src={blobSrc} alt={alt} className="max-w-full max-h-40 rounded-lg border border-slate-200 object-contain my-1" />;
+}
 
 export const STICKY_COLORS: Record<StickyColor, { bg: string; border: string; header: string }> = {
   yellow: { bg: "bg-yellow-50",  border: "border-yellow-300", header: "bg-yellow-200" },
@@ -28,6 +56,7 @@ const HEADER_DOT: Record<StickyColor, string> = {
 
 interface Props {
   sticky: StickyNote;
+  token: string;
   isLinking: boolean;
   isLinkSource: boolean;
   isLinkTarget: boolean;
@@ -43,6 +72,7 @@ interface Props {
 
 export default function StickyCard({
   sticky,
+  token,
   isLinking,
   isLinkSource,
   isLinkTarget,
@@ -59,11 +89,25 @@ export default function StickyCard({
   const [title, setTitle] = useState(sticky.title);
   const [body, setBody] = useState(sticky.body ?? "");
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showDamPicker, setShowDamPicker] = useState(false);
   const [localSize, setLocalSize] = useState({ w: sticky.width, h: sticky.height });
 
-  const dragStart  = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
+  const dragStart   = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
   const resizeStart = useRef<{ px: number; py: number; ow: number; oh: number } | null>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
+  const cardRef     = useRef<HTMLDivElement>(null);
+  const cursorPosRef = useRef<number | null>(null);
+
+  function insertAsset(asset: PickedAsset) {
+    const url = asset.url.replace(/\/?$/, "/thumbnail");
+    const snippet = `![${asset.name}](${url})`;
+    const pos = cursorPosRef.current ?? body.length;
+    const before = body.slice(0, pos);
+    const after  = body.slice(pos);
+    const prefix = before.length > 0 && !before.endsWith("\n") ? "\n\n" : "";
+    const suffix = after.length > 0 && !after.startsWith("\n") ? "\n\n" : "";
+    setBody(before + prefix + snippet + suffix + after);
+    setShowDamPicker(false);
+  }
 
   const theme = STICKY_COLORS[sticky.color];
 
@@ -257,24 +301,72 @@ export default function StickyCard({
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto p-2 min-h-0" data-no-drag onDoubleClick={() => setEditing(true)}>
+      <div className="flex-1 overflow-y-auto p-2 min-h-0" data-no-drag onDoubleClick={() => !editing && setEditing(true)}>
         {editing ? (
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1.5">
             <MarkdownEditor
               value={body}
               onChange={setBody}
               placeholder="Add content…"
-              height={Math.max(60, localSize.h - 100)}
+              height={Math.max(60, localSize.h - (showDamPicker ? 280 : 120))}
+              textareaProps={{
+                onSelect:  (e: React.SyntheticEvent<HTMLTextAreaElement>) => { cursorPosRef.current = (e.target as HTMLTextAreaElement).selectionStart; },
+                onKeyUp:   (e: React.KeyboardEvent<HTMLTextAreaElement>) =>  { cursorPosRef.current = (e.target as HTMLTextAreaElement).selectionStart; },
+                onMouseUp: (e: React.MouseEvent<HTMLTextAreaElement>) =>     { cursorPosRef.current = (e.target as HTMLTextAreaElement).selectionStart; },
+              }}
             />
+
+            {/* DAM picker toggle pill */}
+            <button
+              type="button"
+              onClick={() => setShowDamPicker((v) => !v)}
+              className={`self-start inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border transition-colors ${
+                showDamPicker
+                  ? "bg-violet-100 border-violet-300 text-violet-700"
+                  : "bg-slate-100 border-slate-200 text-slate-500 hover:bg-violet-50 hover:border-violet-200 hover:text-violet-600"
+              }`}
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5">
+                <path d="M1.75 2.5a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h.94a.76.76 0 0 1 .03-.03l6.077-6.077a1.75 1.75 0 0 1 2.474 0l2.159 2.158V5.25a.25.25 0 0 0-.25-.25H10a.75.75 0 0 1 0-1.5h4a1.75 1.75 0 0 1 1.75 1.75v8.5A1.75 1.75 0 0 1 14 15.5H2A1.75 1.75 0 0 1 .25 13.75v-9A1.75 1.75 0 0 1 2 3h.5a.75.75 0 0 1 0 1.5H2a.25.25 0 0 0-.25.25Zm3.5-1.5H2A1.75 1.75 0 0 0 .25 2.75v9A1.75 1.75 0 0 0 2 13.5h12A1.75 1.75 0 0 0 15.75 11.75V5.25A1.75 1.75 0 0 0 14 3.5h-3.25V2.5a1.75 1.75 0 0 0-1.75-1.75H5.25ZM4.5 1.75A.25.25 0 0 1 4.75 1.5H9a.25.25 0 0 1 .25.25V3.5h-5V1.75Z"/>
+              </svg>
+              {showDamPicker ? "Hide media" : "Browse media…"}
+            </button>
+
+            {/* Inline DAM picker */}
+            {showDamPicker && (
+              <div className="h-48 border border-violet-200 rounded-lg overflow-hidden bg-white">
+                <DamPicker
+                  apiBase="/api/dam"
+                  token={token}
+                  onSelect={insertAsset}
+                  filter={(a) => a.asset_type.startsWith("image/")}
+                />
+              </div>
+            )}
+
             <div className="flex justify-end gap-1.5">
-              <button type="button" onClick={() => setEditing(false)} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-0.5 rounded transition-colors">Cancel</button>
+              <button type="button" onClick={() => { setEditing(false); setShowDamPicker(false); }} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-0.5 rounded transition-colors">Cancel</button>
               <button type="button" onClick={saveEdit} className="text-xs bg-violet-600 hover:bg-violet-700 text-white px-2 py-0.5 rounded transition-colors">Save</button>
             </div>
           </div>
         ) : (
           <div className="text-xs text-slate-700 leading-relaxed prose prose-xs max-w-none">
             {sticky.body ? (
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{sticky.body}</ReactMarkdown>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  img: ({ src, alt }) => {
+                    if (!src) return null;
+                    // Render DAM images (proxied through /api/dam/) with auth
+                    if (src.includes("/api/dam/") || src.includes("/assets/")) {
+                      return <AuthImage src={src} alt={alt ?? ""} token={token} />;
+                    }
+                    return <img src={src} alt={alt ?? ""} className="max-w-full rounded" />;
+                  },
+                }}
+              >
+                {sticky.body}
+              </ReactMarkdown>
             ) : (
               <span className="text-slate-400 italic">Double-click to add content…</span>
             )}
