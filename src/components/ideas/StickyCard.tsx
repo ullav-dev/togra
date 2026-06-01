@@ -114,7 +114,6 @@ export default function StickyCard({
   // ── Dragging via pointer events ───────────────────────────────────────────
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
-    if (editing) return;
     if (isLinking) {
       onFinishLink(sticky.id);
       return;
@@ -122,10 +121,10 @@ export default function StickyCard({
     if ((e.target as HTMLElement).closest("[data-no-drag]")) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     dragStart.current = { px: e.clientX, py: e.clientY, ox: sticky.x, oy: sticky.y };
-  }, [editing, isLinking, sticky.id, sticky.x, sticky.y, onFinishLink]);
+  }, [isLinking, sticky.id, sticky.x, sticky.y, onFinishLink]);
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!dragStart.current || editing) return;
+    if (!dragStart.current) return;
     const dx = e.clientX - dragStart.current.px;
     const dy = e.clientY - dragStart.current.py;
     const x = Math.max(0, dragStart.current.ox + dx);
