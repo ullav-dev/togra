@@ -153,6 +153,7 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
   const [labelDraft, setLabelDraft] = useState("");
   const [addingColor, setAddingColor] = useState<StickyColor>("yellow");
   const [createStoryStickyId, setCreateStoryStickyId] = useState<string | null>(null);
+  const [pendingStoryUpdates, setPendingStoryUpdates] = useState<Set<string>>(new Set());
 
   // ── Zoom / pan ────────────────────────────────────────────────────────────
 
@@ -330,9 +331,19 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
     await updateSticky(token, boardId, id, { width, height }).catch(() => {});
   }, [token, boardId]);
 
+  const stickiesRef = useRef(stickies);
+  useEffect(() => { stickiesRef.current = stickies; }, [stickies]);
+
   const handleUpdate = useCallback(async (id: string, patch: { title?: string; body?: string; color?: StickyColor }) => {
     setStickies((prev) => prev.map((s) => s.id === id ? { ...s, ...patch } : s));
     await updateSticky(token, boardId, id, patch).catch(() => {});
+    // If content (not just color) changed on a story-linked sticky, mark for update
+    if (patch.title !== undefined || patch.body !== undefined) {
+      const sticky = stickiesRef.current.find((s) => s.id === id);
+      if (sticky?.workflow_id) {
+        setPendingStoryUpdates((prev) => new Set([...prev, id]));
+      }
+    }
   }, [token, boardId]);
 
   async function handleDelete(id: string) {
@@ -384,6 +395,22 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
     await updateSticky(token, boardId, stickyId, { workflow_id: workflowId }).catch(() => {});
     setStickies((prev) => prev.map((s) => s.id === stickyId ? { ...s, workflow_id: workflowId } : s));
     setCreateStoryStickyId(null);
+  }
+
+  async function handleUpdateStory(stickyId: string) {
+    const sticky = stickiesRef.current.find((s) => s.id === stickyId);
+    if (!sticky?.workflow_id) return;
+    const timestamp = new Date().toLocaleString(undefined, {
+      dateStyle: "medium", timeStyle: "short",
+    });
+    await createNote(token, {
+      entity_type: "workflow",
+      entity_id: sticky.workflow_id,
+      title: `${sticky.title} — updated ${timestamp}`,
+      body: sticky.body ?? undefined,
+      is_shared: true,
+    }).catch(() => {});
+    setPendingStoryUpdates((prev) => { const next = new Set(prev); next.delete(stickyId); return next; });
   }
 
 
@@ -643,6 +670,8 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
               isLinkTarget={!!linkingFrom && linkingFrom !== s.id}
               projectId={projectId}
               storyHref={s.workflow_id ? `/projects/${projectId}/stories/${s.workflow_id}` : null}
+              hasPendingStoryUpdate={pendingStoryUpdates.has(s.id)}
+              onUpdateStory={handleUpdateStory}
               onDragMove={handleDragMove}
               onDragEnd={handleDragEnd}
               onResizeMove={handleResizeMove}

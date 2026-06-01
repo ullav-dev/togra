@@ -59,6 +59,8 @@ interface Props {
   isLinkTarget: boolean;
   projectId: string;
   storyHref: string | null;
+  hasPendingStoryUpdate: boolean;
+  onUpdateStory: (id: string) => void;
   onDragMove: (id: string, x: number, y: number) => void;
   onDragEnd: (id: string, x: number, y: number) => void;
   onResizeMove: (id: string, width: number, height: number) => void;
@@ -79,6 +81,8 @@ export default function StickyCard({
   isLinkSource,
   isLinkTarget,
   storyHref,
+  hasPendingStoryUpdate,
+  onUpdateStory,
   onDragMove,
   onDragEnd,
   onResizeMove,
@@ -231,6 +235,22 @@ export default function StickyCard({
           >
             {sticky.title || "Untitled"}
           </span>
+        )}
+
+        {/* Update Story pill — visible when content changed since last sync */}
+        {sticky.workflow_id && hasPendingStoryUpdate && (
+          <button
+            type="button"
+            data-no-drag
+            onClick={(e) => { e.stopPropagation(); onUpdateStory(sticky.id); }}
+            title="Add updated content as a new note on the linked story"
+            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-amber-500 text-white hover:bg-amber-600 transition-colors shrink-0 animate-pulse"
+          >
+            <svg viewBox="0 0 12 12" fill="currentColor" className="w-2 h-2">
+              <path d="M1 6a5 5 0 1 1 10 0A5 5 0 0 1 1 6Zm5-3.5a.75.75 0 0 1 .75.75v2.5h1.25a.75.75 0 0 1 0 1.5H6a.75.75 0 0 1-.75-.75v-3.25A.75.75 0 0 1 6 2.5Z"/>
+            </svg>
+            Update Story
+          </button>
         )}
 
         {/* Story link — always visible when linked */}
