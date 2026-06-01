@@ -13,7 +13,7 @@ import {
   listNoteReplies, createNoteReply,
   moveNote,
   listNoteFolders, createNoteFolder, updateNoteFolder, deleteNoteFolder,
-} from "@/lib/awe-api";
+} from "@/lib/notes-api";
 import type { Note, NoteFolder, NoteEntityType } from "@/lib/types";
 
 function formatRelative(iso: string, t: (key: string, params?: Record<string, string | number | Date>) => string): string {

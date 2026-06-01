@@ -1,6 +1,6 @@
 {
   "name": "togra",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3006 --webpack",
@@ -10,6 +10,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@ullav/dam-picker": "file:../clann-webapp/packages/dam-picker",
     "@dagrejs/dagre": "^3.0.0",
     "@tailwindcss/typography": "^0.5.19",
     "@uiw/react-md-editor": "^4.1.1",

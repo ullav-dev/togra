@@ -11,9 +11,10 @@ import {
   listTaskTeamRoles,
 } from "@/lib/awe-api";
 import { getProject } from "@/lib/togra-api";
+import { getStickyByWorkflow } from "@/lib/notes-api";
 import type {
   WorkflowWithTasks, ProjectWithJobs,
-  TeamMember, TeamRole, TaskTeamRole,
+  TeamMember, TeamRole, TaskTeamRole, StickyOrigin,
 } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 import NotesPanel from "@/components/notes/NotesPanel";
@@ -41,6 +42,7 @@ export default function StoryDetailPage({
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [teamRoles, setTeamRoles] = useState<TeamRole[]>([]);
   const [taskTeamRoles, setTaskTeamRoles] = useState<Record<string, TaskTeamRole[]>>({});
+  const [ideaOrigin, setIdeaOrigin] = useState<StickyOrigin | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -71,6 +73,7 @@ export default function StoryDetailPage({
         );
         setTaskTeamRoles(ttrMap);
       }
+      getStickyByWorkflow(token, storyId).then(setIdeaOrigin).catch(() => {});
     }).finally(() => setLoading(false));
   }, [token, projectId, storyId]);
 
@@ -107,14 +110,20 @@ export default function StoryDetailPage({
           <Link href="/projects" className="hover:text-violet-700 transition-colors">{t("breadcrumbProjects")}</Link>
           <span>/</span>
           <Link href={`/projects/${projectId}`} className="hover:text-violet-700 transition-colors">{project?.name ?? "…"}</Link>
-          {parentJobId && (
-            <>
-              <span>/</span>
-              <Link href={`/projects/${projectId}/jobs/${parentJobId}`} className="hover:text-violet-700 transition-colors">
-                {project?.jobs?.find((j) => j.id === parentJobId)?.name ?? t("sprintFallback")}
-              </Link>
-            </>
-          )}
+          {parentJobId && (() => {
+            const parentJob = project?.jobs?.find((j) => j.id === parentJobId);
+            const href = parentJob?.job_type === "backlog"
+              ? `/projects/${projectId}?tab=planning`
+              : `/projects/${projectId}/jobs/${parentJobId}`;
+            return (
+              <>
+                <span>/</span>
+                <Link href={href} className="hover:text-violet-700 transition-colors">
+                  {parentJob?.name ?? t("sprintFallback")}
+                </Link>
+              </>
+            );
+          })()}
           <span>/</span>
           <span className="text-slate-700 font-medium truncate max-w-xs">{story.name}</span>
         </nav>
@@ -177,6 +186,17 @@ export default function StoryDetailPage({
               setStory((prev) => prev ? { ...prev, is_shared: updated.is_shared } : prev);
             }}
           />
+          {ideaOrigin && (
+            <Link
+              href={`/projects/${projectId}/boards/${ideaOrigin.board_id}`}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-violet-600 hover:text-violet-700 bg-violet-50 hover:bg-violet-100 px-2.5 py-1 rounded-full transition-colors"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                <path d="M0 3.75C0 2.784.784 2 1.75 2h12.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 14H1.75A1.75 1.75 0 0 1 0 12.25Zm1.75-.25a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25Z"/>
+              </svg>
+              {ideaOrigin.board_name}
+            </Link>
+          )}
         </div>
       </div>
 

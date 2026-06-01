@@ -103,7 +103,7 @@
     "breadcrumbProjects": "Projekte",
     "pmLabel": "PM",
     "notesTitle": "Notizen",
-    "tabs": { "planning": "Planung", "team": "Team" },
+    "tabs": { "planning": "Planung", "ideas": "Ideen", "team": "Team" },
     "deleteProjectTitle": "\"{name}\" löschen?",
     "deleteProjectMessage": "Alle Sprints, Stories und Notizen in diesem Projekt werden dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.",
     "deleteProjectLabel": "Projekt löschen",

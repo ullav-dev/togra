@@ -210,6 +210,53 @@ export type NoteEntityType = "task" | "workflow" | "job" | "project";
 export interface NoteFolder {
   id: string;
   name: string;
+  folder_type: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface IdeaBoard {
+  id: string;
+  name: string;
+  project_id: string;
+  created_by: string;
+  created_at: string;
+}
+
+export type StickyColor = "yellow" | "pink" | "blue" | "green" | "purple" | "orange";
+export type Port = "top" | "right" | "bottom" | "left";
+
+export interface StickyNote {
+  id: string;
+  title: string;
+  body: string | null;
+  color: StickyColor;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  /** Soft reference to a backlog story. Set when the sticky was promoted to a story. */
+  workflow_id: string | null;
+}
+
+export interface StickyOrigin {
+  board_id: string;
+  board_name: string;
+  sticky: StickyNote;
+}
+
+export interface NoteLink {
+  id: string;
+  from_note_id: string;
+  to_note_id: string;
+  label: string | null;
+  from_port: Port | null;
+  to_port: Port | null;
   created_by: string;
   created_at: string;
 }

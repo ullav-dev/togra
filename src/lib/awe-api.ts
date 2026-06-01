@@ -1,7 +1,8 @@
-// AWE API calls (jobs, workflows, tasks, notes, teams) used by Togra.
+// AWE API calls (jobs, workflows, tasks, teams) used by Togra.
+// Notes API has moved to notes-api.ts.
 // All browser requests go via /api/* rewrite; server-side uses API_URL directly.
 
-import type { Job, JobWithWorkflows, Task, TaskLink, TaskScript, TaskPortSpec, PortDirection, PortValueType, ExecutionProfile, ScriptType, Workflow, WorkflowWithTasks, Note, NoteFolder, TeamSummary, Team, TeamRole, TaskTeamRole } from "./types";
+import type { Job, JobWithWorkflows, Task, TaskLink, TaskScript, TaskPortSpec, PortDirection, PortValueType, ExecutionProfile, ScriptType, Workflow, WorkflowWithTasks, TeamSummary, Team, TeamRole, TaskTeamRole } from "./types";
 
 const BASE =
   typeof window === "undefined"
@@ -230,50 +231,6 @@ export const deleteTaskScript = (token: string, taskId: string): Promise<void> =
 
 export const listExecutionProfiles = (token: string): Promise<ExecutionProfile[]> =>
   apiRequest("/execution-profiles", token);
-
-// ── Notes ─────────────────────────────────────────────────────────────────────
-
-export const listNotes = (token: string, entityType: string, entityId: string): Promise<Note[]> =>
-  apiRequest(`/notes?entity_type=${entityType}&entity_id=${entityId}`, token);
-
-export const createNote = (
-  token: string,
-  payload: { entity_type: string; entity_id: string; title: string; body?: string; is_shared?: boolean }
-): Promise<Note> =>
-  apiRequest("/notes", token, { method: "POST", body: JSON.stringify(payload) });
-
-export const updateNote = (
-  token: string,
-  id: string,
-  patch: { title?: string; body?: string; is_shared?: boolean }
-): Promise<Note> =>
-  apiRequest(`/notes/${id}`, token, { method: "PUT", body: JSON.stringify(patch) });
-
-export const deleteNote = (token: string, id: string): Promise<void> =>
-  apiRequest(`/notes/${id}`, token, { method: "DELETE" });
-
-export const listNoteReplies = (token: string, noteId: string): Promise<Note[]> =>
-  apiRequest(`/notes/${noteId}/replies`, token);
-
-export const createNoteReply = (token: string, noteId: string, body: string): Promise<Note> =>
-  apiRequest(`/notes/${noteId}/replies`, token, { method: "POST", body: JSON.stringify({ body }) });
-
-export const moveNote = (token: string, noteId: string, folderId: string | null): Promise<Note> =>
-  apiRequest(`/notes/${noteId}/folder`, token, { method: "PUT", body: JSON.stringify({ folder_id: folderId }) });
-
-// ── Note folders ──────────────────────────────────────────────────────────────
-
-export const listNoteFolders = (token: string): Promise<NoteFolder[]> =>
-  apiRequest("/note-folders", token);
-
-export const createNoteFolder = (token: string, name: string): Promise<NoteFolder> =>
-  apiRequest("/note-folders", token, { method: "POST", body: JSON.stringify({ name }) });
-
-export const updateNoteFolder = (token: string, id: string, name: string): Promise<NoteFolder> =>
-  apiRequest(`/note-folders/${id}`, token, { method: "PUT", body: JSON.stringify({ name }) });
-
-export const deleteNoteFolder = (token: string, id: string): Promise<void> =>
-  apiRequest(`/note-folders/${id}`, token, { method: "DELETE" });
 
 // ── Teams (UUM) ───────────────────────────────────────────────────────────────
 
