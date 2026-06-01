@@ -154,11 +154,12 @@ export default function StickyCard({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
     >
-      {/* Header bar */}
-      <div className={`${theme.header} px-2 py-1.5 flex items-center gap-1.5 shrink-0`} data-no-drag>
+      {/* Header bar — this IS the drag handle; data-no-drag only on individual buttons */}
+      <div className={`${theme.header} px-2 py-1.5 flex items-center gap-1.5 shrink-0`}>
         <span className={`w-2.5 h-2.5 rounded-full ${HEADER_DOT[sticky.color]}`} />
         {editing ? (
           <input
+            data-no-drag
             autoFocus
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -167,6 +168,7 @@ export default function StickyCard({
           />
         ) : (
           <span
+            data-no-drag
             className="flex-1 text-xs font-semibold text-slate-800 truncate cursor-text"
             onDoubleClick={() => setEditing(true)}
           >
