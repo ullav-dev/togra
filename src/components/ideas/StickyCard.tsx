@@ -205,9 +205,15 @@ export default function StickyCard({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
     >
-      {/* Header bar — this IS the drag handle; data-no-drag only on individual buttons */}
+      {/* Header bar — grip icon is always the drag target */}
       <div className={`${theme.header} px-2 py-1.5 flex items-center gap-1.5 shrink-0`}>
-        <span className={`w-2.5 h-2.5 rounded-full ${HEADER_DOT[sticky.color]}`} />
+        {/* Grip handle — no data-no-drag, always draggable */}
+        <svg viewBox="0 0 8 12" fill="currentColor" className="w-2 h-3 shrink-0 opacity-40 hover:opacity-70 cursor-grab">
+          <circle cx="1.5" cy="1.5" r="1.5"/><circle cx="6.5" cy="1.5" r="1.5"/>
+          <circle cx="1.5" cy="6"   r="1.5"/><circle cx="6.5" cy="6"   r="1.5"/>
+          <circle cx="1.5" cy="10.5" r="1.5"/><circle cx="6.5" cy="10.5" r="1.5"/>
+        </svg>
+        <span className={`w-2 h-2 rounded-full shrink-0 ${HEADER_DOT[sticky.color]}`} />
         {editing ? (
           <input
             data-no-drag
