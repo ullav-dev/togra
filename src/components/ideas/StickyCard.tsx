@@ -31,6 +31,7 @@ interface Props {
   isLinking: boolean;
   isLinkSource: boolean;
   isLinkTarget: boolean;
+  onDragMove: (id: string, x: number, y: number) => void;
   onDragEnd: (id: string, x: number, y: number) => void;
   onResizeEnd: (id: string, width: number, height: number) => void;
   onUpdate: (id: string, patch: { title?: string; body?: string; color?: StickyColor }) => void;
@@ -44,6 +45,7 @@ export default function StickyCard({
   isLinking,
   isLinkSource,
   isLinkTarget,
+  onDragMove,
   onDragEnd,
   onResizeEnd,
   onUpdate,
@@ -80,12 +82,15 @@ export default function StickyCard({
     if (!dragStart.current || editing) return;
     const dx = e.clientX - dragStart.current.px;
     const dy = e.clientY - dragStart.current.py;
+    const x = Math.max(0, dragStart.current.ox + dx);
+    const y = Math.max(0, dragStart.current.oy + dy);
     const el = cardRef.current;
     if (el) {
-      el.style.left = `${dragStart.current.ox + dx}px`;
-      el.style.top  = `${dragStart.current.oy + dy}px`;
+      el.style.left = `${x}px`;
+      el.style.top  = `${y}px`;
     }
-  }, [editing]);
+    onDragMove(sticky.id, x, y);
+  }, [editing, sticky.id, onDragMove]);
 
   const onPointerUp = useCallback((e: React.PointerEvent) => {
     if (!dragStart.current) return;
