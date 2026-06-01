@@ -61,7 +61,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<"planning" | "team" | "ideas">(
-    tabParam === "ideas" || tabParam === "team" ? tabParam : "planning"
+    tabParam === "planning" || tabParam === "team" ? tabParam : "ideas"
   );
   const [ideaBoards, setIdeaBoards] = useState<IdeaBoard[]>([]);
 
@@ -230,7 +230,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       {/* Tab bar */}
       <div className="bg-white border-b border-slate-200 px-6 shrink-0 flex items-center gap-1">
-        {(["planning", "ideas", "team"] as const).map((tab) => (
+        {(["ideas", "planning", "team"] as const).map((tab) => (
           <button
             key={tab}
             type="button"

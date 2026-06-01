@@ -1,17 +1,12 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import dynamic from "next/dynamic";
 import type { StickyNote, StickyColor, Port } from "@/lib/types";
 import MarkdownEditor from "@/components/MarkdownEditor";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { PickedAsset } from "@ullav/dam-picker";
-
-const DamPicker = dynamic(
-  () => import("@ullav/dam-picker").then((m) => m.DamPicker),
-  { ssr: false }
-);
+import DamPickerModal from "./DamPickerModal";
 
 // ── Auth-gated DAM image ───────────────────────────────────────────────────────
 
@@ -57,6 +52,8 @@ const HEADER_DOT: Record<StickyColor, string> = {
 interface Props {
   sticky: StickyNote;
   token: string;
+  zoom: number;
+  hasDamAccess: boolean;
   isLinking: boolean;
   isLinkSource: boolean;
   isLinkTarget: boolean;
@@ -73,6 +70,8 @@ interface Props {
 export default function StickyCard({
   sticky,
   token,
+  zoom,
+  hasDamAccess,
   isLinking,
   isLinkSource,
   isLinkTarget,
@@ -125,27 +124,23 @@ export default function StickyCard({
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragStart.current) return;
-    const dx = e.clientX - dragStart.current.px;
-    const dy = e.clientY - dragStart.current.py;
-    const x = Math.max(0, dragStart.current.ox + dx);
-    const y = Math.max(0, dragStart.current.oy + dy);
+    const x = Math.max(0, dragStart.current.ox + (e.clientX - dragStart.current.px) / zoom);
+    const y = Math.max(0, dragStart.current.oy + (e.clientY - dragStart.current.py) / zoom);
     const el = cardRef.current;
     if (el) {
       el.style.left = `${x}px`;
       el.style.top  = `${y}px`;
     }
     onDragMove(sticky.id, x, y);
-  }, [editing, sticky.id, onDragMove]);
+  }, [editing, sticky.id, onDragMove, zoom]);
 
   const onPointerUp = useCallback((e: React.PointerEvent) => {
     if (!dragStart.current) return;
-    const dx = e.clientX - dragStart.current.px;
-    const dy = e.clientY - dragStart.current.py;
-    const newX = Math.max(0, dragStart.current.ox + dx);
-    const newY = Math.max(0, dragStart.current.oy + dy);
+    const newX = Math.max(0, dragStart.current.ox + (e.clientX - dragStart.current.px) / zoom);
+    const newY = Math.max(0, dragStart.current.oy + (e.clientY - dragStart.current.py) / zoom);
     dragStart.current = null;
     onDragEnd(sticky.id, newX, newY);
-  }, [sticky.id, onDragEnd]);
+  }, [sticky.id, onDragEnd, zoom]);
 
   // ── Resizing via pointer events ───────────────────────────────────────────
 
@@ -157,20 +152,20 @@ export default function StickyCard({
 
   const onResizePointerMove = useCallback((e: React.PointerEvent) => {
     if (!resizeStart.current) return;
-    const w = Math.max(160, resizeStart.current.ow + (e.clientX - resizeStart.current.px));
-    const h = Math.max(120, resizeStart.current.oh + (e.clientY - resizeStart.current.py));
+    const w = Math.max(160, resizeStart.current.ow + (e.clientX - resizeStart.current.px) / zoom);
+    const h = Math.max(120, resizeStart.current.oh + (e.clientY - resizeStart.current.py) / zoom);
     setLocalSize({ w, h });
     onResizeMove(sticky.id, w, h);
-  }, [sticky.id, onResizeMove]);
+  }, [sticky.id, onResizeMove, zoom]);
 
   const onResizePointerUp = useCallback((e: React.PointerEvent) => {
     if (!resizeStart.current) return;
-    const w = Math.max(160, resizeStart.current.ow + (e.clientX - resizeStart.current.px));
-    const h = Math.max(120, resizeStart.current.oh + (e.clientY - resizeStart.current.py));
+    const w = Math.max(160, resizeStart.current.ow + (e.clientX - resizeStart.current.px) / zoom);
+    const h = Math.max(120, resizeStart.current.oh + (e.clientY - resizeStart.current.py) / zoom);
     resizeStart.current = null;
     setLocalSize({ w, h });
     onResizeEnd(sticky.id, w, h);
-  }, [sticky.id, onResizeEnd]);
+  }, [sticky.id, onResizeEnd, zoom]);
 
   // ── Editing ───────────────────────────────────────────────────────────────
 
@@ -313,7 +308,7 @@ export default function StickyCard({
               value={body}
               onChange={setBody}
               placeholder="Add content…"
-              height={Math.max(60, localSize.h - (showDamPicker ? 280 : 120))}
+              height={Math.max(60, localSize.h - 120)}
               textareaProps={{
                 onSelect:  (e: React.SyntheticEvent<HTMLTextAreaElement>) => { cursorPosRef.current = (e.target as HTMLTextAreaElement).selectionStart; },
                 onKeyUp:   (e: React.KeyboardEvent<HTMLTextAreaElement>) =>  { cursorPosRef.current = (e.target as HTMLTextAreaElement).selectionStart; },
@@ -321,32 +316,25 @@ export default function StickyCard({
               }}
             />
 
-            {/* DAM picker toggle pill */}
-            <button
+            {/* Browse media pill — only shown when user has Comad/Clann DAM access */}
+            {hasDamAccess && <button
               type="button"
-              onClick={() => setShowDamPicker((v) => !v)}
-              className={`self-start inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border transition-colors ${
-                showDamPicker
-                  ? "bg-violet-100 border-violet-300 text-violet-700"
-                  : "bg-slate-100 border-slate-200 text-slate-500 hover:bg-violet-50 hover:border-violet-200 hover:text-violet-600"
-              }`}
+              onClick={() => setShowDamPicker(true)}
+              className="self-start inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border bg-slate-100 border-slate-200 text-slate-500 hover:bg-violet-50 hover:border-violet-200 hover:text-violet-600 transition-colors"
             >
               <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5">
-                <path d="M1.75 2.5a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h.94a.76.76 0 0 1 .03-.03l6.077-6.077a1.75 1.75 0 0 1 2.474 0l2.159 2.158V5.25a.25.25 0 0 0-.25-.25H10a.75.75 0 0 1 0-1.5h4a1.75 1.75 0 0 1 1.75 1.75v8.5A1.75 1.75 0 0 1 14 15.5H2A1.75 1.75 0 0 1 .25 13.75v-9A1.75 1.75 0 0 1 2 3h.5a.75.75 0 0 1 0 1.5H2a.25.25 0 0 0-.25.25Zm3.5-1.5H2A1.75 1.75 0 0 0 .25 2.75v9A1.75 1.75 0 0 0 2 13.5h12A1.75 1.75 0 0 0 15.75 11.75V5.25A1.75 1.75 0 0 0 14 3.5h-3.25V2.5a1.75 1.75 0 0 0-1.75-1.75H5.25ZM4.5 1.75A.25.25 0 0 1 4.75 1.5H9a.25.25 0 0 1 .25.25V3.5h-5V1.75Z"/>
+                <path d="M1.75 2.5a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h.94l6.077-6.077a1.75 1.75 0 0 1 2.474 0l2.159 2.158V5.25a.25.25 0 0 0-.25-.25H10a.75.75 0 0 1 0-1.5h4A1.75 1.75 0 0 1 15.75 5.25v8.5A1.75 1.75 0 0 1 14 15.5H2A1.75 1.75 0 0 1 .25 13.75v-9A1.75 1.75 0 0 1 2 3h.5a.75.75 0 0 1 0 1.5H2a.25.25 0 0 0-.25.25Z"/>
               </svg>
-              {showDamPicker ? "Hide media" : "Browse media…"}
-            </button>
+              Browse media…
+            </button>}
 
-            {/* Inline DAM picker */}
+            {/* Floating DAM picker modal */}
             {showDamPicker && (
-              <div className="h-48 border border-violet-200 rounded-lg overflow-hidden bg-white">
-                <DamPicker
-                  apiBase="/api/dam"
-                  token={token}
-                  onSelect={insertAsset}
-                  filter={(a) => a.asset_type.startsWith("image/")}
-                />
-              </div>
+              <DamPickerModal
+                token={token}
+                onSelect={insertAsset}
+                onClose={() => setShowDamPicker(false)}
+              />
             )}
 
             <div className="flex justify-end gap-1.5">
@@ -363,7 +351,7 @@ export default function StickyCard({
                   img: ({ src, alt }) => {
                     if (!src) return null;
                     // Render DAM images (proxied through /api/dam/) with auth
-                    if (src.includes("/api/dam/") || src.includes("/assets/")) {
+                    if (typeof src === "string" && (src.includes("/api/dam/") || src.includes("/assets/"))) {
                       return <AuthImage src={src} alt={alt ?? ""} token={token} />;
                     }
                     return <img src={src} alt={alt ?? ""} className="max-w-full rounded" />;
