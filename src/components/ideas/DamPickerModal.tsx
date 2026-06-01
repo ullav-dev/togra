@@ -106,6 +106,7 @@ export default function DamPickerModal({ token, onSelect, onClose }: Props) {
       className="fixed z-[9999] flex flex-col rounded-xl border border-blue-900/30 shadow-2xl bg-white overflow-hidden outline-none"
       style={{ left: pos.x, top: pos.y, width: size.w, height: size.h }}
       onKeyDown={onKeyDown}
+      onPointerDown={(e) => e.stopPropagation()}
     >
       {/* Title bar — drag handle, violet brand colour */}
       <div
