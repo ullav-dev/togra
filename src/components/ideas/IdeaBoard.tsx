@@ -55,34 +55,45 @@ function cpOffset(port: Port, dist: number): { dx: number; dy: number } {
   }
 }
 
+// Rotate a port 90° clockwise: right→bottom→left→top→right
+const ROTATE_CW: Record<Port, Port> = {
+  right: "bottom", bottom: "left", left: "top", top: "right",
+};
+
 function buildConnector(from: StickyNote, to: StickyNote, bidir: boolean) {
-  const srcPort = bestPortTo(from, to.x + to.width / 2, to.y + to.height / 2);
-  const tgtPort = bestPortTo(to,   from.x + from.width / 2, from.y + from.height / 2);
+  let srcPort: Port, tgtPort: Port;
+
+  if (!bidir) {
+    srcPort = bestPortTo(from, to.x + to.width / 2,   to.y + to.height / 2);
+    tgtPort = bestPortTo(to,   from.x + from.width / 2, from.y + from.height / 2);
+  } else {
+    // Primary link (lower-ID → higher-ID): natural port routing.
+    // Return link (higher-ID → lower-ID): rotate both ports 90° CW so it
+    // departs and arrives on orthogonal sides, giving a clearly separate arc.
+    const primarySrc = bestPortTo(from.id < to.id ? from : to,
+      (from.id < to.id ? to : from).x + (from.id < to.id ? to : from).width / 2,
+      (from.id < to.id ? to : from).y + (from.id < to.id ? to : from).height / 2);
+    const primaryTgt = bestPortTo(from.id < to.id ? to : from,
+      (from.id < to.id ? from : to).x + (from.id < to.id ? from : to).width / 2,
+      (from.id < to.id ? from : to).y + (from.id < to.id ? from : to).height / 2);
+
+    if (from.id < to.id) {
+      srcPort = primarySrc;
+      tgtPort = primaryTgt;
+    } else {
+      // Return: rotate the primary ports CW so this link uses orthogonal sides
+      srcPort = ROTATE_CW[primaryTgt]; // depart from B on a rotated side
+      tgtPort = ROTATE_CW[primarySrc]; // arrive at A on a rotated side
+    }
+  }
+
   const src  = portPos(from, srcPort);
   const tgt  = portPos(to,   tgtPort);
   const dist = Math.hypot(tgt.x - src.x, tgt.y - src.y);
   const c1   = cpOffset(srcPort, dist);
   const c2   = cpOffset(tgtPort, dist);
-  let p1x = src.x + c1.dx, p1y = src.y + c1.dy;
-  let p2x = tgt.x + c2.dx, p2y = tgt.y + c2.dy;
-
-  // For bidirectional pairs, offset the two curves perpendicularly so they
-  // diverge rather than overlapping.
-  // IMPORTANT: compute the perpendicular from a *fixed* reference direction
-  // (lower-ID → higher-ID center) so both curves use the same axis and
-  // the sign flip gives truly opposite arcs.
-  if (bidir) {
-    const sign = from.id < to.id ? 1 : -1;
-    const refFrom = from.id < to.id ? from : to;
-    const refTo   = from.id < to.id ? to   : from;
-    const dx = (refTo.x + refTo.width / 2)   - (refFrom.x + refFrom.width / 2);
-    const dy = (refTo.y + refTo.height / 2)  - (refFrom.y + refFrom.height / 2);
-    const len = Math.hypot(dx, dy) || 1;
-    const px = (-dy / len) * 44 * sign;
-    const py = ( dx / len) * 44 * sign;
-    p1x += px; p1y += py;
-    p2x += px; p2y += py;
-  }
+  const p1x = src.x + c1.dx, p1y = src.y + c1.dy;
+  const p2x = tgt.x + c2.dx, p2y = tgt.y + c2.dy;
 
   const midX = 0.125*src.x + 0.375*p1x + 0.375*p2x + 0.125*tgt.x;
   const midY = 0.125*src.y + 0.375*p1y + 0.375*p2y + 0.125*tgt.y;
