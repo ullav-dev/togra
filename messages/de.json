@@ -103,7 +103,7 @@
     "breadcrumbProjects": "Projekte",
     "pmLabel": "PM",
     "notesTitle": "Notizen",
-    "tabs": { "planning": "Planung", "ideas": "Ideen", "team": "Team" },
+    "tabs": { "planning": "Planung", "ideas": "Ideen", "team": "Team", "reports": "Berichte" },
     "deleteProjectTitle": "\"{name}\" löschen?",
     "deleteProjectMessage": "Alle Sprints, Stories und Notizen in diesem Projekt werden dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.",
     "deleteProjectLabel": "Projekt löschen",
@@ -310,5 +310,68 @@
     "deleteFolderTitle": "Ordner \"{name}\" löschen?",
     "deleteFolderMessage": "Notizen in diesem Ordner werden abgelegt, aber nicht gelöscht.",
     "deleteFolderLabel": "Ordner löschen"
+  },
+  "reports": {
+    "controls": {
+      "sprintLabel": "Sprint",
+      "allSprints": "Alle Sprints",
+      "dateFrom": "Von",
+      "dateTo": "Bis",
+      "live": "Live",
+      "refreshInterval": "Aktualisierung",
+      "interval30s": "30s",
+      "interval1m": "1m",
+      "interval5m": "5m",
+      "interval15m": "15m",
+      "manageDashboard": "Dashboard verwalten"
+    },
+    "drawer": {
+      "title": "Dashboard",
+      "presetsHeading": "Vorgefertigte Dashboards",
+      "catalogHeading": "Alle Berichte",
+      "reportsCount": "Berichte",
+      "applyPreset": "Anwenden",
+      "applyPresetConfirm": "Aktuelles Layout durch \"{name}\" ersetzen?",
+      "applyPresetConfirmLabel": "Vorlage anwenden",
+      "close": "Schließen",
+      "categories": {
+        "sprint": "Sprint",
+        "flow": "Fluss & Durchsatz",
+        "process": "Workflow-Prozess",
+        "team": "Team & Kapazität",
+        "ideas": "Ideen-Pipeline"
+      }
+    },
+    "presets": {
+      "sprint_overview": "Sprint-Übersicht",
+      "flow_health": "Flow-Gesundheit",
+      "process_insights": "Prozess-Einblicke",
+      "team_capacity": "Team-Kapazität",
+      "ideas_pipeline": "Ideen-Pipeline",
+      "live_sprint_room": "Live Sprint-Raum"
+    },
+    "tile": {
+      "liveNotApplicable": "Nicht von Live-Updates betroffen",
+      "loading": "Wird geladen…",
+      "noData": "Keine Daten für den ausgewählten Zeitraum"
+    },
+    "catalog": {
+      "sprint_progress_gauge":       { "title": "Sprint-Fortschritt",      "description": "Fertigstellungsgrad und verbleibende Tage" },
+      "burndown_chart":              { "title": "Burndown",                "description": "Verbleibende Story-Punkte vs. Ideallinie" },
+      "velocity_chart":              { "title": "Velocity",                "description": "Story-Punkte pro Sprint mit gleitendem Durchschnitt" },
+      "sprint_completion_rate":      { "title": "Sprint-Abschlussrate",    "description": "Geplante vs. gelieferte Stories pro Sprint" },
+      "cumulative_flow_diagram":     { "title": "Kumulativer Fluss",       "description": "Aufgabenanzahl pro Status über die Zeit" },
+      "throughput_chart":            { "title": "Durchsatz",               "description": "Abgeschlossene Aufgaben pro Woche" },
+      "cycle_time_scatter":          { "title": "Zykluszeit",              "description": "Tage von In-Bearbeitung bis Fertig pro Aufgabe" },
+      "lead_time_distribution":      { "title": "Vorlaufzeit",             "description": "Tage von Erstellung bis Abschluss" },
+      "workflow_step_timing":        { "title": "Schrittzeiten",           "description": "Durchschnittliche und p85-Zeit pro Workflow-Schritt" },
+      "workflow_funnel":             { "title": "Workflow-Trichter",       "description": "Eingehende vs. abgeschlossene Aufgaben pro Schritt" },
+      "story_aging_heatmap":         { "title": "Story-Alterung",          "description": "Offene Stories nach Schritt, farblich nach Alter" },
+      "team_load_chart":             { "title": "Team-Auslastung",         "description": "Geplante vs. abgeschlossene Punkte pro Mitglied" },
+      "task_role_distribution":      { "title": "Rollenverteilung",        "description": "Offene Aufgaben nach Bearbeiter" },
+      "member_throughput_sparklines":{ "title": "Mitglieder-Durchsatz",    "description": "Wöchentliche Abschlüsse pro Teammitglied" },
+      "ideas_funnel":                { "title": "Ideen-Trichter",          "description": "Ideen erstellt, gefördert und abgeschlossen" },
+      "idea_age_distribution":       { "title": "Ideenalter",              "description": "Tage von Ideenerstellung bis Förderung" }
+    }
   }
 }
