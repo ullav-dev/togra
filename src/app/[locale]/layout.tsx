@@ -8,6 +8,8 @@ import "../globals.css";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { AppUrlsProvider } from "@/contexts/AppUrlsContext";
+import type { AppUrls } from "@/contexts/AppUrlsContext";
 
 const geist = Geist({ subsets: ["latin"] });
 
@@ -29,14 +31,23 @@ export default async function LocaleLayout({
 
   const messages = await getMessages();
 
+  // App URLs are read at request time from plain process.env (no NEXT_PUBLIC_ prefix)
+  // so the same Docker image works across staging and production.
+  const appUrls: AppUrls = {
+    obairUrl:     process.env.OBAIR_URL      ?? "",
+    damBrowserUrl: process.env.DAM_BROWSER_URL ?? "",
+  };
+
   return (
     <html lang={locale} className="h-full">
       <body className={`${geist.className} bg-slate-50 text-slate-900 flex flex-col h-full`}>
         <NextIntlClientProvider messages={messages}>
           <AuthProvider>
-            <Nav />
-            <main className="flex-1 overflow-auto">{children}</main>
-            <Footer />
+            <AppUrlsProvider urls={appUrls}>
+              <Nav />
+              <main className="flex-1 overflow-auto">{children}</main>
+              <Footer />
+            </AppUrlsProvider>
           </AuthProvider>
         </NextIntlClientProvider>
       </body>

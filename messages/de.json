@@ -7,9 +7,24 @@
   },
   "nav": {
     "projects": "Projekte",
+    "myDecisions": "Meine Entscheidungen",
     "signIn": "Anmelden",
     "signOut": "Abmelden",
     "myDetails": "Mein Profil"
+  },
+  "decisions": {
+    "title": "Meine Entscheidungen",
+    "subtitle": "Entscheidungsaufgaben, die Ihre Eingabe erfordern",
+    "loading": "Entscheidungen werden geladen…",
+    "empty": "Keine ausstehenden Entscheidungen",
+    "emptySubtitle": "Entscheidungsaufgaben, die Ihnen oder Ihren Teamrollen zugewiesen sind, erscheinen hier.",
+    "viaRole": "über Rolle",
+    "directlyAssigned": "direkt zugewiesen",
+    "decideHeading": "Ergebnis wählen:",
+    "noLabels": "Keine Ergebnisbezeichnungen konfiguriert.",
+    "deciding": "Entscheide…",
+    "storyLabel": "Story",
+    "sprintLabel": "Sprint"
   },
   "idleWarning": {
     "title": "Sie waren inaktiv",
