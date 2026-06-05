@@ -10,7 +10,17 @@
     "myDecisions": "My Decisions",
     "signIn": "Sign in",
     "signOut": "Sign out",
-    "myDetails": "My Details"
+    "myDetails": "My Details",
+    "about": "About Togra"
+  },
+  "about": {
+    "tagline": "Project Management",
+    "version": "Version",
+    "build": "Build",
+    "user": "Signed in as",
+    "support": "Support",
+    "contact": "Contact",
+    "close": "Close"
   },
   "decisions": {
     "title": "My Decisions",

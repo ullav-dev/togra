@@ -10,7 +10,17 @@
     "myDecisions": "Mo Chinntí",
     "signIn": "Sínigh isteach",
     "signOut": "Logáil amach",
-    "myDetails": "Mo Shonraí"
+    "myDetails": "Mo Shonraí",
+    "about": "Faoi Togra"
+  },
+  "about": {
+    "tagline": "Bainistíocht Tionscadal",
+    "version": "Leagan",
+    "build": "Tógáil",
+    "user": "Sínithe isteach mar",
+    "support": "Tacaíocht",
+    "contact": "Teagmháil",
+    "close": "Dún"
   },
   "decisions": {
     "title": "Mo Chinntí",

@@ -10,7 +10,17 @@
     "myDecisions": "Meine Entscheidungen",
     "signIn": "Anmelden",
     "signOut": "Abmelden",
-    "myDetails": "Mein Profil"
+    "myDetails": "Mein Profil",
+    "about": "Über Togra"
+  },
+  "about": {
+    "tagline": "Projektmanagement",
+    "version": "Version",
+    "build": "Build",
+    "user": "Angemeldet als",
+    "support": "Support",
+    "contact": "Kontakt",
+    "close": "Schließen"
   },
   "decisions": {
     "title": "Meine Entscheidungen",

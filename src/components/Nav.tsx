@@ -8,6 +8,7 @@ import { isAdmin, hasObairAccess, hasComadAccess } from "@/lib/auth-api";
 import { useAppUrls } from "@/contexts/AppUrlsContext";
 import TograIcon from "@/components/TograIcon";
 import MyDetailsModal from "@/components/MyDetailsModal";
+import AboutModal from "@/components/AboutModal";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
 
 function NavAvatar({ url, initials }: { url?: string | null; initials: string }) {
@@ -60,6 +61,7 @@ export default function Nav() {
   const t = useTranslations("nav");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -82,6 +84,11 @@ export default function Nav() {
   function handleMyDetails() {
     setDropdownOpen(false);
     setDetailsOpen(true);
+  }
+
+  function handleAbout() {
+    setDropdownOpen(false);
+    setAboutOpen(true);
   }
 
   const navLink = (path: string) =>
@@ -186,6 +193,13 @@ export default function Nav() {
                           </Link>
                         </>
                       )}
+                      <button
+                        type="button"
+                        onClick={handleAbout}
+                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                      >
+                        {t("about")}
+                      </button>
                       <div className="my-1 border-t border-slate-100" />
                       <button
                         type="button"
@@ -198,6 +212,7 @@ export default function Nav() {
                   )}
                 </div>
                 {detailsOpen && <MyDetailsModal onClose={() => setDetailsOpen(false)} />}
+                {aboutOpen && <AboutModal user={user} onClose={() => setAboutOpen(false)} />}
               </>
             ) : !isLoading ? (
               <>
