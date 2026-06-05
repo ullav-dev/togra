@@ -2,7 +2,7 @@
 // Notes API has moved to notes-api.ts.
 // All browser requests go via /api/* rewrite; server-side uses API_URL directly.
 
-import type { Job, JobWithWorkflows, Task, TaskLink, TaskScript, TaskPortSpec, PortDirection, PortValueType, ExecutionProfile, ScriptType, Workflow, WorkflowWithTasks, TeamSummary, Team, TeamRole, TaskTeamRole } from "./types";
+import type { Job, JobWithWorkflows, Task, TaskLink, TaskScript, TaskPortSpec, PortDirection, PortValueType, ExecutionProfile, ScriptType, Workflow, WorkflowWithTasks, TeamSummary, Team, TeamRole, TaskTeamRole, TaskStateHistoryEntry } from "./types";
 
 const BASE =
   typeof window === "undefined"
@@ -242,3 +242,52 @@ export const getTeam = (token: string, id: string): Promise<Team> =>
 
 export const listTeamRoles = (token: string, teamId: string): Promise<TeamRole[]> =>
   authApiRequest(`/teams/${teamId}/roles`, token);
+
+// ── Task State History ────────────────────────────────────────────────────────
+
+export interface JobTaskHistoryParams {
+  since?: string;
+  until?: string;
+  from_status?: string;
+  to_status?: string;
+  actor_id?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export const getJobTaskHistory = (
+  token: string,
+  jobId: string,
+  params?: JobTaskHistoryParams
+): Promise<TaskStateHistoryEntry[]> => {
+  const qs = new URLSearchParams();
+  if (params?.since) qs.set("since", params.since);
+  if (params?.until) qs.set("until", params.until);
+  if (params?.from_status) qs.set("from_status", params.from_status);
+  if (params?.to_status) qs.set("to_status", params.to_status);
+  if (params?.actor_id) qs.set("actor_id", params.actor_id);
+  qs.set("limit", String(params?.limit ?? 1000));
+  if (params?.offset) qs.set("offset", String(params.offset));
+  const query = qs.toString();
+  return apiRequest(`/jobs/${jobId}/task-history${query ? `?${query}` : ""}`, token);
+};
+
+export async function fetchAllJobTaskHistory(
+  token: string,
+  jobId: string,
+  params?: Omit<JobTaskHistoryParams, "limit" | "offset">
+): Promise<TaskStateHistoryEntry[]> {
+  const all: TaskStateHistoryEntry[] = [];
+  let offset = 0;
+  const pageSize = 1000;
+  while (true) {
+    const page = await getJobTaskHistory(token, jobId, { ...params, limit: pageSize, offset });
+    all.push(...page);
+    if (page.length < pageSize) break;
+    offset += pageSize;
+  }
+  return all;
+}
+
+export const listJobsByProject = (token: string, projectId: string): Promise<Job[]> =>
+  apiRequest(`/jobs?project_id=${projectId}`, token);

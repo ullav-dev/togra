@@ -30,6 +30,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import VisibilityToggle from "@/components/VisibilityToggle";
 import NotesPanel from "@/components/notes/NotesPanel";
 import TeamView from "@/components/TeamView";
+import ReportsTab from "@/components/reports/ReportsTab";
 
 const BACKLOG_PAGE_SIZE = 20;
 
@@ -60,8 +61,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const notesResize = useResize({ initial: 320, min: 200, max: 560, axis: "x", reverse: true });
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
-  const [activeTab, setActiveTab] = useState<"planning" | "team" | "ideas">(
-    tabParam === "planning" || tabParam === "team" ? tabParam : "ideas"
+  const [activeTab, setActiveTab] = useState<"planning" | "team" | "ideas" | "reports">(
+    tabParam === "planning" || tabParam === "team" || tabParam === "reports" ? tabParam : "ideas"
   );
   const [ideaBoards, setIdeaBoards] = useState<IdeaBoard[]>([]);
 
@@ -230,7 +231,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       {/* Tab bar */}
       <div className="bg-white border-b border-slate-200 px-6 shrink-0 flex items-center gap-1">
-        {(["ideas", "planning", "team"] as const).map((tab) => (
+        {(["ideas", "planning", "team", "reports"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -241,7 +242,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 : "border-transparent text-slate-500 hover:text-slate-800"
             }`}
           >
-            {tab === "planning" ? t("tabs.planning") : tab === "ideas" ? t("tabs.ideas") : t("tabs.team")}
+            {tab === "planning" ? t("tabs.planning") : tab === "ideas" ? t("tabs.ideas") : tab === "team" ? t("tabs.team") : t("tabs.reports")}
           </button>
         ))}
       </div>
@@ -316,6 +317,16 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           token={token!}
           onBoardCreated={(b) => setIdeaBoards((prev) => [...prev, b])}
           onBoardDeleted={(boardId) => setIdeaBoards((prev) => prev.filter((b) => b.id !== boardId))}
+        />
+      )}
+
+      {/* Reports tab */}
+      {activeTab === "reports" && (
+        <ReportsTab
+          projectId={id}
+          sprints={sprints}
+          token={token!}
+          teamMembers={teamMembers}
         />
       )}
 

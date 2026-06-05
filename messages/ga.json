@@ -103,7 +103,7 @@
     "breadcrumbProjects": "Tionscadail",
     "pmLabel": "BT",
     "notesTitle": "Nótaí",
-    "tabs": { "planning": "Pleanáil", "ideas": "Smaointe", "team": "Foireann" },
+    "tabs": { "planning": "Pleanáil", "ideas": "Smaointe", "team": "Foireann", "reports": "Tuarascálacha" },
     "deleteProjectTitle": "\"{name}\" a scriosadh?",
     "deleteProjectMessage": "Scriosfar gach sprid, scéal agus nóta sa tionscadal seo go buan. Ní féidir é seo a chur ar ceal.",
     "deleteProjectLabel": "Tionscadal a scriosadh",
@@ -310,5 +310,68 @@
     "deleteFolderTitle": "Fillteán \"{name}\" a scriosadh?",
     "deleteFolderMessage": "Cuirfear nótaí sa fillteán seo ar taifead ach ní scriosfar iad.",
     "deleteFolderLabel": "Fillteán a scriosadh"
+  },
+  "reports": {
+    "controls": {
+      "sprintLabel": "Sprint",
+      "allSprints": "Gach sprint",
+      "dateFrom": "Ó",
+      "dateTo": "Go",
+      "live": "Beo",
+      "refreshInterval": "Athnuachan",
+      "interval30s": "30s",
+      "interval1m": "1n",
+      "interval5m": "5n",
+      "interval15m": "15n",
+      "manageDashboard": "Deais a bhainistiú"
+    },
+    "drawer": {
+      "title": "Deais",
+      "presetsHeading": "Deaiseanna Réamhdhéanta",
+      "catalogHeading": "Gach Tuarascáil",
+      "reportsCount": "tuarascálacha",
+      "applyPreset": "Cuir i bhfeidhm",
+      "applyPresetConfirm": "An leagan amach reatha a athsholáthar le \"{name}\"?",
+      "applyPresetConfirmLabel": "Cuir réamhshocrú i bhfeidhm",
+      "close": "Dún",
+      "categories": {
+        "sprint": "Sprint",
+        "flow": "Sreabhadh & Tréchur",
+        "process": "Próiseas Sreafa Oibre",
+        "team": "Foireann & Cumas",
+        "ideas": "Píblíne Smaointe"
+      }
+    },
+    "presets": {
+      "sprint_overview": "Forbhreathnú Sprint",
+      "flow_health": "Sláinte Sreafa",
+      "process_insights": "Léargais Próisis",
+      "team_capacity": "Cumas Foirne",
+      "ideas_pipeline": "Píblíne Smaointe",
+      "live_sprint_room": "Seomra Sprint Beo"
+    },
+    "tile": {
+      "liveNotApplicable": "Ní théann nuashonruithe beo i bhfeidhm air seo",
+      "loading": "Á lódáil…",
+      "noData": "Gan sonraí don tréimhse roghnaithe"
+    },
+    "catalog": {
+      "sprint_progress_gauge":       { "title": "Dul Chun Cinn Sprint",    "description": "Céatadán críochnaithe agus laethanta fágtha" },
+      "burndown_chart":              { "title": "Cairt Dóite",             "description": "Pointí scéil fágtha vs líne idéalach" },
+      "velocity_chart":              { "title": "Luas",                    "description": "Pointí scéil seachadta in aghaidh an sprint" },
+      "sprint_completion_rate":      { "title": "Ráta Críochnaithe Sprint","description": "Scéalta pleanáilte vs seachadta in aghaidh sprint" },
+      "cumulative_flow_diagram":     { "title": "Sreabhadh Carnach",       "description": "Líon tascanna in aghaidh stádais thar am" },
+      "throughput_chart":            { "title": "Tréchur",                 "description": "Tascanna críochnaithe in aghaidh na seachtaine" },
+      "cycle_time_scatter":          { "title": "Am Timthrialla",          "description": "Laethanta ó obair tosaithe go críochnaithe" },
+      "lead_time_distribution":      { "title": "Am Luaidhe",              "description": "Laethanta ó chruthú go críochnú" },
+      "workflow_step_timing":        { "title": "Uainiú Céimeanna",        "description": "Am meánach agus p85 in aghaidh céim sreafa oibre" },
+      "workflow_funnel":             { "title": "Tonnadóir Sreafa Oibre",  "description": "Tascanna ag dul isteach vs ag críochnú gach céim" },
+      "story_aging_heatmap":         { "title": "Aosú Scéalta",            "description": "Scéalta oscailte de réir céime, dathaithe de réir aoise" },
+      "team_load_chart":             { "title": "Ualach Foirne",           "description": "Pointí sannta vs críochnaithe in aghaidh comhalta" },
+      "task_role_distribution":      { "title": "Dáileadh Róil",           "description": "Tascanna oscailte de réir sannadh" },
+      "member_throughput_sparklines":{ "title": "Tréchur Comhaltaí",       "description": "Críochnuithe seachtainiúla in aghaidh comhalta foirne" },
+      "ideas_funnel":                { "title": "Tonnadóir Smaointe",      "description": "Smaointe cruthaithe, chun cinn agus críochnaithe" },
+      "idea_age_distribution":       { "title": "Aois Smaointe",           "description": "Laethanta ó chruthú smaointe go cur chun cinn" }
+    }
   }
 }

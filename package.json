@@ -10,16 +10,17 @@
     "test": "jest"
   },
   "dependencies": {
-    "@ullav/dam-picker": "file:./packages/dam-picker",
     "@dagrejs/dagre": "^3.0.0",
     "@tailwindcss/typography": "^0.5.19",
     "@uiw/react-md-editor": "^4.1.1",
+    "@ullav/dam-picker": "file:./packages/dam-picker",
     "@xyflow/react": "^12.10.2",
     "next": "16.1.6",
     "next-intl": "^4.9.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
+    "recharts": "^3.8.1",
     "remark-gfm": "^4.0.1"
   },
   "overrides": {

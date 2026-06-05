@@ -274,3 +274,57 @@ export interface Note {
   created_at: string;
   updated_at: string;
 }
+
+// ── Reporting ─────────────────────────────────────────────────────────────────
+
+export interface TaskStateHistoryEntry {
+  id: string;
+  transitioned_at: string;
+  task_id: string | null;
+  task_name: string;
+  workflow_id: string | null;
+  workflow_name: string;
+  job_id: string;
+  job_name: string;
+  from_status: string | null;
+  to_status: string;
+  actor_id: string | null;
+  actor_username: string | null;
+  actor_type: string;
+  propagation_depth: number | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export type ReportInterval = 30 | 60 | 300 | 900;
+
+export type ReportId =
+  | "sprint_progress_gauge"
+  | "burndown_chart"
+  | "velocity_chart"
+  | "sprint_completion_rate"
+  | "cumulative_flow_diagram"
+  | "throughput_chart"
+  | "cycle_time_scatter"
+  | "lead_time_distribution"
+  | "workflow_step_timing"
+  | "workflow_funnel"
+  | "story_aging_heatmap"
+  | "team_load_chart"
+  | "task_role_distribution"
+  | "member_throughput_sparklines"
+  | "ideas_funnel"
+  | "idea_age_distribution";
+
+export type PresetId =
+  | "sprint_overview"
+  | "flow_health"
+  | "process_insights"
+  | "team_capacity"
+  | "ideas_pipeline"
+  | "live_sprint_room";
+
+export interface DashboardConfig {
+  version: 1;
+  enabledReportIds: ReportId[];
+  presetId?: PresetId;
+}
