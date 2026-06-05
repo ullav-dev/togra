@@ -7,9 +7,24 @@
   },
   "nav": {
     "projects": "Tionscadail",
+    "myDecisions": "Mo Chinntí",
     "signIn": "Sínigh isteach",
     "signOut": "Logáil amach",
     "myDetails": "Mo Shonraí"
+  },
+  "decisions": {
+    "title": "Mo Chinntí",
+    "subtitle": "Tascanna cinneadh ag fanacht ar d'ionchur",
+    "loading": "Cinntí á lódáil…",
+    "empty": "Níl aon chinntí ar feitheamh",
+    "emptySubtitle": "Tascanna cinneadh a shannadh duit nó do do róil foirne feicfear anseo.",
+    "viaRole": "trí ról",
+    "directlyAssigned": "sannta duit",
+    "decideHeading": "Roghnaigh toradh:",
+    "noLabels": "Níl aon lipéid toradh cumraithe.",
+    "deciding": "Ag cinneadh…",
+    "storyLabel": "Scéal",
+    "sprintLabel": "Sprint"
   },
   "idleWarning": {
     "title": "Bhí tú díomhaoin",

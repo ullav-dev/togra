@@ -5,6 +5,7 @@ import { usePathname, useRouter, Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTranslations } from "next-intl";
 import { isAdmin, hasObairAccess, hasComadAccess } from "@/lib/auth-api";
+import { useAppUrls } from "@/contexts/AppUrlsContext";
 import TograIcon from "@/components/TograIcon";
 import MyDetailsModal from "@/components/MyDetailsModal";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
@@ -34,10 +35,9 @@ export default function Nav() {
   const router = useRouter();
   const { user, token, roles, isLoading, logout } = useAuth();
   const userIsAdmin = isAdmin(token);
-  const obairUrl = process.env.NEXT_PUBLIC_OBAIR_URL ?? "";
-  const damUrl = process.env.NEXT_PUBLIC_DAM_URL ?? "";
+  const { obairUrl, damBrowserUrl } = useAppUrls();
   const showObair = !!obairUrl && hasObairAccess(token);
-  const showComad = !!damUrl && hasComadAccess(token);
+  const showComad = !!damBrowserUrl && hasComadAccess(token);
 
   const obairWindowRef = useRef<Window | null>(null);
   const comadWindowRef = useRef<Window | null>(null);
@@ -106,6 +106,9 @@ export default function Nav() {
                 <Link href="/projects" className={navLink("/projects")}>
                   {t("projects")}
                 </Link>
+                <Link href="/decisions" className={navLink("/decisions")}>
+                  {t("myDecisions")}
+                </Link>
 
                 {(showObair || showComad) && (
                   <div className="flex items-center gap-1 pl-3 border-l border-slate-200">
@@ -123,7 +126,7 @@ export default function Nav() {
                     {showComad && (
                       <button
                         type="button"
-                        onClick={() => openApp(comadWindowRef, ssoUrl(damUrl))}
+                        onClick={() => openApp(comadWindowRef, ssoUrl(damBrowserUrl))}
                         title="Open Comad (DAM)"
                         className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-100 px-2 py-1.5 rounded-lg transition-colors"
                       >

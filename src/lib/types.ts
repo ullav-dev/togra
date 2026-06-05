@@ -148,6 +148,8 @@ export interface Task {
   canvas_x: number | null;
   canvas_y: number | null;
   effort: number | null;
+  decision_outcome: string | null;
+  decision_input_port: string | null;
 }
 
 export interface TaskLink {

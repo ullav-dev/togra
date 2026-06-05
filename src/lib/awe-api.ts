@@ -183,6 +183,15 @@ export const deleteTaskLink = (token: string, fromId: string, toId: string): Pro
 export const listTaskTeamRoles = (token: string, taskId: string): Promise<TaskTeamRole[]> =>
   apiRequest(`/tasks/${taskId}/team-roles`, token);
 
+export const listTaskOutgoingLinks = (token: string, taskId: string): Promise<TaskLink[]> =>
+  apiRequest(`/tasks/${taskId}/links`, token);
+
+export const decideTask = (token: string, taskId: string, branchLabel: string): Promise<Task> =>
+  apiRequest(`/tasks/${taskId}/decide`, token, {
+    method: "POST",
+    body: JSON.stringify({ branch_label: branchLabel }),
+  });
+
 export const assignTaskTeamRole = (token: string, taskId: string, teamRoleId: string): Promise<TaskTeamRole> =>
   apiRequest(`/tasks/${taskId}/team-roles`, token, {
     method: "POST",

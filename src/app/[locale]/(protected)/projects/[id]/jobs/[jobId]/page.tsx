@@ -4,9 +4,9 @@ import { useState, useEffect, useRef, use, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { getJob, listWorkflows, listTasks, updateTask, getTeam } from "@/lib/awe-api";
+import { getJob, listWorkflows, listTasks, updateTask, getTeam, listTaskOutgoingLinks, decideTask } from "@/lib/awe-api";
 import { getProject } from "@/lib/togra-api";
-import type { Job, Workflow, Task, Project, Status, TeamMember } from "@/lib/types";
+import type { Job, Workflow, Task, TaskLink, Project, Status, TeamMember } from "@/lib/types";
 import NotesPanel from "@/components/notes/NotesPanel";
 
 const TASK_COLUMNS: {
@@ -552,7 +552,8 @@ function SwimCell({
   function handleDrop(e: React.DragEvent) {
     e.preventDefault(); dragCounter.current = 0; setIsOver(false);
     const id = e.dataTransfer.getData("taskId");
-    if (id) onDrop(id);
+    const taskType = e.dataTransfer.getData("taskType");
+    if (id && taskType !== "automated") onDrop(id);
   }
 
   const cellClass = isOver
@@ -619,8 +620,12 @@ function TaskCard({
   const effortInputRef = useRef<HTMLInputElement>(null);
   const assignee = task.assigned_to ? teamMembers.find((m) => m.user.id === task.assigned_to) : null;
 
+  const isAutomated = task.task_type === "automated";
+  const isDecisionReady = task.task_type === "decision" && task.status === "Ready";
+
   function handleDragStart(e: React.DragEvent) {
     e.dataTransfer.setData("taskId", task.id);
+    e.dataTransfer.setData("taskType", task.task_type);
     e.dataTransfer.effectAllowed = "move";
     requestAnimationFrame(() => onDragStart(task.id));
   }
@@ -639,17 +644,27 @@ function TaskCard({
     if (newEffort !== task.effort) onEffortChange(newEffort ?? null);
   }
 
+  const cardBase = isAutomated
+    ? `bg-slate-50 rounded-md border-l-2 border border-slate-300 p-2 shadow-sm select-none transition-all cursor-default
+       ${task.status === "In Progress" ? "border-l-amber-400 animate-pulse-border" : "border-l-slate-400"}
+       ${isDraggingActive ? "opacity-70" : "hover:shadow-md hover:border-slate-400"}`
+    : isDecisionReady
+    ? `bg-white rounded-md border-2 border-indigo-300 p-2 shadow-sm select-none transition-all cursor-grab
+       ${isDragging ? "opacity-40 shadow-none cursor-grabbing"
+         : isDraggingActive ? "opacity-90"
+         : "hover:shadow-md hover:border-indigo-400"}`
+    : `bg-white rounded-md border p-2 shadow-sm select-none transition-all cursor-grab
+       ${isDragging ? "opacity-40 border-violet-300 shadow-none cursor-grabbing"
+         : isDraggingActive ? "border-slate-200 opacity-90"
+         : "border-slate-200 hover:shadow-md hover:border-violet-200"}`;
+
   return (
     <div
-      draggable
-      onDragStart={handleDragStart}
-      onDragEnd={onDragEnd}
+      draggable={!isAutomated}
+      onDragStart={isAutomated ? undefined : handleDragStart}
+      onDragEnd={isAutomated ? undefined : onDragEnd}
       onClick={onOpen}
-      className={`bg-white rounded-md border p-2 shadow-sm select-none transition-all cursor-grab
-        ${isDragging ? "opacity-40 border-violet-300 shadow-none cursor-grabbing"
-          : isDraggingActive ? "border-slate-200 opacity-90"
-          : "border-slate-200 hover:shadow-md hover:border-violet-200"
-        }`}
+      className={cardBase}
     >
       {/* Story name (member mode) */}
       {showStoryName && storyName && (
@@ -658,7 +673,7 @@ function TaskCard({
 
       {/* Task name + badges row */}
       <div className="flex items-start gap-1 mb-1.5">
-        <p className="flex-1 text-xs font-medium text-slate-700 leading-snug">{task.name}</p>
+        <p className={`flex-1 text-xs font-medium leading-snug ${isAutomated ? "text-slate-500" : "text-slate-700"}`}>{task.name}</p>
         <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
           {task.is_start && (
             <span title="Start task" className="w-3.5 h-3.5 rounded-full bg-emerald-100 flex items-center justify-center">
@@ -673,10 +688,17 @@ function TaskCard({
             </span>
           )}
           {task.task_type === "decision" && (
-            <span title="Decision" className="text-[9px] px-1 py-0.5 rounded bg-indigo-100 text-indigo-700 font-semibold leading-none">D</span>
+            <span title="Decision" className="text-[9px] px-1 py-0.5 rounded bg-indigo-100 text-indigo-700 font-semibold leading-none">
+              {isDecisionReady ? "⬦ Decide" : "D"}
+            </span>
           )}
           {task.task_type === "automated" && (
-            <span title="Automated" className="text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold leading-none">A</span>
+            <span title="Automated — system managed" className="text-[9px] px-1 py-0.5 rounded bg-slate-200 text-slate-500 font-semibold leading-none flex items-center gap-0.5">
+              <svg viewBox="0 0 12 12" fill="currentColor" className="w-2 h-2">
+                <path d="M6 0a6 6 0 1 1 0 12A6 6 0 0 1 6 0Zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0 1.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Zm0 1a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"/>
+              </svg>
+              Auto
+            </span>
           )}
           {task.task_type === "loop_block" && (
             <span title="Loop" className="text-[9px] px-1 py-0.5 rounded bg-rose-100 text-rose-700 font-semibold leading-none">L</span>
@@ -746,6 +768,8 @@ function TaskDetailModal({
   const [draftStatus, setDraftStatus] = useState<Status>(task.status);
   const [draftEffort, setDraftEffort] = useState<string>(task.effort != null ? String(task.effort) : "");
   const [saving, setSaving] = useState(false);
+  const [deciding, setDeciding] = useState(false);
+  const [decisionLinks, setDecisionLinks] = useState<TaskLink[]>([]);
   const [activeTab, setActiveTab] = useState<"details" | "notes">("details");
   const [modalSize, setModalSize] = useState({ w: 640, h: 580 });
   const resizeRef = useRef<{ dir: string; x0: number; y0: number; w0: number; h0: number } | null>(null);
@@ -759,6 +783,12 @@ function TaskDetailModal({
     setDraftEffort(task.effort != null ? String(task.effort) : "");
     setActiveTab("details");
   }, [task.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load outgoing links for decision tasks
+  useEffect(() => {
+    if (task.task_type !== "decision") return;
+    listTaskOutgoingLinks(token, task.id).then(setDecisionLinks).catch(() => {});
+  }, [task.id, task.task_type, token]);
 
   // Close on Escape
   useEffect(() => {
@@ -791,11 +821,12 @@ function TaskDetailModal({
     resizeRef.current = { dir, x0: e.clientX, y0: e.clientY, w0: modalSize.w, h0: modalSize.h };
   }
 
+  const isAutomatedTask = task.task_type === "automated";
   const isDirty =
     draftName.trim() !== task.name ||
     draftDesc.trim() !== (task.description ?? "") ||
     draftAssignee !== (task.assigned_to ?? null) ||
-    draftStatus !== task.status ||
+    (!isAutomatedTask && draftStatus !== task.status) ||
     (draftEffort.trim() === "" ? null : parseInt(draftEffort, 10)) !== task.effort;
 
   async function handleSave() {
@@ -805,13 +836,22 @@ function TaskDetailModal({
       if (draftName.trim() !== task.name) patch.name = draftName.trim();
       if (draftDesc.trim() !== (task.description ?? "")) patch.description = draftDesc.trim() || undefined;
       if (draftAssignee !== (task.assigned_to ?? null)) patch.assigned_to = draftAssignee;
-      if (draftStatus !== task.status) patch.status = draftStatus;
+      if (!isAutomatedTask && draftStatus !== task.status) patch.status = draftStatus;
       const parsedEffort = draftEffort.trim() === "" ? null : parseInt(draftEffort, 10);
       if (parsedEffort !== task.effort) patch.effort = parsedEffort;
       const updated = await updateTask(token, task.id, patch);
       onTaskUpdated(updated);
       onClose();
     } finally { setSaving(false); }
+  }
+
+  async function handleDecide(branchLabel: string) {
+    setDeciding(true);
+    try {
+      const updated = await decideTask(token, task.id, branchLabel);
+      onTaskUpdated(updated);
+      onClose();
+    } finally { setDeciding(false); }
   }
 
   function memberName(m: TeamMember) {
@@ -895,15 +935,21 @@ function TaskDetailModal({
           ) : (<>
           {/* Row: Status · Type · Start/End badges */}
           <div className="flex items-center gap-2 flex-wrap">
-            <select
-              value={draftStatus}
-              onChange={(e) => setDraftStatus(e.target.value as Status)}
-              className="text-xs font-medium border border-slate-200 rounded-full px-3 py-1 bg-white text-slate-700 outline-none focus:border-violet-400 cursor-pointer"
-            >
-              {(["Not Started", "Ready", "In Progress", "On Hold", "Complete", "Cancelled"] as Status[]).map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+            {task.task_type === "automated" ? (
+              <span className="text-xs font-medium border border-slate-200 rounded-full px-3 py-1 bg-slate-50 text-slate-500 cursor-default select-none" title="Automated tasks are managed by the system">
+                {task.status}
+              </span>
+            ) : (
+              <select
+                value={draftStatus}
+                onChange={(e) => setDraftStatus(e.target.value as Status)}
+                className="text-xs font-medium border border-slate-200 rounded-full px-3 py-1 bg-white text-slate-700 outline-none focus:border-violet-400 cursor-pointer"
+              >
+                {(["Not Started", "Ready", "In Progress", "On Hold", "Complete", "Cancelled"] as Status[]).map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            )}
             <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${typeBadge.cls}`}>{typeBadge.label}</span>
             {task.is_start && (
               <span className="flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">
@@ -914,7 +960,46 @@ function TaskDetailModal({
             {task.is_end && (
               <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">End</span>
             )}
+            {task.task_type === "automated" && (
+              <span className="text-xs text-slate-400 italic">System managed — cannot be moved manually</span>
+            )}
           </div>
+
+          {/* Decision UI — shown when task is a decision in Ready state */}
+          {task.task_type === "decision" && task.status === "Ready" && (
+            <div className="rounded-xl border-2 border-indigo-200 bg-indigo-50 p-4">
+              <p className="text-sm font-semibold text-indigo-800 mb-1">⬦ Decision required</p>
+              <p className="text-xs text-indigo-600 mb-3">Select the appropriate outcome to route this workflow:</p>
+              {decisionLinks.filter((l) => l.branch_label).length === 0 ? (
+                <p className="text-xs text-indigo-400 italic">No outgoing labels configured for this decision task.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {decisionLinks
+                    .filter((l) => l.branch_label)
+                    .map((l) => (
+                      <button
+                        key={l.branch_label}
+                        type="button"
+                        disabled={deciding}
+                        onClick={() => handleDecide(l.branch_label!)}
+                        className="px-4 py-2 rounded-lg bg-white border-2 border-indigo-300 text-sm font-semibold text-indigo-700
+                          hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {l.branch_label}
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Show recorded outcome for decided tasks */}
+          {task.task_type === "decision" && task.decision_outcome && (
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <span className="font-medium text-indigo-700">Decided:</span>
+              <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-semibold">{task.decision_outcome}</span>
+            </div>
+          )}
 
           {/* Row: Assignee · Effort */}
           <div className="grid grid-cols-2 gap-3">

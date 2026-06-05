@@ -7,9 +7,24 @@
   },
   "nav": {
     "projects": "Projects",
+    "myDecisions": "My Decisions",
     "signIn": "Sign in",
     "signOut": "Sign out",
     "myDetails": "My Details"
+  },
+  "decisions": {
+    "title": "My Decisions",
+    "subtitle": "Decision tasks awaiting your input",
+    "loading": "Loading decisions…",
+    "empty": "No pending decisions",
+    "emptySubtitle": "Any decision tasks assigned to you or your team roles will appear here.",
+    "viaRole": "via role",
+    "directlyAssigned": "assigned to you",
+    "decideHeading": "Choose an outcome:",
+    "noLabels": "No outcome labels configured.",
+    "deciding": "Deciding…",
+    "storyLabel": "Story",
+    "sprintLabel": "Sprint"
   },
   "idleWarning": {
     "title": "You've been idle",
