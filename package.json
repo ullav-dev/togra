@@ -1,6 +1,6 @@
 {
   "name": "togra",
-  "version": "0.2.0",
+  "version": "26.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3006 --webpack",
