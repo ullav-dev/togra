@@ -232,7 +232,7 @@ export default function SprintBoardPage({
                 const name = `${m.user.first_name ?? ""} ${m.user.last_name ?? ""}`.trim() || m.user.username;
                 const active = taskFilter === m.user.id;
                 return (
-                  <button key={m.user.id} type="button" title={name} onClick={() => setTaskFilter(active ? "all" : m.user.id)}
+                  <button key={m.user.id} type="button" onClick={() => setTaskFilter(active ? "all" : m.user.id)}
                     className={`rounded-full transition-all ${active ? "ring-2 ring-violet-500 ring-offset-1" : "opacity-60 hover:opacity-100"}`}>
                     <MemberAvatar member={m} size="sm" />
                   </button>
@@ -1139,24 +1139,29 @@ function MemberAvatar({ member, size = "sm" }: { member: TeamMember; size?: "sm"
   const label = `${member.user.first_name ?? ""} ${member.user.last_name ?? ""}`.trim() || member.user.username;
   const dim = size === "md" ? "w-7 h-7 text-[11px]" : "w-5 h-5 text-[9px]";
 
-  if (member.user.avatar_url && !broken) {
-    return (
-      <img
-        src={member.user.avatar_url}
-        alt={initials}
-        title={label}
-        className={`${dim} rounded-full object-cover shrink-0`}
-        onError={() => setBroken(true)}
-      />
-    );
-  }
-  return (
-    <span
-      title={label}
-      className={`${dim} rounded-full bg-violet-100 text-violet-700 font-semibold flex items-center justify-center select-none shrink-0`}
-    >
+  const avatar = (member.user.avatar_url && !broken) ? (
+    <img
+      src={member.user.avatar_url}
+      alt={initials}
+      className={`${dim} rounded-full object-cover`}
+      onError={() => setBroken(true)}
+    />
+  ) : (
+    <span className={`${dim} rounded-full bg-violet-100 text-violet-700 font-semibold flex items-center justify-center select-none`}>
       {initials}
     </span>
+  );
+
+  return (
+    <div className="relative group inline-flex shrink-0">
+      {avatar}
+      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+        <div className="rounded-md bg-slate-800 px-2 py-1 text-xs font-medium text-white whitespace-nowrap shadow-lg">
+          {label}
+        </div>
+        <div className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
+      </div>
+    </div>
   );
 }
 
