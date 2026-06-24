@@ -51,7 +51,14 @@ export default function SprintBoardPage({
   const [taskFilter, setTaskFilter] = useState<"all" | "mine" | string>("all");
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [selectedTaskCtx, setSelectedTaskCtx] = useState<{ task: Task; workflowId: string; storyName: string } | null>(null);
-  const [doneCollapsed, setDoneCollapsed] = useState(false);
+  const [collapsedColumns, setCollapsedColumns] = useState<Set<Status>>(new Set());
+  function toggleColumn(status: Status) {
+    setCollapsedColumns((prev) => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status); else next.add(status);
+      return next;
+    });
+  }
   const promotedRef = useRef(false);
 
   // Load project, job, stories, team
@@ -271,8 +278,8 @@ export default function SprintBoardPage({
               const colCount = totalTasks > 0
                 ? Object.values(storyTasks).flat().filter((t) => t.status === col.status).length
                 : 0;
-              const isDone = col.status === "Complete";
-              const isCollapsed = isDone && doneCollapsed;
+              const isCollapsible = col.status === "Not Started" || col.status === "Complete";
+              const isCollapsed = collapsedColumns.has(col.status);
               return (
                 <div
                   key={col.status}
@@ -286,14 +293,14 @@ export default function SprintBoardPage({
                           {colCount}
                         </span>
                       )}
-                      {isDone && (
+                      {isCollapsible && (
                         <button
                           type="button"
-                          onClick={() => setDoneCollapsed((v) => !v)}
-                          title={doneCollapsed ? "Show done tasks" : "Hide done tasks"}
-                          className={`transition-colors rounded p-0.5 ${doneCollapsed ? `${col.header} hover:opacity-70` : "text-slate-400 hover:text-slate-600"}`}
+                          onClick={() => toggleColumn(col.status)}
+                          title={isCollapsed ? `Show ${col.label} tasks` : `Hide ${col.label} tasks`}
+                          className={`transition-colors rounded p-0.5 ${isCollapsed ? `${col.header} hover:opacity-70` : "text-slate-400 hover:text-slate-600"}`}
                         >
-                          {doneCollapsed ? (
+                          {isCollapsed ? (
                             <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
                               <path d="M8 2C4.134 2 1 5.134 1 8s3.134 6 7 6 7-3.134 7-6-3.134-6-7-6ZM8 12.5A4.5 4.5 0 1 1 8 3.5a4.5 4.5 0 0 1 0 9Zm0-7.5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/>
                             </svg>
@@ -327,7 +334,7 @@ export default function SprintBoardPage({
                     projectId={projectId}
                     teamMembers={teamMembers}
                     columns={columns}
-                    doneCollapsed={doneCollapsed}
+                    collapsedColumns={collapsedColumns}
                     draggingTaskId={draggingTaskId}
                     onDragStart={setDraggingTaskId}
                     onDragEnd={() => setDraggingTaskId(null)}
@@ -353,7 +360,7 @@ export default function SprintBoardPage({
                   stories={stories}
                   teamMembers={teamMembers}
                   columns={columns}
-                  doneCollapsed={doneCollapsed}
+                  collapsedColumns={collapsedColumns}
                   draggingTaskId={draggingTaskId}
                   onDragStart={setDraggingTaskId}
                   onDragEnd={() => setDraggingTaskId(null)}
@@ -389,7 +396,7 @@ function StoryLane({
   projectId,
   teamMembers,
   columns,
-  doneCollapsed,
+  collapsedColumns,
   draggingTaskId,
   onDragStart,
   onDragEnd,
@@ -402,7 +409,7 @@ function StoryLane({
   projectId: string;
   teamMembers: TeamMember[];
   columns: (typeof TASK_COLUMNS[number] & { label: string })[];
-  doneCollapsed: boolean;
+  collapsedColumns: Set<Status>;
   draggingTaskId: string | null;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
@@ -448,7 +455,7 @@ function StoryLane({
           teamMembers={teamMembers}
           showStoryName={false}
           storyName={story.name}
-          collapsed={col.status === "Complete" && doneCollapsed}
+          collapsed={collapsedColumns.has(col.status)}
           draggingTaskId={draggingTaskId}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
@@ -469,7 +476,7 @@ function MemberLane({
   stories,
   teamMembers,
   columns,
-  doneCollapsed,
+  collapsedColumns,
   draggingTaskId,
   onDragStart,
   onDragEnd,
@@ -482,7 +489,7 @@ function MemberLane({
   stories: Workflow[];
   teamMembers: TeamMember[];
   columns: (typeof TASK_COLUMNS[number] & { label: string })[];
-  doneCollapsed: boolean;
+  collapsedColumns: Set<Status>;
   draggingTaskId: string | null;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
@@ -532,7 +539,7 @@ function MemberLane({
             showStoryName
             storyName=""
             storyNameMap={Object.fromEntries(colItems.map(({ task, storyName }) => [task.id, storyName]))}
-            collapsed={col.status === "Complete" && doneCollapsed}
+            collapsed={collapsedColumns.has(col.status)}
             draggingTaskId={draggingTaskId}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
