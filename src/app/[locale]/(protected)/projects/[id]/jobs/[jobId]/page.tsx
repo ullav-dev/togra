@@ -51,6 +51,7 @@ export default function SprintBoardPage({
   const [taskFilter, setTaskFilter] = useState<"all" | "mine" | string>("all");
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [selectedTaskCtx, setSelectedTaskCtx] = useState<{ task: Task; workflowId: string; storyName: string } | null>(null);
+  const [doneCollapsed, setDoneCollapsed] = useState(false);
   const promotedRef = useRef(false);
 
   // Load project, job, stories, team
@@ -266,21 +267,48 @@ export default function SprintBoardPage({
           {/* Column header row */}
           <div className="flex mb-1">
             <div className="w-48 shrink-0" />
-            {columns.map((col) => (
-              <div
-                key={col.status}
-                className={`w-56 shrink-0 mx-1 px-3 py-2 rounded-t-lg border-t border-x ${col.bg} ${col.border}`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className={`text-xs font-semibold uppercase tracking-wide ${col.header}`}>{col.label}</span>
-                  <span className="text-xs text-slate-400 font-medium">
-                    {totalTasks > 0
-                      ? Object.values(storyTasks).flat().filter((t) => t.status === col.status).length
-                      : ""}
-                  </span>
+            {columns.map((col) => {
+              const colCount = totalTasks > 0
+                ? Object.values(storyTasks).flat().filter((t) => t.status === col.status).length
+                : 0;
+              const isDone = col.status === "Complete";
+              const isCollapsed = isDone && doneCollapsed;
+              return (
+                <div
+                  key={col.status}
+                  className={`w-56 shrink-0 mx-1 px-3 py-2 rounded-t-lg border-t border-x ${col.bg} ${col.border}`}
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className={`text-xs font-semibold uppercase tracking-wide ${col.header}`}>{col.label}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {totalTasks > 0 && (
+                        <span className={`text-xs font-medium ${isCollapsed ? col.header : "text-slate-400"}`}>
+                          {colCount}
+                        </span>
+                      )}
+                      {isDone && (
+                        <button
+                          type="button"
+                          onClick={() => setDoneCollapsed((v) => !v)}
+                          title={doneCollapsed ? "Show done tasks" : "Hide done tasks"}
+                          className={`transition-colors rounded p-0.5 ${doneCollapsed ? `${col.header} hover:opacity-70` : "text-slate-400 hover:text-slate-600"}`}
+                        >
+                          {doneCollapsed ? (
+                            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                              <path d="M8 2C4.134 2 1 5.134 1 8s3.134 6 7 6 7-3.134 7-6-3.134-6-7-6ZM8 12.5A4.5 4.5 0 1 1 8 3.5a4.5 4.5 0 0 1 0 9Zm0-7.5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/>
+                            </svg>
+                          ) : (
+                            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                              <path d="M.143 2.31a.75.75 0 0 1 1.047-.167l14 10a.75.75 0 0 1-.88 1.214l-14-10A.75.75 0 0 1 .143 2.31ZM8 4.5a.75.75 0 0 0 0-1.5C5.134 3 2 5.67 2 8.5a.75.75 0 0 0 1.5 0C3.5 6.548 5.866 4.5 8 4.5ZM8 11.5a.75.75 0 0 0 0 1.5c2.866 0 6-2.67 6-5.5a.75.75 0 0 0-1.5 0c0 1.952-2.366 4-4.5 4Z"/>
+                            </svg>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Lanes */}
@@ -299,6 +327,7 @@ export default function SprintBoardPage({
                     projectId={projectId}
                     teamMembers={teamMembers}
                     columns={columns}
+                    doneCollapsed={doneCollapsed}
                     draggingTaskId={draggingTaskId}
                     onDragStart={setDraggingTaskId}
                     onDragEnd={() => setDraggingTaskId(null)}
@@ -324,6 +353,7 @@ export default function SprintBoardPage({
                   stories={stories}
                   teamMembers={teamMembers}
                   columns={columns}
+                  doneCollapsed={doneCollapsed}
                   draggingTaskId={draggingTaskId}
                   onDragStart={setDraggingTaskId}
                   onDragEnd={() => setDraggingTaskId(null)}
@@ -359,6 +389,7 @@ function StoryLane({
   projectId,
   teamMembers,
   columns,
+  doneCollapsed,
   draggingTaskId,
   onDragStart,
   onDragEnd,
@@ -371,6 +402,7 @@ function StoryLane({
   projectId: string;
   teamMembers: TeamMember[];
   columns: (typeof TASK_COLUMNS[number] & { label: string })[];
+  doneCollapsed: boolean;
   draggingTaskId: string | null;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
@@ -416,13 +448,13 @@ function StoryLane({
           teamMembers={teamMembers}
           showStoryName={false}
           storyName={story.name}
+          collapsed={col.status === "Complete" && doneCollapsed}
           draggingTaskId={draggingTaskId}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
           onDrop={(taskId) => onTaskStatusChange(taskId, story.id, col.status)}
           onTaskEffortChange={(taskId, effort) => onTaskEffortChange(taskId, story.id, effort)}
           onTaskOpen={onTaskOpen}
-
         />
       ))}
     </div>
@@ -437,6 +469,7 @@ function MemberLane({
   stories,
   teamMembers,
   columns,
+  doneCollapsed,
   draggingTaskId,
   onDragStart,
   onDragEnd,
@@ -449,6 +482,7 @@ function MemberLane({
   stories: Workflow[];
   teamMembers: TeamMember[];
   columns: (typeof TASK_COLUMNS[number] & { label: string })[];
+  doneCollapsed: boolean;
   draggingTaskId: string | null;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
@@ -498,6 +532,7 @@ function MemberLane({
             showStoryName
             storyName=""
             storyNameMap={Object.fromEntries(colItems.map(({ task, storyName }) => [task.id, storyName]))}
+            collapsed={col.status === "Complete" && doneCollapsed}
             draggingTaskId={draggingTaskId}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
@@ -521,6 +556,7 @@ function SwimCell({
   showStoryName,
   storyName,
   storyNameMap,
+  collapsed,
   draggingTaskId,
   onDragStart,
   onDragEnd,
@@ -535,6 +571,7 @@ function SwimCell({
   showStoryName: boolean;
   storyName: string;
   storyNameMap?: Record<string, string>;
+  collapsed?: boolean;
   draggingTaskId: string | null;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
@@ -556,6 +593,26 @@ function SwimCell({
     if (id && taskType !== "automated") onDrop(id);
   }
 
+  const dragHandlers = { onDragEnter: handleDragEnter, onDragLeave: handleDragLeave, onDragOver: handleDragOver, onDrop: handleDrop };
+
+  if (collapsed) {
+    const overClass = isOver ? `border-2 ${column.overBorder}` : `border ${column.bg} ${column.border}`;
+    return (
+      <div
+        className={`w-56 shrink-0 mx-1 rounded-b-lg rounded-tr-lg min-h-8 px-3 py-2 transition-colors flex items-center justify-center ${overClass}`}
+        {...dragHandlers}
+      >
+        {tasks.length > 0 ? (
+          <span className={`text-xs font-medium ${column.header} opacity-60`}>
+            {tasks.length} {tasks.length === 1 ? "task" : "tasks"} hidden
+          </span>
+        ) : (
+          isOver && <p className="text-xs text-center text-violet-400">{t("dropHere")}</p>
+        )}
+      </div>
+    );
+  }
+
   const cellClass = isOver
     ? `border-2 ${column.overBorder}`
     : `border ${column.bg} ${column.border}`;
@@ -563,10 +620,7 @@ function SwimCell({
   return (
     <div
       className={`w-56 shrink-0 mx-1 rounded-b-lg rounded-tr-lg min-h-16 p-1.5 space-y-1.5 transition-colors ${cellClass}`}
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
+      {...dragHandlers}
     >
       {tasks.map((task) => (
         <TaskCard
