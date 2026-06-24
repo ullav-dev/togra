@@ -9,6 +9,7 @@ import {
   useNodesState,
   useEdgesState,
   addEdge,
+  reconnectEdge,
   type Node,
   type Edge,
   type Connection,
@@ -167,6 +168,7 @@ function WorkflowCanvasInner({
   const [pendingConnection, setPendingConnection] = useState<PendingConnection | null>(null);
 
   const nodePositions = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const reconnectSuccessful = useRef(false);
 
   const layout = useMemo(() => {
     const l = autoLayout(tasks, links);
@@ -271,6 +273,58 @@ function WorkflowCanvasInner({
     void deleteTaskLink(token, fromId, toId).catch(() => {});
     setLinks((prev) => prev.filter((l) => !(l.from_task_id === fromId && l.to_task_id === toId)));
     setEdges((prev) => prev.filter((e) => e.id !== `${fromId}->${toId}`));
+  }
+
+  // ── Delete edges (keyboard shortcut or programmatic) ────────────────────────
+
+  function handleEdgesDelete(deletedEdges: Edge[]) {
+    for (const edge of deletedEdges) {
+      const parts = edge.id.split("->");
+      if (parts.length === 2) handleLinkRemoved(parts[0], parts[1]);
+    }
+  }
+
+  // ── Reconnect (drag edge endpoint to new target) ─────────────────────────────
+
+  function handleReconnectStart() {
+    reconnectSuccessful.current = false;
+  }
+
+  async function handleReconnect(oldEdge: Edge, newConnection: Connection) {
+    reconnectSuccessful.current = true;
+    const parts = oldEdge.id.split("->");
+    if (parts.length !== 2 || !newConnection.source || !newConnection.target) return;
+    const [oldFrom, oldTo] = parts;
+    const fromTask = tasks.find((t) => t.id === newConnection.source);
+    const toTask = tasks.find((t) => t.id === newConnection.target);
+    if (!fromTask || !toTask || newConnection.source === newConnection.target) return;
+
+    // Optimistic visual update
+    setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds));
+
+    // Remove old link
+    void deleteTaskLink(token, oldFrom, oldTo).catch(() => {});
+    setLinks((prev) => prev.filter((l) => !(l.from_task_id === oldFrom && l.to_task_id === oldTo)));
+
+    // Create new link — prompt for branch label if source is a decision node
+    if (fromTask.task_type === "decision") {
+      setPendingConnection({ connection: newConnection, fromTask, toTask });
+    } else {
+      const newLink = await createTaskLink(token, {
+        from_task_id: newConnection.source,
+        to_task_id: newConnection.target,
+        branch_label: null,
+      });
+      setLinks((prev) => [...prev, newLink]);
+    }
+  }
+
+  function handleReconnectEnd(_: MouseEvent | TouchEvent, edge: Edge) {
+    // If the user dropped the edge on empty canvas (no target), delete the connection
+    if (!reconnectSuccessful.current) {
+      const parts = edge.id.split("->");
+      if (parts.length === 2) handleLinkRemoved(parts[0], parts[1]);
+    }
   }
 
   // ── Branch label edit ───────────────────────────────────────────────────────
@@ -465,9 +519,14 @@ function WorkflowCanvasInner({
           onPaneClick={() => setSelectedTaskId(null)}
           onConnect={handleConnect}
           onNodeDragStop={handleNodeDragStop}
+          onEdgesDelete={handleEdgesDelete}
+          onReconnectStart={handleReconnectStart}
+          onReconnect={handleReconnect}
+          onReconnectEnd={handleReconnectEnd}
           fitView
           fitViewOptions={{ padding: 0.3 }}
-          deleteKeyCode={null}
+          deleteKeyCode={isEditMode ? "Backspace" : null}
+          edgesReconnectable={isEditMode}
           nodesDraggable={isEditMode}
           nodesConnectable={isEditMode}
           elementsSelectable={true}
