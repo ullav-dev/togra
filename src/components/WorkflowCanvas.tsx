@@ -18,12 +18,13 @@ import {
   ReactFlowProvider,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { updateTask, deleteTask, createTask, createTaskLink, deleteTaskLink } from "@/lib/awe-api";
-import type { Task, TaskLink, TeamMember, TeamRole, TaskTeamRole, WorkflowWithTasks, Status } from "@/lib/types";
+import { updateTask, deleteTask, createTask, createTaskLink, deleteTaskLink, instantiateWorkItem } from "@/lib/awe-api";
+import type { Task, TaskLink, TeamMember, TeamRole, TaskTeamRole, WorkflowWithTasks, Status, InstantiateWorkItemResponse } from "@/lib/types";
 import StoryTaskNode, { type StoryTaskNodeData } from "@/components/workflow/StoryTaskNode";
 import AddStepModal from "@/components/workflow/AddStepModal";
 import BranchLabelModal from "@/components/workflow/BranchLabelModal";
 import ImportTemplateModal from "@/components/workflow/ImportTemplateModal";
+import WorkItemPickerModal from "@/components/workflow/WorkItemPickerModal";
 import StepEditDrawer from "@/components/workflow/StepEditDrawer";
 
 const NODE_TYPES = { storyTaskNode: StoryTaskNode };
@@ -161,6 +162,7 @@ function WorkflowCanvasInner({
   // Modals
   const [showAddStep, setShowAddStep] = useState(false);
   const [showImportTemplate, setShowImportTemplate] = useState(false);
+  const [showWorkItemPicker, setShowWorkItemPicker] = useState(false);
   const [lastTaskType, setLastTaskType] = useState<"standard" | "decision" | "automated">("standard");
   const [pendingConnection, setPendingConnection] = useState<PendingConnection | null>(null);
 
@@ -292,6 +294,31 @@ function WorkflowCanvasInner({
     setTasks((prev) => [...prev, positioned]);
     setLocalTaskTeamRoles((prev) => ({ ...prev, [newTask.id]: [] }));
     setSelectedTaskId(newTask.id);
+  }
+
+  // ── Work item instantiation ─────────────────────────────────────────────────
+
+  function handleWorkItemInstantiated(result: InstantiateWorkItemResponse) {
+    const { primary_task, branch_tasks } = result;
+    const allNewTasks = [primary_task, ...branch_tasks.map((b) => b.task)];
+    setTasks((prev) => [...prev, ...allNewTasks]);
+    allNewTasks.forEach((t) => {
+      if (t.canvas_x != null && t.canvas_y != null) nodePositions.current.set(t.id, { x: t.canvas_x, y: t.canvas_y });
+    });
+    setLocalTaskTeamRoles((prev) => {
+      const next = { ...prev };
+      allNewTasks.forEach((t) => { next[t.id] = []; });
+      return next;
+    });
+    if (branch_tasks.length > 0) {
+      const newLinks: TaskLink[] = branch_tasks.map((b) => ({
+        from_task_id: primary_task.id,
+        to_task_id: b.task.id,
+        branch_label: b.label,
+      }));
+      setLinks((prev) => [...prev, ...newLinks]);
+    }
+    setSelectedTaskId(primary_task.id);
   }
 
   // ── Import template ─────────────────────────────────────────────────────────
@@ -496,6 +523,16 @@ function WorkflowCanvasInner({
                   </button>
                   <button
                     type="button"
+                    onClick={() => setShowWorkItemPicker(true)}
+                    className="inline-flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-violet-50 hover:border-violet-300 hover:text-violet-700 shadow-sm transition-colors"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                      <path d="M2 2.75A2.75 2.75 0 0 1 4.75 0h6.5A2.75 2.75 0 0 1 14 2.75v10.5A2.75 2.75 0 0 1 11.25 16h-6.5A2.75 2.75 0 0 1 2 13.25Zm2.75-1.25c-.69 0-1.25.56-1.25 1.25v10.5c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V2.75c0-.69-.56-1.25-1.25-1.25ZM8 4a.75.75 0 0 1 .75.75v2.5h2.5a.75.75 0 0 1 0 1.5h-2.5v2.5a.75.75 0 0 1-1.5 0v-2.5h-2.5a.75.75 0 0 1 0-1.5h2.5v-2.5A.75.75 0 0 1 8 4Z" />
+                    </svg>
+                    From Library
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => void handleAutoArrange()}
                     className="inline-flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 shadow-sm transition-colors"
                     title="Auto-arrange"
@@ -623,6 +660,15 @@ function WorkflowCanvasInner({
           token={token}
           onImport={handleImportTemplate}
           onClose={() => setShowImportTemplate(false)}
+        />
+      )}
+      {showWorkItemPicker && (
+        <WorkItemPickerModal
+          workflowId={workflow.id}
+          canvasCenter={screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 })}
+          token={token}
+          onInstantiated={handleWorkItemInstantiated}
+          onClose={() => setShowWorkItemPicker(false)}
         />
       )}
       {pendingConnection && (

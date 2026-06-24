@@ -158,6 +158,34 @@ export interface TaskLink {
   branch_label: string | null;
 }
 
+export interface WorkItem {
+  id: string;
+  name: string;
+  description: string | null;
+  task_type: string;
+  effort: number | null;
+  is_start: boolean;
+  is_end: boolean;
+  decision_input_port: string | null;
+  is_locked: boolean;
+  assigned_to: string | null;
+  team_id: string | null;
+  is_shared: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BranchTaskResult {
+  label: string;
+  task: Task;
+}
+
+export interface InstantiateWorkItemResponse {
+  primary_task: Task;
+  branch_tasks: BranchTaskResult[];
+}
+
 export interface TaskTeamRole {
   task_id: string;
   team_role_id: string;
