@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { createDamClient } from "./api";
-import type { Asset, Category, PickedAsset } from "./api";
+import type { Asset, AssetWithCategories, Category, PickedAsset } from "./api";
 import PickerTree from "./PickerTree";
 import PickerGrid from "./PickerGrid";
 
@@ -31,7 +31,7 @@ export interface DamPickerProps {
 export default function DamPicker({ apiBase, token, username, onSelect, onDragStart, filter }: DamPickerProps) {
   const client = useMemo(() => createDamClient(apiBase, token), [apiBase, token]);
 
-  const [assets, setAssets] = useState<Asset[]>([]);
+  const [assets, setAssets] = useState<AssetWithCategories[]>([]);
   const [assetCategories, setAssetCategories] = useState<Map<string, string[]>>(new Map());
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null | undefined>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -41,7 +41,6 @@ export default function DamPicker({ apiBase, token, username, onSelect, onDragSt
   const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const loadedAssetIds = useRef(new Set<string>());
   const visibleAssets = useMemo(() => (filter ? assets.filter(filter) : assets), [assets, filter]);
 
   // ── Resizable category panel ──────────────────────────────────────────────────
@@ -87,7 +86,6 @@ export default function DamPicker({ apiBase, token, username, onSelect, onDragSt
       setLoading(true);
     } else {
       setRefreshing(true);
-      loadedAssetIds.current = new Set();
     }
     setError(null);
 
@@ -95,7 +93,12 @@ export default function DamPicker({ apiBase, token, username, onSelect, onDragSt
       .then(([a, c]) => {
         if (cancelled) return;
         setAssets(a);
-        setAssetCategories(new Map());
+        // Build category map from the already-included categories on each asset
+        const catMap = new Map<string, string[]>();
+        for (const asset of a) {
+          catMap.set(asset.id, asset.categories.map((cat) => cat.id));
+        }
+        setAssetCategories(catMap);
         setCategories(c);
         setLoading(false);
         setRefreshing(false);
@@ -109,53 +112,6 @@ export default function DamPicker({ apiBase, token, username, onSelect, onDragSt
 
     return () => { cancelled = true; };
   }, [client, refreshKey]);
-
-  // ── Background lazy-load asset→category mappings ─────────────────────────────
-
-  useEffect(() => {
-    if (assets.length === 0) return;
-    let cancelled = false;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-
-    async function loadCats(retryCount = 0): Promise<void> {
-      const toLoad = assets.filter((a) => !loadedAssetIds.current.has(a.id));
-      if (toLoad.length === 0 || cancelled) return;
-
-      for (let i = 0; i < toLoad.length; i += 5) {
-        if (cancelled) return;
-        const chunk = toLoad.slice(i, i + 5);
-        await Promise.all(
-          chunk.map(async (asset) => {
-            if (loadedAssetIds.current.has(asset.id)) return;
-            try {
-              const full = await client.getAsset(asset.id);
-              if (cancelled) return;
-              loadedAssetIds.current.add(asset.id);
-              const catIds = full.categories.map((c) => c.id);
-              setAssetCategories((prev) => {
-                const next = new Map(prev);
-                next.set(asset.id, catIds);
-                return next;
-              });
-            } catch {
-              // Not marked as loaded — will retry below (up to 2 more times)
-            }
-          })
-        );
-      }
-
-      // Retry failed assets after a delay (up to 2 retries total)
-      if (!cancelled && retryCount < 2 && assets.some((a) => !loadedAssetIds.current.has(a.id))) {
-        retryTimer = setTimeout(() => { if (!cancelled) loadCats(retryCount + 1); }, 3000);
-      }
-    }
-
-    loadCats();
-    return () => {
-      cancelled = true;
-      if (retryTimer) clearTimeout(retryTimer);
-    };
-  }, [assets, client]);
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 

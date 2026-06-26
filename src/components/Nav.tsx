@@ -12,6 +12,7 @@ import MyDetailsModal from "@/components/MyDetailsModal";
 import AboutModal from "@/components/AboutModal";
 import AiSettingsModal from "@/components/research/AiSettingsModal";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
+import TeamSelector from "@/components/TeamSelector";
 
 function NavAvatar({ url, initials }: { url?: string | null; initials: string }) {
   const [broken, setBroken] = useState(false);
@@ -148,6 +149,8 @@ export default function Nav() {
                     <span className="truncate">{currentProject.name}</span>
                   </Link>
                 )}
+
+                <TeamSelector />
 
                 {(showObair || showComad) && (
                   <div className="flex items-center gap-1 pl-3 border-l border-slate-200">

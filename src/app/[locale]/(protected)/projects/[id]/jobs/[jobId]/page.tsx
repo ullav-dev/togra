@@ -54,6 +54,14 @@ export default function SprintBoardPage({
   const [taskFilter, setTaskFilter] = useState<"all" | "mine" | string>("all");
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [selectedTaskCtx, setSelectedTaskCtx] = useState<{ task: Task; workflowId: string; storyName: string } | null>(null);
+  const [collapsedColumns, setCollapsedColumns] = useState<Set<Status>>(new Set());
+  function toggleColumn(status: Status) {
+    setCollapsedColumns((prev) => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status); else next.add(status);
+      return next;
+    });
+  }
   const promotedRef = useRef(false);
   const { setCurrentProject } = useCurrentProject();
 
@@ -229,7 +237,7 @@ export default function SprintBoardPage({
                 const name = `${m.user.first_name ?? ""} ${m.user.last_name ?? ""}`.trim() || m.user.username;
                 const active = taskFilter === m.user.id;
                 return (
-                  <button key={m.user.id} type="button" title={name} onClick={() => setTaskFilter(active ? "all" : m.user.id)}
+                  <button key={m.user.id} type="button" onClick={() => setTaskFilter(active ? "all" : m.user.id)}
                     className={`rounded-full transition-all ${active ? "ring-2 ring-violet-500 ring-offset-1" : "opacity-60 hover:opacity-100"}`}>
                     <MemberAvatar member={m} size="sm" />
                   </button>
@@ -286,21 +294,48 @@ export default function SprintBoardPage({
           {/* Column header row */}
           <div className="flex mb-1">
             <div className="w-48 shrink-0" />
-            {columns.map((col) => (
-              <div
-                key={col.status}
-                className={`w-56 shrink-0 mx-1 px-3 py-2 rounded-t-lg border-t border-x ${col.bg} ${col.border}`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className={`text-xs font-semibold uppercase tracking-wide ${col.header}`}>{col.label}</span>
-                  <span className="text-xs text-slate-400 font-medium">
-                    {totalTasks > 0
-                      ? Object.values(storyTasks).flat().filter((t) => t.status === col.status).length
-                      : ""}
-                  </span>
+            {columns.map((col) => {
+              const colCount = totalTasks > 0
+                ? Object.values(storyTasks).flat().filter((t) => t.status === col.status).length
+                : 0;
+              const isCollapsible = col.status === "Not Started" || col.status === "Complete";
+              const isCollapsed = collapsedColumns.has(col.status);
+              return (
+                <div
+                  key={col.status}
+                  className={`w-56 shrink-0 mx-1 px-3 py-2 rounded-t-lg border-t border-x ${col.bg} ${col.border}`}
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className={`text-xs font-semibold uppercase tracking-wide ${col.header}`}>{col.label}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {totalTasks > 0 && (
+                        <span className={`text-xs font-medium ${isCollapsed ? col.header : "text-slate-400"}`}>
+                          {colCount}
+                        </span>
+                      )}
+                      {isCollapsible && (
+                        <button
+                          type="button"
+                          onClick={() => toggleColumn(col.status)}
+                          title={isCollapsed ? `Show ${col.label} tasks` : `Hide ${col.label} tasks`}
+                          className={`transition-colors rounded p-0.5 ${isCollapsed ? `${col.header} hover:opacity-70` : "text-slate-400 hover:text-slate-600"}`}
+                        >
+                          {isCollapsed ? (
+                            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                              <path d="M8 2C4.134 2 1 5.134 1 8s3.134 6 7 6 7-3.134 7-6-3.134-6-7-6ZM8 12.5A4.5 4.5 0 1 1 8 3.5a4.5 4.5 0 0 1 0 9Zm0-7.5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/>
+                            </svg>
+                          ) : (
+                            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                              <path d="M.143 2.31a.75.75 0 0 1 1.047-.167l14 10a.75.75 0 0 1-.88 1.214l-14-10A.75.75 0 0 1 .143 2.31ZM8 4.5a.75.75 0 0 0 0-1.5C5.134 3 2 5.67 2 8.5a.75.75 0 0 0 1.5 0C3.5 6.548 5.866 4.5 8 4.5ZM8 11.5a.75.75 0 0 0 0 1.5c2.866 0 6-2.67 6-5.5a.75.75 0 0 0-1.5 0c0 1.952-2.366 4-4.5 4Z"/>
+                            </svg>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Lanes */}
@@ -319,6 +354,7 @@ export default function SprintBoardPage({
                     projectId={projectId}
                     teamMembers={teamMembers}
                     columns={columns}
+                    collapsedColumns={collapsedColumns}
                     draggingTaskId={draggingTaskId}
                     onDragStart={setDraggingTaskId}
                     onDragEnd={() => setDraggingTaskId(null)}
@@ -344,6 +380,7 @@ export default function SprintBoardPage({
                   stories={stories}
                   teamMembers={teamMembers}
                   columns={columns}
+                  collapsedColumns={collapsedColumns}
                   draggingTaskId={draggingTaskId}
                   onDragStart={setDraggingTaskId}
                   onDragEnd={() => setDraggingTaskId(null)}
@@ -396,6 +433,7 @@ function StoryLane({
   projectId,
   teamMembers,
   columns,
+  collapsedColumns,
   draggingTaskId,
   onDragStart,
   onDragEnd,
@@ -408,6 +446,7 @@ function StoryLane({
   projectId: string;
   teamMembers: TeamMember[];
   columns: (typeof TASK_COLUMNS[number] & { label: string })[];
+  collapsedColumns: Set<Status>;
   draggingTaskId: string | null;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
@@ -453,13 +492,13 @@ function StoryLane({
           teamMembers={teamMembers}
           showStoryName={false}
           storyName={story.name}
+          collapsed={collapsedColumns.has(col.status)}
           draggingTaskId={draggingTaskId}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
           onDrop={(taskId) => onTaskStatusChange(taskId, story.id, col.status)}
           onTaskEffortChange={(taskId, effort) => onTaskEffortChange(taskId, story.id, effort)}
           onTaskOpen={onTaskOpen}
-
         />
       ))}
     </div>
@@ -474,6 +513,7 @@ function MemberLane({
   stories,
   teamMembers,
   columns,
+  collapsedColumns,
   draggingTaskId,
   onDragStart,
   onDragEnd,
@@ -486,6 +526,7 @@ function MemberLane({
   stories: Workflow[];
   teamMembers: TeamMember[];
   columns: (typeof TASK_COLUMNS[number] & { label: string })[];
+  collapsedColumns: Set<Status>;
   draggingTaskId: string | null;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
@@ -535,6 +576,7 @@ function MemberLane({
             showStoryName
             storyName=""
             storyNameMap={Object.fromEntries(colItems.map(({ task, storyName }) => [task.id, storyName]))}
+            collapsed={collapsedColumns.has(col.status)}
             draggingTaskId={draggingTaskId}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
@@ -558,6 +600,7 @@ function SwimCell({
   showStoryName,
   storyName,
   storyNameMap,
+  collapsed,
   draggingTaskId,
   onDragStart,
   onDragEnd,
@@ -572,6 +615,7 @@ function SwimCell({
   showStoryName: boolean;
   storyName: string;
   storyNameMap?: Record<string, string>;
+  collapsed?: boolean;
   draggingTaskId: string | null;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
@@ -593,6 +637,26 @@ function SwimCell({
     if (id && taskType !== "automated") onDrop(id);
   }
 
+  const dragHandlers = { onDragEnter: handleDragEnter, onDragLeave: handleDragLeave, onDragOver: handleDragOver, onDrop: handleDrop };
+
+  if (collapsed) {
+    const overClass = isOver ? `border-2 ${column.overBorder}` : `border ${column.bg} ${column.border}`;
+    return (
+      <div
+        className={`w-56 shrink-0 mx-1 rounded-b-lg rounded-tr-lg min-h-8 px-3 py-2 transition-colors flex items-center justify-center ${overClass}`}
+        {...dragHandlers}
+      >
+        {tasks.length > 0 ? (
+          <span className={`text-xs font-medium ${column.header} opacity-60`}>
+            {tasks.length} {tasks.length === 1 ? "task" : "tasks"} hidden
+          </span>
+        ) : (
+          isOver && <p className="text-xs text-center text-violet-400">{t("dropHere")}</p>
+        )}
+      </div>
+    );
+  }
+
   const cellClass = isOver
     ? `border-2 ${column.overBorder}`
     : `border ${column.bg} ${column.border}`;
@@ -600,10 +664,7 @@ function SwimCell({
   return (
     <div
       className={`w-56 shrink-0 mx-1 rounded-b-lg rounded-tr-lg min-h-16 p-1.5 space-y-1.5 transition-colors ${cellClass}`}
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
+      {...dragHandlers}
     >
       {tasks.map((task) => (
         <TaskCard
@@ -1115,24 +1176,29 @@ function MemberAvatar({ member, size = "sm" }: { member: TeamMember; size?: "sm"
   const label = `${member.user.first_name ?? ""} ${member.user.last_name ?? ""}`.trim() || member.user.username;
   const dim = size === "md" ? "w-7 h-7 text-[11px]" : "w-5 h-5 text-[9px]";
 
-  if (member.user.avatar_url && !broken) {
-    return (
-      <img
-        src={member.user.avatar_url}
-        alt={initials}
-        title={label}
-        className={`${dim} rounded-full object-cover shrink-0`}
-        onError={() => setBroken(true)}
-      />
-    );
-  }
-  return (
-    <span
-      title={label}
-      className={`${dim} rounded-full bg-violet-100 text-violet-700 font-semibold flex items-center justify-center select-none shrink-0`}
-    >
+  const avatar = (member.user.avatar_url && !broken) ? (
+    <img
+      src={member.user.avatar_url}
+      alt={initials}
+      className={`${dim} rounded-full object-cover`}
+      onError={() => setBroken(true)}
+    />
+  ) : (
+    <span className={`${dim} rounded-full bg-violet-100 text-violet-700 font-semibold flex items-center justify-center select-none`}>
       {initials}
     </span>
+  );
+
+  return (
+    <div className="relative group inline-flex shrink-0">
+      {avatar}
+      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+        <div className="rounded-md bg-slate-800 px-2 py-1 text-xs font-medium text-white whitespace-nowrap shadow-lg">
+          {label}
+        </div>
+        <div className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
+      </div>
+    </div>
   );
 }
 

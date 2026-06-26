@@ -120,7 +120,8 @@
       "creating": "Creating…",
       "create": "Create",
       "error": "Failed to create project"
-    }
+    },
+    "filteredSubtitle": "Projects in {team}"
   },
   "project": {
     "loading": "Loading…",
@@ -381,22 +382,74 @@
       "noData": "No data for selected period"
     },
     "catalog": {
-      "sprint_progress_gauge":      { "title": "Sprint Progress",       "description": "Completion % and days remaining for the active sprint" },
-      "burndown_chart":             { "title": "Burndown",              "description": "Remaining story points vs ideal line" },
-      "velocity_chart":             { "title": "Velocity",              "description": "Story points delivered per sprint with rolling average" },
-      "sprint_completion_rate":     { "title": "Sprint Completion Rate","description": "Planned vs delivered stories per sprint" },
-      "cumulative_flow_diagram":    { "title": "Cumulative Flow",       "description": "Task count per status over time" },
-      "throughput_chart":           { "title": "Throughput",            "description": "Tasks completed per week" },
-      "cycle_time_scatter":         { "title": "Cycle Time",            "description": "Days from in-progress to done per task" },
-      "lead_time_distribution":     { "title": "Lead Time",             "description": "Days from task creation to completion" },
-      "workflow_step_timing":       { "title": "Step Timing",           "description": "Average and p85 time spent in each workflow step" },
-      "workflow_funnel":            { "title": "Workflow Funnel",       "description": "Tasks entering vs completing each workflow step" },
-      "story_aging_heatmap":        { "title": "Story Aging",           "description": "Open stories by step, coloured by days in current state" },
-      "team_load_chart":            { "title": "Team Load",             "description": "Assigned vs completed story points per team member" },
-      "task_role_distribution":     { "title": "Role Distribution",     "description": "Open tasks by assignee" },
-      "member_throughput_sparklines":{ "title": "Member Throughput",    "description": "Weekly completions per team member" },
-      "ideas_funnel":               { "title": "Ideas Funnel",          "description": "Ideas created, promoted to stories, and completed" },
-      "idea_age_distribution":      { "title": "Idea Age",              "description": "Days from idea creation to promotion or archive" }
+      "sprint_progress_gauge": {
+        "title": "Sprint Progress",
+        "description": "Completion % and days remaining for the active sprint"
+      },
+      "burndown_chart": {
+        "title": "Burndown",
+        "description": "Remaining story points vs ideal line"
+      },
+      "velocity_chart": {
+        "title": "Velocity",
+        "description": "Story points delivered per sprint with rolling average"
+      },
+      "sprint_completion_rate": {
+        "title": "Sprint Completion Rate",
+        "description": "Planned vs delivered stories per sprint"
+      },
+      "cumulative_flow_diagram": {
+        "title": "Cumulative Flow",
+        "description": "Task count per status over time"
+      },
+      "throughput_chart": {
+        "title": "Throughput",
+        "description": "Tasks completed per week"
+      },
+      "cycle_time_scatter": {
+        "title": "Cycle Time",
+        "description": "Days from in-progress to done per task"
+      },
+      "lead_time_distribution": {
+        "title": "Lead Time",
+        "description": "Days from task creation to completion"
+      },
+      "workflow_step_timing": {
+        "title": "Step Timing",
+        "description": "Average and p85 time spent in each workflow step"
+      },
+      "workflow_funnel": {
+        "title": "Workflow Funnel",
+        "description": "Tasks entering vs completing each workflow step"
+      },
+      "story_aging_heatmap": {
+        "title": "Story Aging",
+        "description": "Open stories by step, coloured by days in current state"
+      },
+      "team_load_chart": {
+        "title": "Team Load",
+        "description": "Assigned vs completed story points per team member"
+      },
+      "task_role_distribution": {
+        "title": "Role Distribution",
+        "description": "Open tasks by assignee"
+      },
+      "member_throughput_sparklines": {
+        "title": "Member Throughput",
+        "description": "Weekly completions per team member"
+      },
+      "ideas_funnel": {
+        "title": "Ideas Funnel",
+        "description": "Ideas created, promoted to stories, and completed"
+      },
+      "idea_age_distribution": {
+        "title": "Idea Age",
+        "description": "Days from idea creation to promotion or archive"
+      }
     }
+  },
+  "teamSelector": {
+    "switchTeam": "Switch team",
+    "selectTeam": "Select team"
   }
 }

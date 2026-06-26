@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTeam } from "@/contexts/TeamContext";
 import { useTranslations } from "next-intl";
 import { listProjects, createProjectWithBacklog, updateProject, deleteProject } from "@/lib/togra-api";
 import { getMyTeams, getTeam } from "@/lib/awe-api";
@@ -14,11 +15,16 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 
 export default function ProjectsPage() {
   const { token } = useAuth();
+  const { activeTeam } = useTeam();
   const t = useTranslations("projects");
   const [projects, setProjects] = useState<Project[]>([]);
   const [teams, setTeams] = useState<TeamSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+
+  const visibleProjects = activeTeam
+    ? projects.filter((p) => p.team_id === activeTeam.id)
+    : projects;
 
   useEffect(() => {
     if (!token) return;
@@ -55,7 +61,9 @@ export default function ProjectsPage() {
           <TograIcon className="w-9 h-9" />
           <div>
             <h1 className="text-2xl font-bold text-slate-800">{t("title")}</h1>
-            <p className="text-sm text-slate-500">{t("subtitle")}</p>
+            <p className="text-sm text-slate-500">
+              {activeTeam ? t("filteredSubtitle", { team: activeTeam.name }) : t("subtitle")}
+            </p>
           </div>
         </div>
         <button
@@ -70,11 +78,11 @@ export default function ProjectsPage() {
 
       {loading ? (
         <div className="text-slate-400 text-sm">{t("loading")}</div>
-      ) : projects.length === 0 ? (
+      ) : visibleProjects.length === 0 ? (
         <EmptyState onCreate={() => setShowCreate(true)} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {projects.map((p) => (
+          {visibleProjects.map((p) => (
             <ProjectCard key={p.id} project={p} onRename={onProjectRenamed} onDelete={onProjectDeleted} />
           ))}
         </div>
@@ -84,6 +92,7 @@ export default function ProjectsPage() {
         <CreateProjectModal
           teams={teams}
           token={token!}
+          defaultTeamId={activeTeam?.id}
           onCreated={onProjectCreated}
           onClose={() => setShowCreate(false)}
         />
@@ -196,18 +205,22 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
 function CreateProjectModal({
   teams,
   token,
+  defaultTeamId,
   onCreated,
   onClose,
 }: {
   teams: TeamSummary[];
   token: string;
+  defaultTeamId?: string;
   onCreated: (p: Project) => void;
   onClose: () => void;
 }) {
   const t = useTranslations("projects");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [teamId, setTeamId] = useState(teams.length === 1 ? teams[0].id : "");
+  const [teamId, setTeamId] = useState(
+    defaultTeamId ?? (teams.length === 1 ? teams[0].id : "")
+  );
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [pmId, setPmId] = useState("");
   const [loadingMembers, setLoadingMembers] = useState(false);

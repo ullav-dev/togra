@@ -120,7 +120,8 @@
       "creating": "Wird erstellt…",
       "create": "Erstellen",
       "error": "Projekt konnte nicht erstellt werden"
-    }
+    },
+    "filteredSubtitle": "Projekte in {team}"
   },
   "project": {
     "loading": "Wird geladen…",
@@ -381,22 +382,74 @@
       "noData": "Keine Daten für den ausgewählten Zeitraum"
     },
     "catalog": {
-      "sprint_progress_gauge":       { "title": "Sprint-Fortschritt",      "description": "Fertigstellungsgrad und verbleibende Tage" },
-      "burndown_chart":              { "title": "Burndown",                "description": "Verbleibende Story-Punkte vs. Ideallinie" },
-      "velocity_chart":              { "title": "Velocity",                "description": "Story-Punkte pro Sprint mit gleitendem Durchschnitt" },
-      "sprint_completion_rate":      { "title": "Sprint-Abschlussrate",    "description": "Geplante vs. gelieferte Stories pro Sprint" },
-      "cumulative_flow_diagram":     { "title": "Kumulativer Fluss",       "description": "Aufgabenanzahl pro Status über die Zeit" },
-      "throughput_chart":            { "title": "Durchsatz",               "description": "Abgeschlossene Aufgaben pro Woche" },
-      "cycle_time_scatter":          { "title": "Zykluszeit",              "description": "Tage von In-Bearbeitung bis Fertig pro Aufgabe" },
-      "lead_time_distribution":      { "title": "Vorlaufzeit",             "description": "Tage von Erstellung bis Abschluss" },
-      "workflow_step_timing":        { "title": "Schrittzeiten",           "description": "Durchschnittliche und p85-Zeit pro Workflow-Schritt" },
-      "workflow_funnel":             { "title": "Workflow-Trichter",       "description": "Eingehende vs. abgeschlossene Aufgaben pro Schritt" },
-      "story_aging_heatmap":         { "title": "Story-Alterung",          "description": "Offene Stories nach Schritt, farblich nach Alter" },
-      "team_load_chart":             { "title": "Team-Auslastung",         "description": "Geplante vs. abgeschlossene Punkte pro Mitglied" },
-      "task_role_distribution":      { "title": "Rollenverteilung",        "description": "Offene Aufgaben nach Bearbeiter" },
-      "member_throughput_sparklines":{ "title": "Mitglieder-Durchsatz",    "description": "Wöchentliche Abschlüsse pro Teammitglied" },
-      "ideas_funnel":                { "title": "Ideen-Trichter",          "description": "Ideen erstellt, gefördert und abgeschlossen" },
-      "idea_age_distribution":       { "title": "Ideenalter",              "description": "Tage von Ideenerstellung bis Förderung" }
+      "sprint_progress_gauge": {
+        "title": "Sprint-Fortschritt",
+        "description": "Fertigstellungsgrad und verbleibende Tage"
+      },
+      "burndown_chart": {
+        "title": "Burndown",
+        "description": "Verbleibende Story-Punkte vs. Ideallinie"
+      },
+      "velocity_chart": {
+        "title": "Velocity",
+        "description": "Story-Punkte pro Sprint mit gleitendem Durchschnitt"
+      },
+      "sprint_completion_rate": {
+        "title": "Sprint-Abschlussrate",
+        "description": "Geplante vs. gelieferte Stories pro Sprint"
+      },
+      "cumulative_flow_diagram": {
+        "title": "Kumulativer Fluss",
+        "description": "Aufgabenanzahl pro Status über die Zeit"
+      },
+      "throughput_chart": {
+        "title": "Durchsatz",
+        "description": "Abgeschlossene Aufgaben pro Woche"
+      },
+      "cycle_time_scatter": {
+        "title": "Zykluszeit",
+        "description": "Tage von In-Bearbeitung bis Fertig pro Aufgabe"
+      },
+      "lead_time_distribution": {
+        "title": "Vorlaufzeit",
+        "description": "Tage von Erstellung bis Abschluss"
+      },
+      "workflow_step_timing": {
+        "title": "Schrittzeiten",
+        "description": "Durchschnittliche und p85-Zeit pro Workflow-Schritt"
+      },
+      "workflow_funnel": {
+        "title": "Workflow-Trichter",
+        "description": "Eingehende vs. abgeschlossene Aufgaben pro Schritt"
+      },
+      "story_aging_heatmap": {
+        "title": "Story-Alterung",
+        "description": "Offene Stories nach Schritt, farblich nach Alter"
+      },
+      "team_load_chart": {
+        "title": "Team-Auslastung",
+        "description": "Geplante vs. abgeschlossene Punkte pro Mitglied"
+      },
+      "task_role_distribution": {
+        "title": "Rollenverteilung",
+        "description": "Offene Aufgaben nach Bearbeiter"
+      },
+      "member_throughput_sparklines": {
+        "title": "Mitglieder-Durchsatz",
+        "description": "Wöchentliche Abschlüsse pro Teammitglied"
+      },
+      "ideas_funnel": {
+        "title": "Ideen-Trichter",
+        "description": "Ideen erstellt, gefördert und abgeschlossen"
+      },
+      "idea_age_distribution": {
+        "title": "Ideenalter",
+        "description": "Tage von Ideenerstellung bis Förderung"
+      }
     }
+  },
+  "teamSelector": {
+    "switchTeam": "Team wechseln",
+    "selectTeam": "Team auswählen"
   }
 }
