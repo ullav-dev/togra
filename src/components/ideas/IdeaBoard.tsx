@@ -2,13 +2,19 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { StickyNote, NoteLink, StickyColor, Port, Workflow } from "@/lib/types";
+import type { BoardShape, ShapeType, ShapePort } from "@ullav-dev/diagram-shapes";
+import { ShapeNode, ShapeIcon, SHAPE_LABELS, DEFAULT_SHAPE_SIZES, shapePortPos, bestShapePortTo } from "@ullav-dev/diagram-shapes";
 import {
   createSticky,
   updateSticky,
   deleteSticky,
-  createNoteLink,
+  createBoardLink,
   updateNoteLink,
   deleteNoteLink,
+  listShapes,
+  createShape,
+  updateShape,
+  deleteShape,
 } from "@/lib/notes-api";
 import {
   createWorkflow,
@@ -18,6 +24,7 @@ import {
 } from "@/lib/awe-api";
 import { createNote } from "@/lib/notes-api";
 import StickyCard from "./StickyCard";
+import ShapePropsPanel from "./ShapePropsPanel";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import MarkdownEditor from "@/components/MarkdownEditor";
 
@@ -118,6 +125,11 @@ interface LinkLabelModal {
   currentLabel: string | null;
 }
 
+function bestPortFromSticky(s: StickyNote, link: NoteLink): Port {
+  // fallback port direction when no explicit port is stored
+  return s.id === link.from_note_id ? "right" : "left";
+}
+
 interface Props {
   boardId: string;
   token: string;
@@ -126,6 +138,7 @@ interface Props {
   templates: Workflow[];
   initialStickies: StickyNote[];
   initialLinks: NoteLink[];
+  initialShapes: BoardShape[];
 }
 
 let nextOffset = 0;
@@ -140,11 +153,20 @@ function checkDamAccess(token: string): boolean {
   } catch { return false; }
 }
 
-export default function IdeaBoard({ boardId, token, projectId, backlogJobId, templates, initialStickies, initialLinks }: Props) {
+const SHAPE_TYPES: ShapeType[] = ["rect", "circle", "diamond", "database", "cloud", "actor"];
+
+export default function IdeaBoard({ boardId, token, projectId, backlogJobId, templates, initialStickies, initialLinks, initialShapes }: Props) {
   const [stickies, setStickies] = useState<StickyNote[]>(initialStickies);
   const [links, setLinks] = useState<NoteLink[]>(initialLinks);
+  const [shapes, setShapes] = useState<BoardShape[]>(initialShapes);
+  const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
+  const [addingShapeType, setAddingShapeType] = useState<ShapeType | null>(null);
+  const [confirmDeleteShapeId, setConfirmDeleteShapeId] = useState<string | null>(null);
+
+  // linkingFrom is either a sticky ID or shape ID; linkingFromKind discriminates
   const [linkingFrom, setLinkingFrom] = useState<string | null>(null);
-  const [linkingFromPort, setLinkingFromPort] = useState<Port | null>(null);
+  const [linkingFromKind, setLinkingFromKind] = useState<"sticky" | "shape">("sticky");
+  const [linkingFromPort, setLinkingFromPort] = useState<Port | ShapePort | null>(null);
   const [pendingLine, setPendingLine] = useState<{ x1: number; y1: number; x2: number; y2: number; port: Port } | null>(null);
   const [hoveredLinkId, setHoveredLinkId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -228,14 +250,18 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
   }
 
   function fitToSize() {
-    if (stickies.length === 0) return;
+    const allItems = [
+      ...stickies.map((s) => ({ x: s.x, y: s.y, x2: s.x + s.width, y2: s.y + s.height })),
+      ...shapes.map((s) => ({ x: s.x, y: s.y, x2: s.x + s.width, y2: s.y + s.height })),
+    ];
+    if (allItems.length === 0) return;
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     const padding = 60;
-    const minX = Math.min(...stickies.map((s) => s.x));
-    const minY = Math.min(...stickies.map((s) => s.y));
-    const maxX = Math.max(...stickies.map((s) => s.x + s.width));
-    const maxY = Math.max(...stickies.map((s) => s.y + s.height));
+    const minX = Math.min(...allItems.map((i) => i.x));
+    const minY = Math.min(...allItems.map((i) => i.y));
+    const maxX = Math.max(...allItems.map((i) => i.x2));
+    const maxY = Math.max(...allItems.map((i) => i.y2));
     const contentW = maxX - minX + padding * 2;
     const contentH = maxY - minY + padding * 2;
     const newZoom = Math.min(1, Math.min(rect.width / contentW, rect.height / contentH));
@@ -357,6 +383,7 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
 
   const handleStartLink = useCallback((id: string, port?: Port) => {
     setLinkingFrom(id);
+    setLinkingFromKind("sticky");
     setLinkingFromPort(port ?? null);
     setPendingLine(null);
   }, []);
@@ -368,15 +395,18 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
       setPendingLine(null);
       return;
     }
-    const link = await createNoteLink(
-      token, boardId, linkingFrom, targetId,
-      undefined, linkingFromPort ?? undefined, targetPort
+    const link = await createBoardLink(
+      token, boardId,
+      linkingFromKind === "shape" ? { shapeId: linkingFrom } : { noteId: linkingFrom },
+      { noteId: targetId },
+      linkingFromPort ?? undefined,
+      targetPort,
     ).catch(() => null);
     if (link) setLinks((prev) => [...prev, link]);
     setLinkingFrom(null);
     setLinkingFromPort(null);
     setPendingLine(null);
-  }, [linkingFrom, linkingFromPort, token, boardId]);
+  }, [linkingFrom, linkingFromKind, linkingFromPort, token, boardId]);
 
   async function handleDeleteLink(id: string) {
     await deleteNoteLink(token, id);
@@ -396,6 +426,94 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
     setStickies((prev) => prev.map((s) => s.id === stickyId ? { ...s, workflow_id: workflowId } : s));
     setCreateStoryStickyId(null);
   }
+
+  // ── Shape actions ─────────────────────────────────────────────────────────
+
+  async function handleAddShape(type: ShapeType) {
+    const rect = canvasRef.current?.getBoundingClientRect() ?? { width: 800, height: 600 };
+    const cx = Math.round((rect.width  / 2 - panRef.current.x) / zoomRef.current);
+    const cy = Math.round((rect.height / 2 - panRef.current.y) / zoomRef.current);
+    const { width, height } = DEFAULT_SHAPE_SIZES[type];
+    const cascade = (nextOffset % 6) * 20;
+    nextOffset++;
+    const s = await createShape(token, boardId, {
+      shape_type: type,
+      x: cx - width / 2 + cascade,
+      y: cy - height / 2 + cascade,
+      width,
+      height,
+    });
+    setShapes((prev) => [...prev, s]);
+    setSelectedShapeId(s.id);
+    setAddingShapeType(null);
+  }
+
+  const shapeDragRafRef = useRef<number | null>(null);
+
+  const handleShapeDragMove = useCallback((id: string, x: number, y: number) => {
+    if (shapeDragRafRef.current !== null) cancelAnimationFrame(shapeDragRafRef.current);
+    shapeDragRafRef.current = requestAnimationFrame(() => {
+      setShapes((prev) => prev.map((s) => s.id === id ? { ...s, x, y } : s));
+      shapeDragRafRef.current = null;
+    });
+  }, []);
+
+  const handleShapeDragEnd = useCallback(async (id: string, x: number, y: number) => {
+    if (shapeDragRafRef.current !== null) { cancelAnimationFrame(shapeDragRafRef.current); shapeDragRafRef.current = null; }
+    setShapes((prev) => prev.map((s) => s.id === id ? { ...s, x, y } : s));
+    await updateShape(token, boardId, id, { x, y }).catch(() => {});
+  }, [token, boardId]);
+
+  const shapeResizeRafRef = useRef<number | null>(null);
+
+  const handleShapeResizeEnd = useCallback(async (id: string, width: number, height: number) => {
+    if (shapeResizeRafRef.current !== null) { cancelAnimationFrame(shapeResizeRafRef.current); shapeResizeRafRef.current = null; }
+    setShapes((prev) => prev.map((s) => s.id === id ? { ...s, width, height } : s));
+    await updateShape(token, boardId, id, { width, height }).catch(() => {});
+  }, [token, boardId]);
+
+  const handleShapePropsUpdate = useCallback(async (id: string, patch: Partial<BoardShape>) => {
+    setShapes((prev) => prev.map((s) => s.id === id ? { ...s, ...patch } : s));
+    await updateShape(token, boardId, id, patch).catch(() => {});
+  }, [token, boardId]);
+
+  async function handleDeleteShape(id: string) {
+    await deleteShape(token, boardId, id);
+    setShapes((prev) => prev.filter((s) => s.id !== id));
+    setLinks((prev) => prev.filter((l) => l.from_shape_id !== id && l.to_shape_id !== id));
+    setConfirmDeleteShapeId(null);
+    setSelectedShapeId(null);
+  }
+
+  // ── Shape link actions ────────────────────────────────────────────────────
+
+  const handleStartLinkShape = useCallback((id: string, port: ShapePort) => {
+    setLinkingFrom(id);
+    setLinkingFromKind("shape");
+    setLinkingFromPort(port);
+    setPendingLine(null);
+  }, []);
+
+  const shapesRef = useRef(shapes);
+  useEffect(() => { shapesRef.current = shapes; }, [shapes]);
+
+  const handleFinishLinkShape = useCallback(async (targetId: string, targetPort: ShapePort) => {
+    if (!linkingFrom || linkingFrom === targetId) {
+      setLinkingFrom(null); setLinkingFromPort(null); setPendingLine(null); return;
+    }
+    const link = await createBoardLink(
+      token, boardId,
+      linkingFromKind === "shape" ? { shapeId: linkingFrom } : { noteId: linkingFrom },
+      { shapeId: targetId },
+      linkingFromPort ?? undefined,
+      targetPort,
+    ).catch(() => null);
+    if (link) setLinks((prev) => [...prev, link]);
+    setLinkingFrom(null); setLinkingFromPort(null); setPendingLine(null);
+  }, [linkingFrom, linkingFromKind, linkingFromPort, token, boardId]);
+
+  // ── Override handleFinishLink to support finishing on a shape ─────────────
+  // The existing handleFinishLink is for sticky targets. We gate on linkingFrom kind below in JSX.
 
   async function handleUpdateStory(stickyId: string) {
     const sticky = stickiesRef.current.find((s) => s.id === stickyId);
@@ -483,16 +601,31 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
           </button>
         </div>
 
+        {/* Shape picker */}
+        <div className="flex items-center gap-1 pl-3 border-l border-slate-200">
+          {SHAPE_TYPES.map((type) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => handleAddShape(type)}
+              title={SHAPE_LABELS[type]}
+              className={`w-7 h-7 flex items-center justify-center rounded-md transition-colors text-slate-500 hover:text-violet-700 hover:bg-violet-50 ${addingShapeType === type ? "bg-violet-100 text-violet-700" : ""}`}
+            >
+              <ShapeIcon type={type} size={16} />
+            </button>
+          ))}
+        </div>
+
         {linkingFrom && (
           <div className="flex items-center gap-2 text-xs text-violet-700 bg-violet-50 border border-violet-200 px-3 py-1.5 rounded-lg">
             <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 animate-pulse">
               <path d="M7.775 3.275a.75.75 0 0 0 1.06 1.06l1.25-1.25a2 2 0 1 1 2.83 2.83l-2.5 2.5a2 2 0 0 1-2.83 0 .75.75 0 0 0-1.06 1.06 3.5 3.5 0 0 0 4.95 0l2.5-2.5a3.5 3.5 0 0 0-4.95-4.95l-1.25 1.25Zm-4.69 9.64a2 2 0 0 1 0-2.83l2.5-2.5a2 2 0 0 1 2.83 0 .75.75 0 0 0 1.06-1.06 3.5 3.5 0 0 0-4.95 0l-2.5 2.5a3.5 3.5 0 0 0 4.95 4.95l1.25-1.25a.75.75 0 0 0-1.06-1.06l-1.25 1.25a2 2 0 0 1-2.83 0Z"/>
             </svg>
-            Click another sticky to link — <kbd className="font-mono bg-violet-100 px-1 rounded">Esc</kbd> to cancel
+            Click a shape or sticky to link — <kbd className="font-mono bg-violet-100 px-1 rounded">Esc</kbd> to cancel
           </div>
         )}
 
-        <span className="ml-auto text-xs text-slate-400">{stickies.length} {stickies.length === 1 ? "idea" : "ideas"}</span>
+        <span className="ml-auto text-xs text-slate-400">{stickies.length + shapes.length} items</span>
       </div>
 
       {/* Canvas viewport */}
@@ -520,6 +653,7 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
           onPointerDown={(e) => {
             // Only act on clicks directly on the inner div (empty canvas), not on children
             if (e.target !== innerRef.current) return;
+            setSelectedShapeId(null);
             if (linkingFrom) {
               setLinkingFrom(null);
               setPendingLine(null);
@@ -568,16 +702,48 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
             </defs>
 
             {links.map((link) => {
-              const fromSticky = stickies.find((s) => s.id === link.from_note_id);
-              const toSticky   = stickies.find((s) => s.id === link.to_note_id);
-              if (!fromSticky || !toSticky) return null;
-              const bidir = !link.from_port && !link.to_port && links.some(
-                (l) => l.from_note_id === link.to_note_id && l.to_note_id === link.from_note_id
-                  && !l.from_port && !l.to_port
-              );
-              const { d, midX, midY, color } = buildConnector(
-                fromSticky, toSticky, bidir, link.from_port, link.to_port
-              );
+              // Resolve source and target port positions (sticky or shape)
+              let srcPos: { x: number; y: number } | null = null;
+              let tgtPos: { x: number; y: number } | null = null;
+              let color = "#7c3aed";
+
+              if (link.from_note_id) {
+                const s = stickies.find((st) => st.id === link.from_note_id);
+                if (!s) return null;
+                const port = (link.from_port ?? bestPortFromSticky(s, link)) as Port;
+                srcPos = portPos(s, port);
+                color = CONNECTOR_COLORS[s.color] ?? color;
+              } else if (link.from_shape_id) {
+                const s = shapes.find((sh) => sh.id === link.from_shape_id);
+                if (!s) return null;
+                const port = (link.from_port ?? "right") as ShapePort;
+                srcPos = shapePortPos(s, port);
+              }
+
+              if (link.to_note_id) {
+                const s = stickies.find((st) => st.id === link.to_note_id);
+                if (!s) return null;
+                const port = (link.to_port ?? bestPortFromSticky(s, link)) as Port;
+                tgtPos = portPos(s, port);
+              } else if (link.to_shape_id) {
+                const s = shapes.find((sh) => sh.id === link.to_shape_id);
+                if (!s) return null;
+                const port = (link.to_port ?? "left") as ShapePort;
+                tgtPos = shapePortPos(s, port);
+              }
+
+              if (!srcPos || !tgtPos) return null;
+
+              const dist = Math.hypot(tgtPos.x - srcPos.x, tgtPos.y - srcPos.y);
+              const fromPort = (link.from_port ?? "right") as Port;
+              const toPort   = (link.to_port   ?? "left")  as Port;
+              const c1 = cpOffset(fromPort, dist);
+              const c2 = cpOffset(toPort,   dist);
+              const p1x = srcPos.x + c1.dx, p1y = srcPos.y + c1.dy;
+              const p2x = tgtPos.x + c2.dx, p2y = tgtPos.y + c2.dy;
+              const d = `M ${srcPos.x} ${srcPos.y} C ${p1x} ${p1y} ${p2x} ${p2y} ${tgtPos.x} ${tgtPos.y}`;
+              const midX = 0.125*srcPos.x + 0.375*p1x + 0.375*p2x + 0.125*tgtPos.x;
+              const midY = 0.125*srcPos.y + 0.375*p1y + 0.375*p2y + 0.125*tgtPos.y;
               const hovered = hoveredLinkId === link.id;
               const labelW = link.label ? Math.max(link.label.length * 6.5 + 16, 44) : 0;
               return (
@@ -683,9 +849,53 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
               onCreateStory={(id) => backlogJobId ? setCreateStoryStickyId(id) : undefined}
             />
           ))}
+
+          {/* Shape nodes — rendered as an SVG overlay so they live in the same coordinate space */}
+          {shapes.length > 0 && (
+            <svg
+              className="absolute inset-0 w-full h-full"
+              style={{ overflow: "visible", pointerEvents: "none" }}
+            >
+              {shapes.map((shape) => (
+                <g key={shape.id} style={{ pointerEvents: "all" }}>
+                  <ShapeNode
+                    shape={shape}
+                    zoom={zoom}
+                    selected={selectedShapeId === shape.id}
+                    linkingActive={!!linkingFrom && linkingFrom !== shape.id}
+                    onSelect={() => { setSelectedShapeId(shape.id); }}
+                    onDragEnd={(x, y) => {
+                      setShapes((prev) => prev.map((s) => s.id === shape.id ? { ...s, x, y } : s));
+                      handleShapeDragEnd(shape.id, x, y);
+                    }}
+                    onResizeEnd={(w, h) => {
+                      setShapes((prev) => prev.map((s) => s.id === shape.id ? { ...s, width: w, height: h } : s));
+                      handleShapeResizeEnd(shape.id, w, h);
+                    }}
+                    onStartLink={(port) => handleStartLinkShape(shape.id, port)}
+                    onFinishLink={(port) => handleFinishLinkShape(shape.id, port)}
+                    onDoubleClick={() => setSelectedShapeId(shape.id)}
+                  />
+                </g>
+              ))}
+            </svg>
+          )}
         </div>
 
-        {stickies.length === 0 && (
+        {/* Shape properties panel */}
+        {selectedShapeId && (() => {
+          const shape = shapes.find((s) => s.id === selectedShapeId);
+          if (!shape) return null;
+          return (
+            <ShapePropsPanel
+              shape={shape}
+              onUpdate={(patch) => handleShapePropsUpdate(selectedShapeId, patch as Partial<BoardShape>)}
+              onDelete={() => setConfirmDeleteShapeId(selectedShapeId)}
+            />
+          );
+        })()}
+
+        {stickies.length === 0 && shapes.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="text-center text-slate-400 select-none">
               <p className="text-sm font-medium mb-1">This board is empty</p>
@@ -703,6 +913,17 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
           confirmLabel="Delete"
           onConfirm={() => handleDelete(confirmDeleteId)}
           onCancel={() => setConfirmDeleteId(null)}
+        />
+      )}
+
+      {/* Confirm delete shape */}
+      {confirmDeleteShapeId && (
+        <ConfirmDialog
+          title="Delete shape?"
+          message="This will permanently delete this shape and any links attached to it."
+          confirmLabel="Delete"
+          onConfirm={() => handleDeleteShape(confirmDeleteShapeId)}
+          onCancel={() => setConfirmDeleteShapeId(null)}
         />
       )}
 

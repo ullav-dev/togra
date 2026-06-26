@@ -21,7 +21,7 @@ import {
   getTeam,
   listTeamRoles,
 } from "@/lib/awe-api";
-import { createNote, listIdeaBoards, createIdeaBoard, deleteIdeaBoard, listStickies, listNoteLinks } from "@/lib/notes-api";
+import { createNote, listIdeaBoards, createIdeaBoard, deleteIdeaBoard, listStickies, listNoteLinks, listShapes } from "@/lib/notes-api";
 import IdeaBoardCanvas from "@/components/ideas/IdeaBoard";
 import MarkdownEditor from "@/components/MarkdownEditor";
 import { useRouter } from "@/i18n/navigation";
@@ -1343,6 +1343,7 @@ function IdeasPanel({
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
   const [boardStickies, setBoardStickies] = useState<import("@/lib/types").StickyNote[]>([]);
   const [boardLinks, setBoardLinks] = useState<import("@/lib/types").NoteLink[]>([]);
+  const [boardShapes, setBoardShapes] = useState<import("@ullav-dev/diagram-shapes").BoardShape[]>([]);
   const [loadingBoard, setLoadingBoard] = useState(false);
   const autoSelectedRef = useRef(false);
 
@@ -1351,9 +1352,10 @@ function IdeasPanel({
     setSelectedBoardId(boardId);
     setLoadingBoard(true);
     try {
-      const [s, l] = await Promise.all([listStickies(token, boardId), listNoteLinks(token, boardId)]);
+      const [s, l, sh] = await Promise.all([listStickies(token, boardId), listNoteLinks(token, boardId), listShapes(token, boardId)]);
       setBoardStickies(s);
       setBoardLinks(l);
+      setBoardShapes(sh);
     } finally {
       setLoadingBoard(false);
     }
@@ -1421,6 +1423,7 @@ function IdeasPanel({
             templates={templates}
             initialStickies={boardStickies}
             initialLinks={boardLinks}
+            initialShapes={boardShapes}
           />
         )}
       </div>

@@ -10,6 +10,7 @@ import type {
   StickyOrigin,
   NoteLink,
 } from "./types";
+import type { BoardShape, CreateBoardShape, UpdateBoardShape } from "@ullav-dev/diagram-shapes";
 
 const BASE =
   typeof window === "undefined"
@@ -156,8 +157,49 @@ export const createNoteLink = (
     body: JSON.stringify({ from_note_id: fromNoteId, to_note_id: toNoteId, label, from_port: fromPort, to_port: toPort }),
   });
 
+/** Create a link where either endpoint may be a shape or a sticky. */
+export const createBoardLink = (
+  token: string,
+  boardId: string,
+  from: { noteId?: string; shapeId?: string },
+  to: { noteId?: string; shapeId?: string },
+  fromPort?: string,
+  toPort?: string,
+): Promise<NoteLink> =>
+  apiRequest(`/idea-boards/${boardId}/links`, token, {
+    method: "POST",
+    body: JSON.stringify({
+      from_note_id:  from.noteId  ?? null,
+      from_shape_id: from.shapeId ?? null,
+      to_note_id:    to.noteId    ?? null,
+      to_shape_id:   to.shapeId   ?? null,
+      from_port: fromPort,
+      to_port:   toPort,
+    }),
+  });
+
 export const updateNoteLink = (token: string, linkId: string, label: string | null): Promise<NoteLink> =>
   apiRequest(`/note-links/${linkId}`, token, { method: "PUT", body: JSON.stringify({ label }) });
 
 export const deleteNoteLink = (token: string, linkId: string): Promise<void> =>
   apiRequest(`/note-links/${linkId}`, token, { method: "DELETE" });
+
+// ── Board Shapes ──────────────────────────────────────────────────────────────
+
+export const listShapes = (token: string, boardId: string): Promise<BoardShape[]> =>
+  apiRequest(`/idea-boards/${boardId}/shapes`, token);
+
+export const createShape = (token: string, boardId: string, body: CreateBoardShape): Promise<BoardShape> =>
+  apiRequest(`/idea-boards/${boardId}/shapes`, token, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const updateShape = (token: string, boardId: string, shapeId: string, body: UpdateBoardShape): Promise<BoardShape> =>
+  apiRequest(`/idea-boards/${boardId}/shapes/${shapeId}`, token, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+
+export const deleteShape = (token: string, boardId: string, shapeId: string): Promise<void> =>
+  apiRequest(`/idea-boards/${boardId}/shapes/${shapeId}`, token, { method: "DELETE" });

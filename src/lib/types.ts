@@ -258,6 +258,9 @@ export interface IdeaBoard {
 export type StickyColor = "yellow" | "pink" | "blue" | "green" | "purple" | "orange";
 export type Port = "top" | "right" | "bottom" | "left";
 
+// Re-export from diagram-shapes package so consumers can import from one place
+export type { BoardShape, ShapeType } from "@ullav-dev/diagram-shapes";
+
 export interface StickyNote {
   id: string;
   title: string;
@@ -282,8 +285,10 @@ export interface StickyOrigin {
 
 export interface NoteLink {
   id: string;
-  from_note_id: string;
-  to_note_id: string;
+  from_note_id: string | null;
+  to_note_id: string | null;
+  from_shape_id: string | null;
+  to_shape_id: string | null;
   label: string | null;
   from_port: Port | null;
   to_port: Port | null;

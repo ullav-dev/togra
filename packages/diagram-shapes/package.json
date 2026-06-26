@@ -1,0 +1,14 @@
+{
+  "name": "@ullav-dev/diagram-shapes",
+  "version": "0.1.0",
+  "description": "Reusable SVG diagram shape primitives for canvas-based apps",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  }
+}
