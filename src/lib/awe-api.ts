@@ -2,7 +2,7 @@
 // Notes API has moved to notes-api.ts.
 // All browser requests go via /api/* rewrite; server-side uses API_URL directly.
 
-import type { Job, JobWithWorkflows, Task, TaskLink, TaskScript, TaskPortSpec, PortDirection, PortValueType, ExecutionProfile, ScriptType, Workflow, WorkflowWithTasks, TeamSummary, Team, TeamRole, TaskTeamRole, TaskStateHistoryEntry } from "./types";
+import type { Job, JobWithWorkflows, Task, TaskLink, TaskScript, TaskPortSpec, PortDirection, PortValueType, ExecutionProfile, ScriptType, Workflow, WorkflowWithTasks, TeamSummary, Team, TeamRole, TaskTeamRole, TaskStateHistoryEntry, WorkItem, InstantiateWorkItemResponse } from "./types";
 
 const BASE =
   typeof window === "undefined"
@@ -300,3 +300,13 @@ export async function fetchAllJobTaskHistory(
 
 export const listJobsByProject = (token: string, projectId: string): Promise<Job[]> =>
   apiRequest(`/jobs?project_id=${projectId}`, token);
+
+export const listWorkItems = (token: string): Promise<WorkItem[]> =>
+  apiRequest("/work-items", token);
+
+export const instantiateWorkItem = (
+  token: string,
+  id: string,
+  payload: { workflow_id: string; canvas_x?: number; canvas_y?: number }
+): Promise<InstantiateWorkItemResponse> =>
+  apiRequest(`/work-items/${id}/instantiate`, token, { method: "POST", body: JSON.stringify(payload) });
