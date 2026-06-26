@@ -120,7 +120,8 @@
       "creating": "Á chruthú…",
       "create": "Cruthaigh",
       "error": "Theip ar chruthú an tionscadail"
-    }
+    },
+    "filteredSubtitle": "Tionscadail in {team}"
   },
   "project": {
     "loading": "Ag luchtú…",
@@ -128,7 +129,12 @@
     "breadcrumbProjects": "Tionscadail",
     "pmLabel": "BT",
     "notesTitle": "Nótaí",
-    "tabs": { "planning": "Pleanáil", "ideas": "Smaointe", "team": "Foireann", "reports": "Tuarascálacha" },
+    "tabs": {
+      "planning": "Pleanáil",
+      "ideas": "Smaointe",
+      "team": "Foireann",
+      "reports": "Tuarascálacha"
+    },
     "deleteProjectTitle": "\"{name}\" a scriosadh?",
     "deleteProjectMessage": "Scriosfar gach sprid, scéal agus nóta sa tionscadal seo go buan. Ní féidir é seo a chur ar ceal.",
     "deleteProjectLabel": "Tionscadal a scriosadh",
@@ -381,22 +387,74 @@
       "noData": "Gan sonraí don tréimhse roghnaithe"
     },
     "catalog": {
-      "sprint_progress_gauge":       { "title": "Dul Chun Cinn Sprint",    "description": "Céatadán críochnaithe agus laethanta fágtha" },
-      "burndown_chart":              { "title": "Cairt Dóite",             "description": "Pointí scéil fágtha vs líne idéalach" },
-      "velocity_chart":              { "title": "Luas",                    "description": "Pointí scéil seachadta in aghaidh an sprint" },
-      "sprint_completion_rate":      { "title": "Ráta Críochnaithe Sprint","description": "Scéalta pleanáilte vs seachadta in aghaidh sprint" },
-      "cumulative_flow_diagram":     { "title": "Sreabhadh Carnach",       "description": "Líon tascanna in aghaidh stádais thar am" },
-      "throughput_chart":            { "title": "Tréchur",                 "description": "Tascanna críochnaithe in aghaidh na seachtaine" },
-      "cycle_time_scatter":          { "title": "Am Timthrialla",          "description": "Laethanta ó obair tosaithe go críochnaithe" },
-      "lead_time_distribution":      { "title": "Am Luaidhe",              "description": "Laethanta ó chruthú go críochnú" },
-      "workflow_step_timing":        { "title": "Uainiú Céimeanna",        "description": "Am meánach agus p85 in aghaidh céim sreafa oibre" },
-      "workflow_funnel":             { "title": "Tonnadóir Sreafa Oibre",  "description": "Tascanna ag dul isteach vs ag críochnú gach céim" },
-      "story_aging_heatmap":         { "title": "Aosú Scéalta",            "description": "Scéalta oscailte de réir céime, dathaithe de réir aoise" },
-      "team_load_chart":             { "title": "Ualach Foirne",           "description": "Pointí sannta vs críochnaithe in aghaidh comhalta" },
-      "task_role_distribution":      { "title": "Dáileadh Róil",           "description": "Tascanna oscailte de réir sannadh" },
-      "member_throughput_sparklines":{ "title": "Tréchur Comhaltaí",       "description": "Críochnuithe seachtainiúla in aghaidh comhalta foirne" },
-      "ideas_funnel":                { "title": "Tonnadóir Smaointe",      "description": "Smaointe cruthaithe, chun cinn agus críochnaithe" },
-      "idea_age_distribution":       { "title": "Aois Smaointe",           "description": "Laethanta ó chruthú smaointe go cur chun cinn" }
+      "sprint_progress_gauge": {
+        "title": "Dul Chun Cinn Sprint",
+        "description": "Céatadán críochnaithe agus laethanta fágtha"
+      },
+      "burndown_chart": {
+        "title": "Cairt Dóite",
+        "description": "Pointí scéil fágtha vs líne idéalach"
+      },
+      "velocity_chart": {
+        "title": "Luas",
+        "description": "Pointí scéil seachadta in aghaidh an sprint"
+      },
+      "sprint_completion_rate": {
+        "title": "Ráta Críochnaithe Sprint",
+        "description": "Scéalta pleanáilte vs seachadta in aghaidh sprint"
+      },
+      "cumulative_flow_diagram": {
+        "title": "Sreabhadh Carnach",
+        "description": "Líon tascanna in aghaidh stádais thar am"
+      },
+      "throughput_chart": {
+        "title": "Tréchur",
+        "description": "Tascanna críochnaithe in aghaidh na seachtaine"
+      },
+      "cycle_time_scatter": {
+        "title": "Am Timthrialla",
+        "description": "Laethanta ó obair tosaithe go críochnaithe"
+      },
+      "lead_time_distribution": {
+        "title": "Am Luaidhe",
+        "description": "Laethanta ó chruthú go críochnú"
+      },
+      "workflow_step_timing": {
+        "title": "Uainiú Céimeanna",
+        "description": "Am meánach agus p85 in aghaidh céim sreafa oibre"
+      },
+      "workflow_funnel": {
+        "title": "Tonnadóir Sreafa Oibre",
+        "description": "Tascanna ag dul isteach vs ag críochnú gach céim"
+      },
+      "story_aging_heatmap": {
+        "title": "Aosú Scéalta",
+        "description": "Scéalta oscailte de réir céime, dathaithe de réir aoise"
+      },
+      "team_load_chart": {
+        "title": "Ualach Foirne",
+        "description": "Pointí sannta vs críochnaithe in aghaidh comhalta"
+      },
+      "task_role_distribution": {
+        "title": "Dáileadh Róil",
+        "description": "Tascanna oscailte de réir sannadh"
+      },
+      "member_throughput_sparklines": {
+        "title": "Tréchur Comhaltaí",
+        "description": "Críochnuithe seachtainiúla in aghaidh comhalta foirne"
+      },
+      "ideas_funnel": {
+        "title": "Tonnadóir Smaointe",
+        "description": "Smaointe cruthaithe, chun cinn agus críochnaithe"
+      },
+      "idea_age_distribution": {
+        "title": "Aois Smaointe",
+        "description": "Laethanta ó chruthú smaointe go cur chun cinn"
+      }
     }
+  },
+  "teamSelector": {
+    "switchTeam": "Athraigh foireann",
+    "selectTeam": "Roghnaigh foireann"
   }
 }

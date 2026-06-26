@@ -10,6 +10,7 @@ import TograIcon from "@/components/TograIcon";
 import MyDetailsModal from "@/components/MyDetailsModal";
 import AboutModal from "@/components/AboutModal";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
+import TeamSelector from "@/components/TeamSelector";
 
 function NavAvatar({ url, initials }: { url?: string | null; initials: string }) {
   const [broken, setBroken] = useState(false);
@@ -116,6 +117,8 @@ export default function Nav() {
                 <Link href="/decisions" className={navLink("/decisions")}>
                   {t("myDecisions")}
                 </Link>
+
+                <TeamSelector />
 
                 {(showObair || showComad) && (
                   <div className="flex items-center gap-1 pl-3 border-l border-slate-200">
