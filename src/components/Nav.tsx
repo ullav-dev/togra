@@ -9,6 +9,7 @@ import { useAppUrls } from "@/contexts/AppUrlsContext";
 import TograIcon from "@/components/TograIcon";
 import MyDetailsModal from "@/components/MyDetailsModal";
 import AboutModal from "@/components/AboutModal";
+import AiSettingsModal from "@/components/research/AiSettingsModal";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
 
 function NavAvatar({ url, initials }: { url?: string | null; initials: string }) {
@@ -62,6 +63,7 @@ export default function Nav() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -89,6 +91,11 @@ export default function Nav() {
   function handleAbout() {
     setDropdownOpen(false);
     setAboutOpen(true);
+  }
+
+  function handleAiSettings() {
+    setDropdownOpen(false);
+    setAiSettingsOpen(true);
   }
 
   const navLink = (path: string) =>
@@ -195,6 +202,16 @@ export default function Nav() {
                       )}
                       <button
                         type="button"
+                        onClick={handleAiSettings}
+                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                      >
+                        <svg className="w-3.5 h-3.5 text-violet-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                        </svg>
+                        AI Settings
+                      </button>
+                      <button
+                        type="button"
                         onClick={handleAbout}
                         className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
                       >
@@ -213,6 +230,7 @@ export default function Nav() {
                 </div>
                 {detailsOpen && <MyDetailsModal onClose={() => setDetailsOpen(false)} />}
                 {aboutOpen && <AboutModal user={user} onClose={() => setAboutOpen(false)} />}
+                {aiSettingsOpen && <AiSettingsModal onClose={() => setAiSettingsOpen(false)} />}
               </>
             ) : !isLoading ? (
               <>

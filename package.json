@@ -10,11 +10,18 @@
     "test": "jest"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.87",
+    "@ai-sdk/google": "^3.0.84",
+    "@ai-sdk/mistral": "^3.0.41",
+    "@ai-sdk/openai": "^3.0.75",
+    "@ai-sdk/openai-compatible": "^2.0.52",
+    "@ai-sdk/react": "^3.0.213",
     "@dagrejs/dagre": "^3.0.0",
     "@tailwindcss/typography": "^0.5.19",
     "@uiw/react-md-editor": "^4.1.1",
     "@ullav/dam-picker": "file:./packages/dam-picker",
     "@xyflow/react": "^12.10.2",
+    "ai": "^6.0.211",
     "next": "16.1.6",
     "next-intl": "^4.9.0",
     "react": "19.2.3",

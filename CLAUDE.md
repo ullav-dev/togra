@@ -93,6 +93,9 @@ src/
     MarkdownEditor.tsx       # Markdown input with preview
     VisibilityToggle.tsx     # Shared/private toggle
     notes/NotesPanel.tsx     # Notes sidebar (folders + markdown notes)
+    research/AiChat.tsx      # AI chat component (violet branding, agile templates, session history)
+    research/ResearchPanel.tsx  # Research panel container (tab shell, save-as-note form)
+    research/AiSettingsModal.tsx  # AI provider/model/key settings modal (opened from Nav)
   contexts/
     AuthContext.tsx           # Auth state, idle timeout, updateUser
   lib/
@@ -100,6 +103,8 @@ src/
     awe-api.ts               # AWE server API: jobs, workflows, tasks, notes, teams
     togra-api.ts             # Project CRUD against /projects endpoints
     types.ts                 # Shared domain types (TeamUserRef includes avatar_url)
+    ai-settings.ts           # AES-256-GCM encrypt/decrypt for AI keys (server-side only)
+    research-api.ts          # Chat session CRUD against awe-server /ai-sessions endpoints
   i18n/                      # next-intl config
   proxy.ts                   # API rewrites + intl middleware (this IS the middleware)
 messages/                    # Translation files (en, de, ga)
@@ -111,6 +116,7 @@ messages/                    # Translation files (en, de, ga)
 API_URL=http://localhost:8085   # server-side only (awe-server)
 AUTH_URL=http://localhost:8081  # server-side only (ullav-user-management)
 NEXT_PUBLIC_IDLE_TIMEOUT_MS=3600000  # optional, default 1 hour
+SETTINGS_ENCRYPTION_KEY=<32-char hex>  # AES-256-GCM key for AI API key encryption (Research Panel)
 ```
 
 `NEXT_PUBLIC_*` vars are baked in at build time — do not use for backend URLs.
