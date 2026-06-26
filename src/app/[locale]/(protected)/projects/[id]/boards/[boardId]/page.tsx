@@ -41,6 +41,7 @@ export default function IdeaBoardPage({
         setStickies(s);
         setLinks(l);
         setCurrentProject({ id: proj.id, name: proj.name });
+        localStorage.setItem(`togra_last_idea_board_${projectId}`, boardId);
         const bl = proj.jobs.find((j: Job) => j.job_type === "backlog") ?? null;
         setBacklogJob(bl);
         if (proj.team_id) {

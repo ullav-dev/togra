@@ -1332,7 +1332,18 @@ function IdeasPanel({
   onBoardCreated: (b: IdeaBoard) => void;
   onBoardDeleted: (id: string) => void;
 }) {
+  const router = useRouter();
   const [showCreate, setShowCreate] = useState(false);
+  const [autoNavigated, setAutoNavigated] = useState(false);
+
+  useEffect(() => {
+    if (autoNavigated || boards.length === 0) return;
+    const savedId = localStorage.getItem(`togra_last_idea_board_${projectId}`);
+    if (savedId && boards.some((b) => b.id === savedId)) {
+      setAutoNavigated(true);
+      router.push(`/projects/${projectId}/boards/${savedId}`);
+    }
+  }, [boards, projectId, autoNavigated, router]);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
