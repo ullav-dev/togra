@@ -283,13 +283,22 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
       const canvas = canvasRef.current;
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
-      const src = stickies.find((s) => s.id === linkingFrom);
-      if (!src) return;
-      // Convert screen coords → canvas coords using live refs
       const mouseX = (e.clientX - rect.left - panRef.current.x) / zoomRef.current;
       const mouseY = (e.clientY - rect.top  - panRef.current.y) / zoomRef.current;
-      const port = linkingFromPort ?? bestPortTo(src, mouseX, mouseY);
-      const pp = portPos(src, port);
+
+      const srcSticky = stickies.find((s) => s.id === linkingFrom);
+      if (srcSticky) {
+        const port = linkingFromPort ?? bestPortTo(srcSticky, mouseX, mouseY);
+        const pp = portPos(srcSticky, port);
+        setPendingLine({ x1: pp.x, y1: pp.y, x2: mouseX, y2: mouseY, port });
+        return;
+      }
+
+      // Shape source
+      const srcShape = shapesRef.current.find((s) => s.id === linkingFrom);
+      if (!srcShape) return;
+      const port = (linkingFromPort ?? bestShapePortTo(srcShape, mouseX, mouseY)) as Port;
+      const pp = shapePortPos(srcShape, port);
       setPendingLine({ x1: pp.x, y1: pp.y, x2: mouseX, y2: mouseY, port });
     }
 
@@ -864,14 +873,9 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
                     selected={selectedShapeId === shape.id}
                     linkingActive={!!linkingFrom && linkingFrom !== shape.id}
                     onSelect={() => { setSelectedShapeId(shape.id); }}
-                    onDragEnd={(x, y) => {
-                      setShapes((prev) => prev.map((s) => s.id === shape.id ? { ...s, x, y } : s));
-                      handleShapeDragEnd(shape.id, x, y);
-                    }}
-                    onResizeEnd={(w, h) => {
-                      setShapes((prev) => prev.map((s) => s.id === shape.id ? { ...s, width: w, height: h } : s));
-                      handleShapeResizeEnd(shape.id, w, h);
-                    }}
+                    onDragMove={(x, y) => handleShapeDragMove(shape.id, x, y)}
+                    onDragEnd={(x, y) => handleShapeDragEnd(shape.id, x, y)}
+                    onResizeEnd={(w, h) => handleShapeResizeEnd(shape.id, w, h)}
                     onStartLink={(port) => handleStartLinkShape(shape.id, port)}
                     onFinishLink={(port) => handleFinishLinkShape(shape.id, port)}
                     onDoubleClick={() => setSelectedShapeId(shape.id)}

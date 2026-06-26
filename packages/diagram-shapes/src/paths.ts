@@ -16,37 +16,21 @@ export function getShapePath(type: ShapeType, w: number, h: number): string {
     }
 
     case "database": {
-      const ry = Math.min(h * 0.14, 18); // ellipse half-height for caps
+      const ry = Math.max(Math.min(h * 0.18, 24), 8);
       const rx = w / 2;
-      const cy = ry;
-      const bodyBottom = h - ry;
-      // Top ellipse + right side + bottom ellipse arc (open) + left side
+      // Rendered via DatabaseShape component; this path is used only as a fallback hit area
       return [
-        `M0,${cy}`,
-        ellipseTopArc(rx, cy, rx, ry),       // top ellipse (full)
-        `L${w},${bodyBottom}`,               // right edge down
-        ellipseBottomArc(rx, bodyBottom, rx, ry), // bottom arc
-        `L0,${cy}`,                          // left edge up
-        `Z`,
+        `M0,${ry}`,
+        `A${rx},${ry} 0 1,0 ${w},${ry}`,
+        `A${rx},${ry} 0 1,0 0,${ry}`,
+        `M0,${ry} V${h - ry}`,
+        `A${rx},${ry} 0 0,1 ${w},${h - ry}`,
+        `V${ry} Z`,
       ].join(" ");
     }
 
-    case "cloud": {
-      // 5-circle composite cloud, scaled to fit w×h
-      const s = Math.min(w, h);
-      const scale = s / 100;
-      // Circles (cx, cy, r) in 100×100 space, then scale + translate to fit bounds
-      const circles: [number, number, number][] = [
-        [50, 70, 30],  // main body
-        [25, 60, 22],  // left lobe
-        [75, 60, 22],  // right lobe
-        [38, 45, 20],  // upper-left lobe
-        [62, 45, 20],  // upper-right lobe
-      ];
-      const ox = (w - s) / 2;
-      const oy = (h - s * 0.85) / 2;
-      return cloudPath(circles, scale, ox, oy);
-    }
+    case "cloud":
+      return cloudPath(w, h);
 
     case "actor": {
       const cx = w / 2;
@@ -93,24 +77,27 @@ export function getShapePorts(type: ShapeType, w: number, h: number): ShapePortP
       ];
 
     case "database": {
-      const ry = Math.min(h * 0.14, 18);
+      // ry matches DatabaseShape component (h*0.18, capped at 24)
+      const ry = Math.max(Math.min(h * 0.18, 24), 8);
       return [
-        { port: "top",    x: w / 2, y: 0     },
-        { port: "right",  x: w,     y: h / 2 },
-        { port: "bottom", x: w / 2, y: h     },
-        { port: "left",   x: 0,     y: h / 2 },
+        { port: "top",    x: w / 2, y: 0        },
+        { port: "right",  x: w,     y: h / 2    },
+        { port: "bottom", x: w / 2, y: h        },
+        { port: "left",   x: 0,     y: h / 2    },
       ];
     }
 
     case "actor": {
-      const headR = Math.min(w * 0.28, h * 0.18);
+      const headR    = Math.min(w * 0.28, h * 0.18);
       const shoulderY = headR * 2 + h * 0.05;
-      const armY = shoulderY + h * 0.08;
+      const armY     = shoulderY + h * 0.08;
+      const armSpan  = w * 0.45;
+      const cx       = w / 2;
       return [
-        { port: "top",    x: w / 2,        y: 0    },
-        { port: "right",  x: w,            y: armY },
-        { port: "bottom", x: w / 2,        y: h    },
-        { port: "left",   x: 0,            y: armY },
+        { port: "top",    x: cx,             y: 0    },
+        { port: "right",  x: cx + armSpan,   y: armY },
+        { port: "bottom", x: cx,             y: h    },
+        { port: "left",   x: cx - armSpan,   y: armY },
       ];
     }
   }
@@ -163,29 +150,18 @@ function ellipsePath(cx: number, cy: number, rx: number, ry: number): string {
   ].join(" ");
 }
 
-function ellipseTopArc(cx: number, cy: number, rx: number, ry: number): string {
-  // Full top ellipse (clockwise)
-  return `A${rx},${ry} 0 1,1 ${cx * 2},${cy} A${rx},${ry} 0 1,1 0,${cy}`;
-}
-
-function ellipseBottomArc(cx: number, cy: number, rx: number, ry: number): string {
-  // Bottom arc only (left to right, convex downward)
-  return `A${rx},${ry} 0 0,0 ${cx * 2},${cy}`;
-}
-
-function cloudPath(
-  circles: [number, number, number][],
-  scale: number,
-  ox: number,
-  oy: number,
-): string {
-  // Render each circle as a path — the browser's fill-rule handles the union visually.
-  // For a true union we'd need Bezier approximation; this approach works with
-  // fill="..." on a <g> with all paths, or a single compound path at the cost of gaps.
-  // We use individual <circle> elements in the component for simplicity.
-  // This function returns a simplified rounded rectangle as a lightweight fallback.
-  const w = 100 * scale;
-  const h = 85 * scale;
-  const r = 28 * scale;
-  return `M${ox + r},${oy} H${ox + w - r} Q${ox + w},${oy} ${ox + w},${oy + r} V${oy + h - r} Q${ox + w},${oy + h} ${ox + w - r},${oy + h} H${ox + r} Q${ox},${oy + h} ${ox},${oy + h - r} V${oy + r} Q${ox},${oy} ${ox + r},${oy} Z`;
+function cloudPath(w: number, h: number): string {
+  // Cloud outline adapted from mxGraph's mxCloud shape — traces a recognisable cloud silhouette
+  // using cubic Bézier segments, clockwise from the upper-left lobe.
+  const p = (x: number, y: number) => `${(x * w).toFixed(1)},${(y * h).toFixed(1)}`;
+  return [
+    `M${p(0.25, 0.25)}`,
+    `C${p(0.05, 0.25)} ${p(0.00, 0.50)} ${p(0.16, 0.55)}`,
+    `C${p(0.00, 0.66)} ${p(0.18, 0.90)} ${p(0.31, 0.80)}`,
+    `C${p(0.40, 1.00)} ${p(0.70, 1.00)} ${p(0.80, 0.80)}`,
+    `C${p(1.00, 0.80)} ${p(1.00, 0.60)} ${p(0.875, 0.50)}`,
+    `C${p(1.00, 0.30)} ${p(0.80, 0.10)} ${p(0.625, 0.20)}`,
+    `C${p(0.50, 0.00)} ${p(0.30, 0.00)} ${p(0.25, 0.25)}`,
+    `Z`,
+  ].join(' ');
 }
