@@ -8,6 +8,11 @@ const intlMiddleware = createMiddleware(routing);
 function route(request: NextRequest): NextResponse {
   const { pathname, search } = request.nextUrl;
 
+  // /api/ai/* is handled by local Next.js route handlers (streaming; must not be proxied)
+  if (pathname.startsWith("/api/ai/")) {
+    return NextResponse.next();
+  }
+
   // Proxy /api/dam/* → ullav-dam-server (must come before the general /api/* rule)
   if (pathname.startsWith("/api/dam/")) {
     const damUrl = process.env.DAM_URL ?? "http://localhost:8080";

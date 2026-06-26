@@ -21,7 +21,8 @@ import {
   getTeam,
   listTeamRoles,
 } from "@/lib/awe-api";
-import { createNote, listIdeaBoards, createIdeaBoard, deleteIdeaBoard } from "@/lib/notes-api";
+import { createNote, listIdeaBoards, createIdeaBoard, deleteIdeaBoard, listStickies, listNoteLinks } from "@/lib/notes-api";
+import IdeaBoardCanvas from "@/components/ideas/IdeaBoard";
 import MarkdownEditor from "@/components/MarkdownEditor";
 import { useRouter } from "@/i18n/navigation";
 import type { ProjectWithJobs, Job, Workflow, Task, TeamMember, TeamRole, IdeaBoard } from "@/lib/types";
@@ -31,6 +32,7 @@ import VisibilityToggle from "@/components/VisibilityToggle";
 import NotesPanel from "@/components/notes/NotesPanel";
 import TeamView from "@/components/TeamView";
 import ReportsTab from "@/components/reports/ReportsTab";
+import { useCurrentProject } from "@/contexts/CurrentProjectContext";
 
 const BACKLOG_PAGE_SIZE = 20;
 
@@ -61,9 +63,10 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const notesResize = useResize({ initial: 320, min: 200, max: 560, axis: "x", reverse: true });
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
-  const [activeTab, setActiveTab] = useState<"planning" | "team" | "ideas" | "reports">(
-    tabParam === "planning" || tabParam === "team" || tabParam === "reports" ? tabParam : "ideas"
+  const [activeTab, setActiveTab] = useState<"management" | "team" | "ideas" | "reports">(
+    tabParam === "management" || tabParam === "team" || tabParam === "reports" ? tabParam : "ideas"
   );
+  const { setCurrentProject } = useCurrentProject();
   const [ideaBoards, setIdeaBoards] = useState<IdeaBoard[]>([]);
 
   const backlogJob = project?.jobs.find((j) => j.job_type === "backlog") ?? null;
@@ -75,6 +78,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     if (!token) return;
     getProject(token, id).then(async (proj) => {
       setProject(proj);
+      setCurrentProject({ id, name: proj.name });
       const bl = proj.jobs.find((j) => j.job_type === "backlog");
       const [stories, tmpl] = await Promise.all([
         bl ? listWorkflows(token, { job_id: bl.id }) : Promise.resolve([]),
@@ -231,7 +235,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       {/* Tab bar */}
       <div className="bg-white border-b border-slate-200 px-6 shrink-0 flex items-center gap-1">
-        {(["ideas", "planning", "team", "reports"] as const).map((tab) => (
+        {(["ideas", "management", "reports", "team"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -242,13 +246,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 : "border-transparent text-slate-500 hover:text-slate-800"
             }`}
           >
-            {tab === "planning" ? t("tabs.planning") : tab === "ideas" ? t("tabs.ideas") : tab === "team" ? t("tabs.team") : t("tabs.reports")}
+            {tab === "management" ? t("tabs.management") : tab === "ideas" ? t("tabs.ideas") : tab === "team" ? t("tabs.team") : t("tabs.reports")}
           </button>
         ))}
       </div>
 
-      {/* Planning tab — Three-column pane: Backlog | Sprints | Notes */}
-      {activeTab === "planning" && <div className="flex flex-1 overflow-hidden">
+      {/* Management tab — Three-column pane: Backlog | Sprints | Notes */}
+      {activeTab === "management" && <div className="flex flex-1 overflow-hidden">
         {/* Left — Backlog (resizable) */}
         <div className="shrink-0 overflow-hidden flex flex-col" style={{ width: backlogResize.size }}>
           <BacklogPanel
@@ -315,6 +319,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           projectId={id}
           boards={ideaBoards}
           token={token!}
+          backlogJobId={backlogJob?.id ?? null}
+          templates={templates}
           onBoardCreated={(b) => setIdeaBoards((prev) => [...prev, b])}
           onBoardDeleted={(boardId) => setIdeaBoards((prev) => prev.filter((b) => b.id !== boardId))}
         />
@@ -1320,16 +1326,48 @@ function IdeasPanel({
   projectId,
   boards,
   token,
+  backlogJobId,
+  templates,
   onBoardCreated,
   onBoardDeleted,
 }: {
   projectId: string;
   boards: IdeaBoard[];
   token: string;
+  backlogJobId: string | null;
+  templates: Workflow[];
   onBoardCreated: (b: IdeaBoard) => void;
   onBoardDeleted: (id: string) => void;
 }) {
   const [showCreate, setShowCreate] = useState(false);
+  const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
+  const [boardStickies, setBoardStickies] = useState<import("@/lib/types").StickyNote[]>([]);
+  const [boardLinks, setBoardLinks] = useState<import("@/lib/types").NoteLink[]>([]);
+  const [loadingBoard, setLoadingBoard] = useState(false);
+  const autoSelectedRef = useRef(false);
+
+  async function openBoard(boardId: string) {
+    localStorage.setItem(`togra_last_idea_board_${projectId}`, boardId);
+    setSelectedBoardId(boardId);
+    setLoadingBoard(true);
+    try {
+      const [s, l] = await Promise.all([listStickies(token, boardId), listNoteLinks(token, boardId)]);
+      setBoardStickies(s);
+      setBoardLinks(l);
+    } finally {
+      setLoadingBoard(false);
+    }
+  }
+
+  useEffect(() => {
+    if (autoSelectedRef.current || boards.length === 0) return;
+    const savedId = localStorage.getItem(`togra_last_idea_board_${projectId}`);
+    if (savedId && boards.some((b) => b.id === savedId)) {
+      autoSelectedRef.current = true;
+      openBoard(savedId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boards.length]);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -1354,6 +1392,42 @@ function IdeasPanel({
     setConfirmDeleteId(null);
   }
 
+  // ── Inline board canvas ────────────────────────────────────────────────────
+  if (selectedBoardId) {
+    const board = boards.find((b) => b.id === selectedBoardId);
+    return (
+      <div className="flex flex-col flex-1 overflow-hidden">
+        <div className="bg-white border-b border-slate-200 px-4 py-2 flex items-center gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={() => setSelectedBoardId(null)}
+            className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-violet-700 transition-colors"
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+              <path d="M7.78 12.53a.75.75 0 0 1-1.06 0L2.47 8.28a.75.75 0 0 1 0-1.06l4.25-4.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042L4.81 7h7.44a.75.75 0 0 1 0 1.5H4.81l2.97 2.97a.75.75 0 0 1 0 1.06Z"/>
+            </svg>
+            Boards
+          </button>
+          {board && <span className="text-sm font-medium text-slate-700">{board.name}</span>}
+        </div>
+        {loadingBoard ? (
+          <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Loading board…</div>
+        ) : (
+          <IdeaBoardCanvas
+            boardId={selectedBoardId}
+            token={token}
+            projectId={projectId}
+            backlogJobId={backlogJobId}
+            templates={templates}
+            initialStickies={boardStickies}
+            initialLinks={boardLinks}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // ── Board list ─────────────────────────────────────────────────────────────
   return (
     <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
       <div className="max-w-2xl mx-auto">
@@ -1389,7 +1463,7 @@ function IdeasPanel({
               <BoardCard
                 key={board.id}
                 board={board}
-                projectId={projectId}
+                onOpen={() => openBoard(board.id)}
                 onDelete={() => setConfirmDeleteId(board.id)}
               />
             ))}
@@ -1431,20 +1505,17 @@ function IdeasPanel({
 
 function BoardCard({
   board,
-  projectId,
+  onOpen,
   onDelete,
 }: {
   board: IdeaBoard;
-  projectId: string;
+  onOpen: () => void;
   onDelete: () => void;
 }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-4 hover:border-violet-200 hover:shadow-sm transition-all group">
       <div className="flex items-start justify-between gap-2">
-        <Link
-          href={`/projects/${projectId}/boards/${board.id}`}
-          className="flex-1 min-w-0"
-        >
+        <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left">
           <div className="flex items-center gap-2 mb-2">
             <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-violet-400 shrink-0">
               <path d="M0 3.75C0 2.784.784 2 1.75 2h12.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 14H1.75A1.75 1.75 0 0 1 0 12.25Zm1.75-.25a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25Z"/>
@@ -1456,10 +1527,10 @@ function BoardCard({
           <p className="text-xs text-slate-400">
             Created {new Date(board.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
           </p>
-        </Link>
+        </button>
         <button
           type="button"
-          onClick={(e) => { e.preventDefault(); onDelete(); }}
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
           className="p-1 rounded text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
           title="Delete board"
         >

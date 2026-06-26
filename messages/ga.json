@@ -129,12 +129,7 @@
     "breadcrumbProjects": "Tionscadail",
     "pmLabel": "BT",
     "notesTitle": "Nótaí",
-    "tabs": {
-      "planning": "Pleanáil",
-      "ideas": "Smaointe",
-      "team": "Foireann",
-      "reports": "Tuarascálacha"
-    },
+    "tabs": { "management": "Bainistíocht", "ideas": "Smaointe", "team": "Foireann", "reports": "Tuarascálacha" },
     "deleteProjectTitle": "\"{name}\" a scriosadh?",
     "deleteProjectMessage": "Scriosfar gach sprid, scéal agus nóta sa tionscadal seo go buan. Ní féidir é seo a chur ar ceal.",
     "deleteProjectLabel": "Tionscadal a scriosadh",

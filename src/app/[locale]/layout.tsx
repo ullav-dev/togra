@@ -10,6 +10,7 @@ import Footer from "@/components/Footer";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppUrlsProvider } from "@/contexts/AppUrlsContext";
 import type { AppUrls } from "@/contexts/AppUrlsContext";
+import { CurrentProjectProvider } from "@/contexts/CurrentProjectContext";
 import { TeamProvider } from "@/contexts/TeamContext";
 
 const geist = Geist({ subsets: ["latin"] });
@@ -46,9 +47,11 @@ export default async function LocaleLayout({
           <AuthProvider>
             <AppUrlsProvider urls={appUrls}>
               <TeamProvider>
-                <Nav />
-                <main className="flex-1 overflow-auto">{children}</main>
-                <Footer />
+                <CurrentProjectProvider>
+                  <Nav />
+                  <main className="flex-1 overflow-auto">{children}</main>
+                  <Footer />
+                </CurrentProjectProvider>
               </TeamProvider>
             </AppUrlsProvider>
           </AuthProvider>

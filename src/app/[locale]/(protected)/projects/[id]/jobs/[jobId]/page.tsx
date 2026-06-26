@@ -8,6 +8,8 @@ import { getJob, listWorkflows, listTasks, updateTask, getTeam, listTaskOutgoing
 import { getProject } from "@/lib/togra-api";
 import type { Job, Workflow, Task, TaskLink, Project, Status, TeamMember } from "@/lib/types";
 import NotesPanel from "@/components/notes/NotesPanel";
+import ResearchPanel from "@/components/research/ResearchPanel";
+import { useCurrentProject } from "@/contexts/CurrentProjectContext";
 
 const TASK_COLUMNS: {
   status: Status;
@@ -47,6 +49,7 @@ export default function SprintBoardPage({
   const [loading, setLoading] = useState(true);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [groupBy, setGroupBy] = useState<"story" | "member">("story");
+  const [researchOpen, setResearchOpen] = useState(false);
   // "all" | "mine" | a team member's user ID
   const [taskFilter, setTaskFilter] = useState<"all" | "mine" | string>("all");
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
@@ -60,6 +63,7 @@ export default function SprintBoardPage({
     });
   }
   const promotedRef = useRef(false);
+  const { setCurrentProject } = useCurrentProject();
 
   // Load project, job, stories, team
   useEffect(() => {
@@ -72,6 +76,7 @@ export default function SprintBoardPage({
       setProject(proj);
       setJob(j);
       setStories(wfs);
+      setCurrentProject({ id: projectId, name: proj.name });
       const teamId = j.team_id ?? proj.team_id ?? null;
       if (teamId) {
         const team = await getTeam(token, teamId).catch(() => null);
@@ -203,7 +208,7 @@ export default function SprintBoardPage({
         <nav className="flex items-center gap-2 text-sm text-slate-500 mb-1">
           <Link href="/projects" className="hover:text-violet-700 transition-colors">{t("breadcrumbProjects")}</Link>
           <span>/</span>
-          <Link href={`/projects/${projectId}`} className="hover:text-violet-700 transition-colors">{project?.name ?? "…"}</Link>
+          <Link href={`/projects/${projectId}?tab=management`} className="hover:text-violet-700 transition-colors">{project?.name ?? "…"}</Link>
           <span>/</span>
           <span className="text-slate-700 font-medium">{job.name}</span>
         </nav>
@@ -264,11 +269,26 @@ export default function SprintBoardPage({
                 {t("byMember")}
               </button>
             </div>
+            <button
+              type="button"
+              onClick={() => setResearchOpen((v) => !v)}
+              className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
+                researchOpen
+                  ? "bg-violet-600 text-white"
+                  : "bg-violet-50 text-violet-700 hover:bg-violet-100"
+              }`}
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+              </svg>
+              Research
+            </button>
           </div>
         </div>
       </div>
 
-      {/* ── Board ── */}
+      {/* ── Board + Research panel ── */}
+      <div className="flex flex-1 overflow-hidden">
       <div className="flex-1 overflow-auto p-6">
         <div className="min-w-max">
           {/* Column header row */}
@@ -371,6 +391,23 @@ export default function SprintBoardPage({
             ))
           )}
         </div>
+      </div>
+
+        {/* Research panel */}
+        {researchOpen && (
+          <div className="w-96 shrink-0 overflow-hidden border-l border-slate-200">
+            <ResearchPanel
+              token={token ?? ""}
+              entityType={selectedTaskCtx ? "task" : "job"}
+              entityId={selectedTaskCtx ? selectedTaskCtx.task.id : jobId}
+              storyId={selectedTaskCtx?.workflowId}
+              storyTitle={selectedTaskCtx?.storyName}
+              taskId={selectedTaskCtx?.task.id}
+              taskTitle={selectedTaskCtx?.task.name}
+              onClose={() => setResearchOpen(false)}
+            />
+          </div>
+        )}
       </div>
 
       {selectedTaskCtx && (

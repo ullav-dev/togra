@@ -5,6 +5,7 @@ import { useResize } from "@/hooks/useResize";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCurrentProject } from "@/contexts/CurrentProjectContext";
 import {
   getWorkflow, updateWorkflow,
   getTeam, listTeamRoles,
@@ -20,6 +21,7 @@ import StatusPill from "@/components/StatusPill";
 import NotesPanel from "@/components/notes/NotesPanel";
 import VisibilityToggle from "@/components/VisibilityToggle";
 import WorkflowCanvas from "@/components/WorkflowCanvas";
+import ResearchPanel from "@/components/research/ResearchPanel";
 
 export default function StoryDetailPage({
   params,
@@ -28,6 +30,7 @@ export default function StoryDetailPage({
 }) {
   const { id: projectId, storyId } = use(params);
   const { token } = useAuth();
+  const { setCurrentProject } = useCurrentProject();
   const t = useTranslations("story");
 
   const [project, setProject] = useState<ProjectWithJobs | null>(null);
@@ -51,6 +54,7 @@ export default function StoryDetailPage({
       getWorkflow(token, storyId),
     ]).then(async ([proj, wft]) => {
       setProject(proj);
+      setCurrentProject({ id: proj.id, name: proj.name });
       setStory(wft);
       setNameValue(wft.name);
       setPointsValue(wft.story_points?.toString() ?? "");
@@ -95,6 +99,7 @@ export default function StoryDetailPage({
   }
 
   const notesResize = useResize({ initial: 360, min: 180, max: 700, axis: "y" });
+  const [researchOpen, setResearchOpen] = useState(false);
 
   if (loading) return <div className="p-8 text-slate-400 text-sm">{t("loading")}</div>;
   if (!story) return <div className="p-8 text-slate-500 text-sm">{t("notFound")}</div>;
@@ -109,11 +114,11 @@ export default function StoryDetailPage({
         <nav className="flex items-center gap-2 text-sm text-slate-500 mb-3 flex-wrap">
           <Link href="/projects" className="hover:text-violet-700 transition-colors">{t("breadcrumbProjects")}</Link>
           <span>/</span>
-          <Link href={`/projects/${projectId}`} className="hover:text-violet-700 transition-colors">{project?.name ?? "…"}</Link>
+          <Link href={`/projects/${projectId}?tab=management`} className="hover:text-violet-700 transition-colors">{project?.name ?? "…"}</Link>
           {parentJobId && (() => {
             const parentJob = project?.jobs?.find((j) => j.id === parentJobId);
             const href = parentJob?.job_type === "backlog"
-              ? `/projects/${projectId}?tab=planning`
+              ? `/projects/${projectId}?tab=management`
               : `/projects/${projectId}/jobs/${parentJobId}`;
             return (
               <>
@@ -197,41 +202,76 @@ export default function StoryDetailPage({
               {ideaOrigin.board_name}
             </Link>
           )}
+          <button
+            type="button"
+            onClick={() => setResearchOpen((v) => !v)}
+            className={`ml-auto inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${
+              researchOpen
+                ? "bg-violet-600 text-white"
+                : "bg-violet-50 text-violet-700 hover:bg-violet-100"
+            }`}
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+            </svg>
+            Research
+          </button>
         </div>
       </div>
 
-      {/* Notes — resizable, fills from header down */}
-      <div
-        className="shrink-0 overflow-hidden bg-white border-b border-slate-200 px-6 py-4"
-        style={{ height: notesResize.size }}
-      >
-        <NotesPanel entityType="workflow" entityId={storyId} isTeam={true} twoColumn autoSelectFirst members={teamMembers.map((m) => m.user)} />
-      </div>
+      {/* Body: main content + optional research panel */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Main content */}
+        <div className="flex flex-col flex-1 overflow-hidden min-w-0">
+          {/* Notes — resizable */}
+          <div
+            className="shrink-0 overflow-hidden bg-white border-b border-slate-200 px-6 py-4"
+            style={{ height: notesResize.size }}
+          >
+            <NotesPanel entityType="workflow" entityId={storyId} isTeam={true} twoColumn autoSelectFirst members={teamMembers.map((m) => m.user)} />
+          </div>
 
-      {/* Resize handle */}
-      <div
-        onMouseDown={notesResize.onMouseDown}
-        className="h-2 shrink-0 bg-slate-100 hover:bg-violet-100 cursor-row-resize flex items-center justify-center group transition-colors"
-        title="Drag to resize"
-      >
-        <div className="w-8 h-0.5 bg-slate-300 group-hover:bg-violet-400 rounded-full transition-colors" />
-      </div>
+          {/* Resize handle */}
+          <div
+            onMouseDown={notesResize.onMouseDown}
+            className="h-2 shrink-0 bg-slate-100 hover:bg-violet-100 cursor-row-resize flex items-center justify-center group transition-colors"
+            title="Drag to resize"
+          >
+            <div className="w-8 h-0.5 bg-slate-300 group-hover:bg-violet-400 rounded-full transition-colors" />
+          </div>
 
-      {/* Workflow canvas — fills remaining space */}
-      <div className="flex-1 overflow-hidden bg-slate-50">
-        {story.tasks.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-slate-400 text-sm">{t("noSteps")}</div>
-        ) : (
-          <WorkflowCanvas
-            workflow={story}
-            teamMembers={teamMembers}
-            teamRoles={teamRoles}
-            taskTeamRoles={taskTeamRoles}
-            token={token ?? ""}
-            onTaskUpdated={(updated) =>
-              setStory((prev) => prev ? { ...prev, tasks: prev.tasks.map((t) => t.id === updated.id ? updated : t) } : prev)
-            }
-          />
+          {/* Workflow canvas — fills remaining space */}
+          <div className="flex-1 overflow-hidden bg-slate-50">
+            {story.tasks.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-slate-400 text-sm">{t("noSteps")}</div>
+            ) : (
+              <WorkflowCanvas
+                workflow={story}
+                teamMembers={teamMembers}
+                teamRoles={teamRoles}
+                taskTeamRoles={taskTeamRoles}
+                token={token ?? ""}
+                onTaskUpdated={(updated) =>
+                  setStory((prev) => prev ? { ...prev, tasks: prev.tasks.map((t) => t.id === updated.id ? updated : t) } : prev)
+                }
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Research panel */}
+        {researchOpen && (
+          <div className="w-96 shrink-0 overflow-hidden">
+            <ResearchPanel
+              token={token ?? ""}
+              entityType="workflow"
+              entityId={storyId}
+              storyId={storyId}
+              storyTitle={story.name}
+              storyDescription={story.description ?? undefined}
+              onClose={() => setResearchOpen(false)}
+            />
+          </div>
         )}
       </div>
     </div>

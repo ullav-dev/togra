@@ -129,12 +129,7 @@
     "breadcrumbProjects": "Projects",
     "pmLabel": "PM",
     "notesTitle": "Notes",
-    "tabs": {
-      "planning": "Planning",
-      "ideas": "Ideas",
-      "team": "Team",
-      "reports": "Reports"
-    },
+    "tabs": { "management": "Management", "ideas": "Ideas", "team": "Team", "reports": "Reports" },
     "deleteProjectTitle": "Delete \"{name}\"?",
     "deleteProjectMessage": "All sprints, stories, and notes in this project will be permanently deleted. This cannot be undone.",
     "deleteProjectLabel": "Delete project",
