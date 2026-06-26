@@ -221,8 +221,26 @@ export default function StoryDetailPage({
         </div>
 
         {story.description && (
-          <div className="mt-3 pt-3 border-t border-slate-100 prose prose-sm prose-slate max-w-none text-sm leading-relaxed [&_a]:text-violet-600 [&_a:hover]:underline">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{story.description}</ReactMarkdown>
+          <div className="mt-3 pt-3 border-t border-slate-100 prose prose-sm prose-slate max-w-none text-sm leading-relaxed">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                a: ({ href, children }) => {
+                  const isCunav = !!href && href.includes("/en/tickets/");
+                  return (
+                    <button
+                      type="button"
+                      className="text-violet-600 hover:underline"
+                      onClick={() => window.open(href, isCunav ? "cunav-app" : "_blank")}
+                    >
+                      {children}
+                    </button>
+                  );
+                },
+              }}
+            >
+              {story.description}
+            </ReactMarkdown>
           </div>
         )}
       </div>
