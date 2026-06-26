@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTranslations } from "next-intl";
 import { isAdmin, hasObairAccess, hasComadAccess } from "@/lib/auth-api";
 import { useAppUrls } from "@/contexts/AppUrlsContext";
+import { useCurrentProject } from "@/contexts/CurrentProjectContext";
 import TograIcon from "@/components/TograIcon";
 import MyDetailsModal from "@/components/MyDetailsModal";
 import AboutModal from "@/components/AboutModal";
@@ -38,6 +39,17 @@ export default function Nav() {
   const { user, token, roles, isLoading, logout } = useAuth();
   const userIsAdmin = isAdmin(token);
   const { obairUrl, damBrowserUrl } = useAppUrls();
+  const { project: currentProject } = useCurrentProject();
+
+  // Determine the target href for the active project button.
+  // If we're on a sprint board (/projects/[id]/jobs/[jobId]), link back to that board.
+  // Otherwise link to the project Management tab.
+  const sprintBoardMatch = pathname.match(/^\/projects\/([^/]+)\/jobs\/([^/]+)/);
+  const activeProjectHref = currentProject
+    ? sprintBoardMatch
+      ? `/projects/${sprintBoardMatch[1]}/jobs/${sprintBoardMatch[2]}`
+      : `/projects/${currentProject.id}?tab=management`
+    : null;
   const showObair = !!obairUrl && hasObairAccess(token);
   const showComad = !!damBrowserUrl && hasComadAccess(token);
 
@@ -123,6 +135,19 @@ export default function Nav() {
                 <Link href="/decisions" className={navLink("/decisions")}>
                   {t("myDecisions")}
                 </Link>
+
+                {activeProjectHref && currentProject && (
+                  <Link
+                    href={activeProjectHref}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-violet-600 text-white hover:bg-violet-700 transition-colors max-w-[180px] truncate"
+                    title={currentProject.name}
+                  >
+                    <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                    </svg>
+                    <span className="truncate">{currentProject.name}</span>
+                  </Link>
+                )}
 
                 {(showObair || showComad) && (
                   <div className="flex items-center gap-1 pl-3 border-l border-slate-200">

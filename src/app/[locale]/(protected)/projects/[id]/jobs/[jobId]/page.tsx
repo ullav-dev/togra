@@ -9,6 +9,7 @@ import { getProject } from "@/lib/togra-api";
 import type { Job, Workflow, Task, TaskLink, Project, Status, TeamMember } from "@/lib/types";
 import NotesPanel from "@/components/notes/NotesPanel";
 import ResearchPanel from "@/components/research/ResearchPanel";
+import { useCurrentProject } from "@/contexts/CurrentProjectContext";
 
 const TASK_COLUMNS: {
   status: Status;
@@ -54,6 +55,7 @@ export default function SprintBoardPage({
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [selectedTaskCtx, setSelectedTaskCtx] = useState<{ task: Task; workflowId: string; storyName: string } | null>(null);
   const promotedRef = useRef(false);
+  const { setCurrentProject } = useCurrentProject();
 
   // Load project, job, stories, team
   useEffect(() => {
@@ -66,6 +68,7 @@ export default function SprintBoardPage({
       setProject(proj);
       setJob(j);
       setStories(wfs);
+      setCurrentProject({ id: projectId, name: proj.name });
       const teamId = j.team_id ?? proj.team_id ?? null;
       if (teamId) {
         const team = await getTeam(token, teamId).catch(() => null);
@@ -197,7 +200,7 @@ export default function SprintBoardPage({
         <nav className="flex items-center gap-2 text-sm text-slate-500 mb-1">
           <Link href="/projects" className="hover:text-violet-700 transition-colors">{t("breadcrumbProjects")}</Link>
           <span>/</span>
-          <Link href={`/projects/${projectId}`} className="hover:text-violet-700 transition-colors">{project?.name ?? "…"}</Link>
+          <Link href={`/projects/${projectId}?tab=management`} className="hover:text-violet-700 transition-colors">{project?.name ?? "…"}</Link>
           <span>/</span>
           <span className="text-slate-700 font-medium">{job.name}</span>
         </nav>

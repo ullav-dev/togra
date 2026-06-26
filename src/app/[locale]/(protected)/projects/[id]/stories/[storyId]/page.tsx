@@ -5,6 +5,7 @@ import { useResize } from "@/hooks/useResize";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCurrentProject } from "@/contexts/CurrentProjectContext";
 import {
   getWorkflow, updateWorkflow,
   getTeam, listTeamRoles,
@@ -29,6 +30,7 @@ export default function StoryDetailPage({
 }) {
   const { id: projectId, storyId } = use(params);
   const { token } = useAuth();
+  const { setCurrentProject } = useCurrentProject();
   const t = useTranslations("story");
 
   const [project, setProject] = useState<ProjectWithJobs | null>(null);
@@ -52,6 +54,7 @@ export default function StoryDetailPage({
       getWorkflow(token, storyId),
     ]).then(async ([proj, wft]) => {
       setProject(proj);
+      setCurrentProject({ id: proj.id, name: proj.name });
       setStory(wft);
       setNameValue(wft.name);
       setPointsValue(wft.story_points?.toString() ?? "");
@@ -111,11 +114,11 @@ export default function StoryDetailPage({
         <nav className="flex items-center gap-2 text-sm text-slate-500 mb-3 flex-wrap">
           <Link href="/projects" className="hover:text-violet-700 transition-colors">{t("breadcrumbProjects")}</Link>
           <span>/</span>
-          <Link href={`/projects/${projectId}`} className="hover:text-violet-700 transition-colors">{project?.name ?? "…"}</Link>
+          <Link href={`/projects/${projectId}?tab=management`} className="hover:text-violet-700 transition-colors">{project?.name ?? "…"}</Link>
           {parentJobId && (() => {
             const parentJob = project?.jobs?.find((j) => j.id === parentJobId);
             const href = parentJob?.job_type === "backlog"
-              ? `/projects/${projectId}?tab=planning`
+              ? `/projects/${projectId}?tab=management`
               : `/projects/${projectId}/jobs/${parentJobId}`;
             return (
               <>

@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCurrentProject } from "@/contexts/CurrentProjectContext";
 import { Link } from "@/i18n/navigation";
 import { getIdeaBoard, listStickies, listNoteLinks } from "@/lib/notes-api";
 import { getProject, } from "@/lib/togra-api";
@@ -17,6 +18,7 @@ export default function IdeaBoardPage({
 }) {
   const { id: projectId, boardId } = use(params);
   const { token } = useAuth();
+  const { setCurrentProject } = useCurrentProject();
 
   const [board, setBoard] = useState<IdeaBoard | null>(null);
   const [researchOpen, setResearchOpen] = useState(false);
@@ -38,6 +40,7 @@ export default function IdeaBoardPage({
         setBoard(b);
         setStickies(s);
         setLinks(l);
+        setCurrentProject({ id: proj.id, name: proj.name });
         const bl = proj.jobs.find((j: Job) => j.job_type === "backlog") ?? null;
         setBacklogJob(bl);
         if (proj.team_id) {

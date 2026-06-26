@@ -31,6 +31,7 @@ import VisibilityToggle from "@/components/VisibilityToggle";
 import NotesPanel from "@/components/notes/NotesPanel";
 import TeamView from "@/components/TeamView";
 import ReportsTab from "@/components/reports/ReportsTab";
+import { useCurrentProject } from "@/contexts/CurrentProjectContext";
 
 const BACKLOG_PAGE_SIZE = 20;
 
@@ -61,9 +62,10 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const notesResize = useResize({ initial: 320, min: 200, max: 560, axis: "x", reverse: true });
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
-  const [activeTab, setActiveTab] = useState<"planning" | "team" | "ideas" | "reports">(
-    tabParam === "planning" || tabParam === "team" || tabParam === "reports" ? tabParam : "ideas"
+  const [activeTab, setActiveTab] = useState<"management" | "team" | "ideas" | "reports">(
+    tabParam === "management" || tabParam === "team" || tabParam === "reports" ? tabParam : "ideas"
   );
+  const { setCurrentProject } = useCurrentProject();
   const [ideaBoards, setIdeaBoards] = useState<IdeaBoard[]>([]);
 
   const backlogJob = project?.jobs.find((j) => j.job_type === "backlog") ?? null;
@@ -75,6 +77,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     if (!token) return;
     getProject(token, id).then(async (proj) => {
       setProject(proj);
+      setCurrentProject({ id, name: proj.name });
       const bl = proj.jobs.find((j) => j.job_type === "backlog");
       const [stories, tmpl] = await Promise.all([
         bl ? listWorkflows(token, { job_id: bl.id }) : Promise.resolve([]),
@@ -231,7 +234,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       {/* Tab bar */}
       <div className="bg-white border-b border-slate-200 px-6 shrink-0 flex items-center gap-1">
-        {(["ideas", "planning", "team", "reports"] as const).map((tab) => (
+        {(["ideas", "management", "reports", "team"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -242,13 +245,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 : "border-transparent text-slate-500 hover:text-slate-800"
             }`}
           >
-            {tab === "planning" ? t("tabs.planning") : tab === "ideas" ? t("tabs.ideas") : tab === "team" ? t("tabs.team") : t("tabs.reports")}
+            {tab === "management" ? t("tabs.management") : tab === "ideas" ? t("tabs.ideas") : tab === "team" ? t("tabs.team") : t("tabs.reports")}
           </button>
         ))}
       </div>
 
-      {/* Planning tab — Three-column pane: Backlog | Sprints | Notes */}
-      {activeTab === "planning" && <div className="flex flex-1 overflow-hidden">
+      {/* Management tab — Three-column pane: Backlog | Sprints | Notes */}
+      {activeTab === "management" && <div className="flex flex-1 overflow-hidden">
         {/* Left — Backlog (resizable) */}
         <div className="shrink-0 overflow-hidden flex flex-col" style={{ width: backlogResize.size }}>
           <BacklogPanel
