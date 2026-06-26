@@ -45,6 +45,13 @@ export interface PickedAsset {
   thumbnailUrl: string;
 }
 
+interface AssetPage {
+  items: AssetWithCategories[];
+  total: number;
+  page: number;
+  per_page: number;
+}
+
 export function createDamClient(base: string, token: string) {
   async function get<T>(path: string): Promise<T> {
     const res = await fetch(`${base}${path}`, {
@@ -62,7 +69,10 @@ export function createDamClient(base: string, token: string) {
   }
 
   return {
-    listAssets: (): Promise<Asset[]> => get("/assets"),
+    listAssets: async (): Promise<AssetWithCategories[]> => {
+      const page = await get<AssetPage>("/assets?per_page=200");
+      return page.items;
+    },
     listCategories: (): Promise<Category[]> => get("/categories"),
     getAsset: (id: string): Promise<AssetWithCategories> => get(`/assets/${id}`),
     thumbnailUrl: (id: string): string => `${base}/assets/${id}/thumbnail`,
