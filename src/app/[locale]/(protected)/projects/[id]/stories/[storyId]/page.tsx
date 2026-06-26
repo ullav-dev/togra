@@ -22,6 +22,8 @@ import NotesPanel from "@/components/notes/NotesPanel";
 import VisibilityToggle from "@/components/VisibilityToggle";
 import WorkflowCanvas from "@/components/WorkflowCanvas";
 import ResearchPanel from "@/components/research/ResearchPanel";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export default function StoryDetailPage({
   params,
@@ -217,6 +219,12 @@ export default function StoryDetailPage({
             Research
           </button>
         </div>
+
+        {story.description && (
+          <div className="mt-3 pt-3 border-t border-slate-100 prose prose-sm prose-slate max-w-none text-sm leading-relaxed [&_a]:text-violet-600 [&_a:hover]:underline">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{story.description}</ReactMarkdown>
+          </div>
+        )}
       </div>
 
       {/* Body: main content + optional research panel */}
