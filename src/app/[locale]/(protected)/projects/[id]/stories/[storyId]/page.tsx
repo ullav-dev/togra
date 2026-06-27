@@ -22,6 +22,7 @@ import NotesPanel from "@/components/notes/NotesPanel";
 import VisibilityToggle from "@/components/VisibilityToggle";
 import WorkflowCanvas from "@/components/WorkflowCanvas";
 import ResearchPanel from "@/components/research/ResearchPanel";
+import MarkdownEditor from "@/components/MarkdownEditor";
 
 export default function StoryDetailPage({
   params,
@@ -41,6 +42,8 @@ export default function StoryDetailPage({
   const [nameValue, setNameValue] = useState("");
   const [editingPoints, setEditingPoints] = useState(false);
   const [pointsValue, setPointsValue] = useState("");
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [descriptionValue, setDescriptionValue] = useState("");
 
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [teamRoles, setTeamRoles] = useState<TeamRole[]>([]);
@@ -58,6 +61,7 @@ export default function StoryDetailPage({
       setStory(wft);
       setNameValue(wft.name);
       setPointsValue(wft.story_points?.toString() ?? "");
+      setDescriptionValue(wft.description ?? "");
 
       const teamId = wft.team_id ?? proj.team_id ?? null;
       if (teamId) {
@@ -95,6 +99,14 @@ export default function StoryDetailPage({
     const pts = pointsValue ? parseInt(pointsValue, 10) : undefined;
     if (pts === story.story_points) return;
     const updated = await updateWorkflow(token, storyId, { story_points: pts });
+    setStory((prev) => prev ? { ...prev, ...updated } : prev);
+  }
+
+  async function saveDescription() {
+    if (!token || !story) return;
+    setEditingDescription(false);
+    if (descriptionValue === (story.description ?? "")) return;
+    const updated = await updateWorkflow(token, storyId, { description: descriptionValue || undefined });
     setStory((prev) => prev ? { ...prev, ...updated } : prev);
   }
 
@@ -191,6 +203,28 @@ export default function StoryDetailPage({
               setStory((prev) => prev ? { ...prev, is_shared: updated.is_shared } : prev);
             }}
           />
+          {story.ticket_type && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {story.ticket_number != null && (
+                <span className="inline-flex items-center gap-1 text-xs font-mono font-semibold bg-violet-100 text-violet-700 px-2 py-0.5 rounded">
+                  ULLAV-{story.ticket_number}
+                </span>
+              )}
+              <span className="inline-flex items-center text-xs font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded capitalize">
+                {story.ticket_type}
+              </span>
+              {story.priority && (
+                <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded capitalize ${
+                  story.priority === "critical" ? "bg-red-100 text-red-700" :
+                  story.priority === "high"     ? "bg-orange-100 text-orange-700" :
+                  story.priority === "medium"   ? "bg-yellow-100 text-yellow-700" :
+                                                  "bg-slate-100 text-slate-600"
+                }`}>
+                  {story.priority}
+                </span>
+              )}
+            </div>
+          )}
           {ideaOrigin && (
             <Link
               href={`/projects/${projectId}/boards/${ideaOrigin.board_id}`}
@@ -223,6 +257,47 @@ export default function StoryDetailPage({
       <div className="flex flex-1 overflow-hidden">
         {/* Main content */}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
+          {/* Description */}
+          <div className="shrink-0 bg-white border-b border-slate-200 px-6 py-3">
+            {editingDescription ? (
+              <div className="space-y-2">
+                <MarkdownEditor
+                  value={descriptionValue}
+                  onChange={setDescriptionValue}
+                  placeholder="Add a description…"
+                  height={160}
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={saveDescription}
+                    className="text-xs font-medium bg-violet-600 text-white px-3 py-1 rounded hover:bg-violet-700 transition-colors"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setEditingDescription(false); setDescriptionValue(story.description ?? ""); }}
+                    className="text-xs font-medium text-slate-500 px-3 py-1 rounded hover:bg-slate-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEditingDescription(true)}
+                className="w-full text-left text-sm text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                {story.description
+                  ? <span className="text-slate-700 whitespace-pre-wrap">{story.description}</span>
+                  : <span className="italic">Add a description…</span>
+                }
+              </button>
+            )}
+          </div>
+
           {/* Notes — resizable */}
           <div
             className="shrink-0 overflow-hidden bg-white border-b border-slate-200 px-6 py-4"

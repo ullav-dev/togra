@@ -117,6 +117,11 @@ export interface Workflow {
   sort_order: number | null;
   /** Story point estimate. */
   story_points: number | null;
+  /** Cunav ticket fields — present when ticket_type is set. */
+  ticket_type: string | null;
+  ticket_number: number | null;
+  priority: string | null;
+  reporter_id: string | null;
 }
 
 export interface WorkflowWithTasks extends Workflow {
