@@ -160,13 +160,17 @@ export default function StoryDetailPage({
                 className="text-xl font-bold text-slate-800 w-full border-b-2 border-violet-400 outline-none bg-transparent pb-0.5"
               />
             ) : (
-              <h1
-                className="text-xl font-bold text-slate-800 cursor-pointer hover:text-violet-700 transition-colors leading-snug"
+              <div
+                className="group flex items-start gap-2 cursor-pointer"
                 onClick={() => setEditingName(true)}
-                title="Click to edit"
               >
-                {story.name}
-              </h1>
+                <h1 className="text-xl font-bold text-slate-800 group-hover:text-violet-700 transition-colors leading-snug">
+                  {story.name}
+                </h1>
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 mt-1 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  <path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm.176 4.823L9.75 4.81l-6.286 6.287a.253.253 0 0 0-.064.108l-.558 1.953 1.953-.558a.253.253 0 0 0 .108-.064Zm1.238-3.763a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354Z"/>
+                </svg>
+              </div>
             )}
           </div>
           <StatusPill status={story.status} />
@@ -176,24 +180,41 @@ export default function StoryDetailPage({
           <div className="flex items-center gap-2">
             <span className="font-medium">{t("storyPoints")}</span>
             {editingPoints ? (
-              <input
-                autoFocus
-                type="number"
-                min="0"
-                value={pointsValue}
-                onChange={(e) => setPointsValue(e.target.value)}
-                onBlur={savePoints}
-                onKeyDown={(e) => { if (e.key === "Enter") savePoints(); if (e.key === "Escape") { setEditingPoints(false); setPointsValue(story.story_points?.toString() ?? ""); } }}
-                className="w-16 border-b-2 border-violet-400 outline-none bg-transparent text-center text-sm font-semibold text-violet-700"
-              />
+              <div className="flex items-center gap-1.5">
+                <input
+                  autoFocus
+                  type="number"
+                  min="0"
+                  value={pointsValue}
+                  onChange={(e) => setPointsValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") savePoints(); if (e.key === "Escape") { setEditingPoints(false); setPointsValue(story.story_points?.toString() ?? ""); } }}
+                  className="w-16 border border-violet-400 rounded px-2 py-0.5 text-sm font-semibold text-violet-700 outline-none focus:ring-1 focus:ring-violet-400 bg-white"
+                />
+                <button
+                  type="button"
+                  onClick={savePoints}
+                  className="text-xs font-medium bg-violet-600 text-white px-2 py-0.5 rounded hover:bg-violet-700 transition-colors"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setEditingPoints(false); setPointsValue(story.story_points?.toString() ?? ""); }}
+                  className="text-xs font-medium text-slate-500 px-2 py-0.5 rounded hover:bg-slate-100 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             ) : (
               <button
                 type="button"
                 onClick={() => setEditingPoints(true)}
-                className="text-sm font-semibold text-violet-700 hover:text-violet-800 transition-colors"
-                title="Click to edit"
+                className="group flex items-center gap-1.5 text-sm font-semibold text-violet-700 hover:text-violet-800 bg-violet-50 hover:bg-violet-100 px-2.5 py-0.5 rounded transition-colors"
               >
                 {story.story_points != null ? story.story_points : "—"}
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm.176 4.823L9.75 4.81l-6.286 6.287a.253.253 0 0 0-.064.108l-.558 1.953 1.953-.558a.253.253 0 0 0 .108-.064Zm1.238-3.763a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354Z"/>
+                </svg>
               </button>
             )}
           </div>
