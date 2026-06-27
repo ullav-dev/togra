@@ -242,20 +242,16 @@ export default function StoryDetailPage({
 
           {/* Workflow canvas — fills remaining space */}
           <div className="flex-1 overflow-hidden bg-slate-50">
-            {story.tasks.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-slate-400 text-sm">{t("noSteps")}</div>
-            ) : (
-              <WorkflowCanvas
-                workflow={story}
-                teamMembers={teamMembers}
-                teamRoles={teamRoles}
-                taskTeamRoles={taskTeamRoles}
-                token={token ?? ""}
-                onTaskUpdated={(updated) =>
-                  setStory((prev) => prev ? { ...prev, tasks: prev.tasks.map((t) => t.id === updated.id ? updated : t) } : prev)
-                }
-              />
-            )}
+            <WorkflowCanvas
+              workflow={story}
+              teamMembers={teamMembers}
+              teamRoles={teamRoles}
+              taskTeamRoles={taskTeamRoles}
+              token={token ?? ""}
+              onTaskUpdated={(updated) =>
+                setStory((prev) => prev ? { ...prev, tasks: prev.tasks.map((t) => t.id === updated.id ? updated : t) } : prev)
+              }
+            />
           </div>
         </div>
 
