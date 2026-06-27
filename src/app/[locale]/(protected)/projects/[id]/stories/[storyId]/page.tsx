@@ -23,6 +23,8 @@ import VisibilityToggle from "@/components/VisibilityToggle";
 import WorkflowCanvas from "@/components/WorkflowCanvas";
 import ResearchPanel from "@/components/research/ResearchPanel";
 import MarkdownEditor from "@/components/MarkdownEditor";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export default function StoryDetailPage({
   params,
@@ -285,16 +287,15 @@ export default function StoryDetailPage({
                 </div>
               </div>
             ) : (
-              <button
-                type="button"
+              <div
                 onClick={() => setEditingDescription(true)}
-                className="w-full text-left text-sm text-slate-500 hover:text-slate-700 transition-colors"
+                className="cursor-pointer text-sm text-slate-700 hover:bg-slate-50 rounded px-1 -mx-1 transition-colors prose prose-sm prose-slate max-w-none"
               >
                 {story.description
-                  ? <span className="text-slate-700 whitespace-pre-wrap">{story.description}</span>
-                  : <span className="italic">Add a description…</span>
+                  ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{story.description}</ReactMarkdown>
+                  : <span className="italic text-slate-400">Add a description…</span>
                 }
-              </button>
+              </div>
             )}
           </div>
 
