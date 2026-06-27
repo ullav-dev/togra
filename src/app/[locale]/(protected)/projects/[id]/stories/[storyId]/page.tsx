@@ -22,6 +22,9 @@ import NotesPanel from "@/components/notes/NotesPanel";
 import VisibilityToggle from "@/components/VisibilityToggle";
 import WorkflowCanvas from "@/components/WorkflowCanvas";
 import ResearchPanel from "@/components/research/ResearchPanel";
+import MarkdownEditor from "@/components/MarkdownEditor";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export default function StoryDetailPage({
   params,
@@ -41,6 +44,8 @@ export default function StoryDetailPage({
   const [nameValue, setNameValue] = useState("");
   const [editingPoints, setEditingPoints] = useState(false);
   const [pointsValue, setPointsValue] = useState("");
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [descriptionValue, setDescriptionValue] = useState("");
 
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [teamRoles, setTeamRoles] = useState<TeamRole[]>([]);
@@ -58,6 +63,7 @@ export default function StoryDetailPage({
       setStory(wft);
       setNameValue(wft.name);
       setPointsValue(wft.story_points?.toString() ?? "");
+      setDescriptionValue(wft.description ?? "");
 
       const teamId = wft.team_id ?? proj.team_id ?? null;
       if (teamId) {
@@ -95,6 +101,14 @@ export default function StoryDetailPage({
     const pts = pointsValue ? parseInt(pointsValue, 10) : undefined;
     if (pts === story.story_points) return;
     const updated = await updateWorkflow(token, storyId, { story_points: pts });
+    setStory((prev) => prev ? { ...prev, ...updated } : prev);
+  }
+
+  async function saveDescription() {
+    if (!token || !story) return;
+    setEditingDescription(false);
+    if (descriptionValue === (story.description ?? "")) return;
+    const updated = await updateWorkflow(token, storyId, { description: descriptionValue || undefined });
     setStory((prev) => prev ? { ...prev, ...updated } : prev);
   }
 
@@ -146,13 +160,17 @@ export default function StoryDetailPage({
                 className="text-xl font-bold text-slate-800 w-full border-b-2 border-violet-400 outline-none bg-transparent pb-0.5"
               />
             ) : (
-              <h1
-                className="text-xl font-bold text-slate-800 cursor-pointer hover:text-violet-700 transition-colors leading-snug"
+              <div
+                className="group flex items-start gap-2 cursor-pointer"
                 onClick={() => setEditingName(true)}
-                title="Click to edit"
               >
-                {story.name}
-              </h1>
+                <h1 className="text-xl font-bold text-slate-800 group-hover:text-violet-700 transition-colors leading-snug">
+                  {story.name}
+                </h1>
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 mt-1 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  <path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm.176 4.823L9.75 4.81l-6.286 6.287a.253.253 0 0 0-.064.108l-.558 1.953 1.953-.558a.253.253 0 0 0 .108-.064Zm1.238-3.763a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354Z"/>
+                </svg>
+              </div>
             )}
           </div>
           <StatusPill status={story.status} />
@@ -162,24 +180,41 @@ export default function StoryDetailPage({
           <div className="flex items-center gap-2">
             <span className="font-medium">{t("storyPoints")}</span>
             {editingPoints ? (
-              <input
-                autoFocus
-                type="number"
-                min="0"
-                value={pointsValue}
-                onChange={(e) => setPointsValue(e.target.value)}
-                onBlur={savePoints}
-                onKeyDown={(e) => { if (e.key === "Enter") savePoints(); if (e.key === "Escape") { setEditingPoints(false); setPointsValue(story.story_points?.toString() ?? ""); } }}
-                className="w-16 border-b-2 border-violet-400 outline-none bg-transparent text-center text-sm font-semibold text-violet-700"
-              />
+              <div className="flex items-center gap-1.5">
+                <input
+                  autoFocus
+                  type="number"
+                  min="0"
+                  value={pointsValue}
+                  onChange={(e) => setPointsValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") savePoints(); if (e.key === "Escape") { setEditingPoints(false); setPointsValue(story.story_points?.toString() ?? ""); } }}
+                  className="w-16 border border-violet-400 rounded px-2 py-0.5 text-sm font-semibold text-violet-700 outline-none focus:ring-1 focus:ring-violet-400 bg-white"
+                />
+                <button
+                  type="button"
+                  onClick={savePoints}
+                  className="text-xs font-medium bg-violet-600 text-white px-2 py-0.5 rounded hover:bg-violet-700 transition-colors"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setEditingPoints(false); setPointsValue(story.story_points?.toString() ?? ""); }}
+                  className="text-xs font-medium text-slate-500 px-2 py-0.5 rounded hover:bg-slate-100 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             ) : (
               <button
                 type="button"
                 onClick={() => setEditingPoints(true)}
-                className="text-sm font-semibold text-violet-700 hover:text-violet-800 transition-colors"
-                title="Click to edit"
+                className="group flex items-center gap-1.5 text-sm font-semibold text-violet-700 hover:text-violet-800 bg-violet-50 hover:bg-violet-100 px-2.5 py-0.5 rounded transition-colors"
               >
                 {story.story_points != null ? story.story_points : "—"}
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm.176 4.823L9.75 4.81l-6.286 6.287a.253.253 0 0 0-.064.108l-.558 1.953 1.953-.558a.253.253 0 0 0 .108-.064Zm1.238-3.763a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354Z"/>
+                </svg>
               </button>
             )}
           </div>
@@ -191,6 +226,28 @@ export default function StoryDetailPage({
               setStory((prev) => prev ? { ...prev, is_shared: updated.is_shared } : prev);
             }}
           />
+          {story.ticket_type && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {story.ticket_number != null && (
+                <span className="inline-flex items-center gap-1 text-xs font-mono font-semibold bg-violet-100 text-violet-700 px-2 py-0.5 rounded">
+                  ULLAV-{story.ticket_number}
+                </span>
+              )}
+              <span className="inline-flex items-center text-xs font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded capitalize">
+                {story.ticket_type}
+              </span>
+              {story.priority && (
+                <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded capitalize ${
+                  story.priority === "critical" ? "bg-red-100 text-red-700" :
+                  story.priority === "high"     ? "bg-orange-100 text-orange-700" :
+                  story.priority === "medium"   ? "bg-yellow-100 text-yellow-700" :
+                                                  "bg-slate-100 text-slate-600"
+                }`}>
+                  {story.priority}
+                </span>
+              )}
+            </div>
+          )}
           {ideaOrigin && (
             <Link
               href={`/projects/${projectId}/boards/${ideaOrigin.board_id}`}
@@ -223,6 +280,46 @@ export default function StoryDetailPage({
       <div className="flex flex-1 overflow-hidden">
         {/* Main content */}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
+          {/* Description */}
+          <div className="shrink-0 bg-white border-b border-slate-200 px-6 py-3">
+            {editingDescription ? (
+              <div className="space-y-2">
+                <MarkdownEditor
+                  value={descriptionValue}
+                  onChange={setDescriptionValue}
+                  placeholder="Add a description…"
+                  height={160}
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={saveDescription}
+                    className="text-xs font-medium bg-violet-600 text-white px-3 py-1 rounded hover:bg-violet-700 transition-colors"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setEditingDescription(false); setDescriptionValue(story.description ?? ""); }}
+                    className="text-xs font-medium text-slate-500 px-3 py-1 rounded hover:bg-slate-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => setEditingDescription(true)}
+                className="cursor-pointer text-sm text-slate-700 hover:bg-slate-50 rounded px-1 -mx-1 transition-colors prose prose-sm prose-slate max-w-none"
+              >
+                {story.description
+                  ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{story.description}</ReactMarkdown>
+                  : <span className="italic text-slate-400">Add a description…</span>
+                }
+              </div>
+            )}
+          </div>
+
           {/* Notes — resizable */}
           <div
             className="shrink-0 overflow-hidden bg-white border-b border-slate-200 px-6 py-4"
@@ -242,20 +339,16 @@ export default function StoryDetailPage({
 
           {/* Workflow canvas — fills remaining space */}
           <div className="flex-1 overflow-hidden bg-slate-50">
-            {story.tasks.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-slate-400 text-sm">{t("noSteps")}</div>
-            ) : (
-              <WorkflowCanvas
-                workflow={story}
-                teamMembers={teamMembers}
-                teamRoles={teamRoles}
-                taskTeamRoles={taskTeamRoles}
-                token={token ?? ""}
-                onTaskUpdated={(updated) =>
-                  setStory((prev) => prev ? { ...prev, tasks: prev.tasks.map((t) => t.id === updated.id ? updated : t) } : prev)
-                }
-              />
-            )}
+            <WorkflowCanvas
+              workflow={story}
+              teamMembers={teamMembers}
+              teamRoles={teamRoles}
+              taskTeamRoles={taskTeamRoles}
+              token={token ?? ""}
+              onTaskUpdated={(updated) =>
+                setStory((prev) => prev ? { ...prev, tasks: prev.tasks.map((t) => t.id === updated.id ? updated : t) } : prev)
+              }
+            />
           </div>
         </div>
 
