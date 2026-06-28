@@ -9,6 +9,7 @@ import { getProject } from "@/lib/togra-api";
 import type { Job, Workflow, Task, TaskLink, Project, Status, TeamMember } from "@/lib/types";
 import NotesPanel from "@/components/notes/NotesPanel";
 import ResearchPanel from "@/components/research/ResearchPanel";
+import KanbanBoard from "@/components/KanbanBoard";
 import { useCurrentProject } from "@/contexts/CurrentProjectContext";
 
 const TASK_COLUMNS: {
@@ -186,7 +187,29 @@ export default function SprintBoardPage({
   if (loading) return <div className="p-8 text-slate-400 text-sm">{t("loading")}</div>;
   if (!job) return <div className="p-8 text-slate-500 text-sm">{t("notFound")}</div>;
 
-  const typeLabel = job.job_type === "sprint" ? t("sprint") : job.job_type === "kanban" ? t("kanban") : "Board";
+  // Kanban boards get their own dedicated view
+  if (job.job_type === "kanban") {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="bg-white border-b border-slate-200 px-6 py-4 shrink-0">
+          <nav className="flex items-center gap-2 text-sm text-slate-500 mb-1">
+            <Link href="/projects" className="hover:text-violet-700 transition-colors">{t("breadcrumbProjects")}</Link>
+            <span>/</span>
+            <Link href={`/projects/${projectId}?tab=management`} className="hover:text-violet-700 transition-colors">{project?.name ?? "…"}</Link>
+            <span>/</span>
+            <span className="text-slate-700 font-medium">{job.name}</span>
+          </nav>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold text-slate-800">{job.name}</h1>
+            <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-teal-50 text-teal-700">{t("kanban")}</span>
+          </div>
+        </div>
+        <KanbanBoard job={job} projectId={projectId} />
+      </div>
+    );
+  }
+
+  const typeLabel = job.job_type === "sprint" ? t("sprint") : "Board";
   const dateRange = job.start_date && job.end_date
     ? ` · ${fmtDate(job.start_date)} – ${fmtDate(job.end_date)}` : "";
 
@@ -215,8 +238,7 @@ export default function SprintBoardPage({
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-xl font-bold text-slate-800">{job.name}</h1>
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-            job.job_type === "sprint" ? "bg-indigo-50 text-indigo-700" :
-            job.job_type === "kanban" ? "bg-teal-50 text-teal-700" : "bg-slate-100 text-slate-500"
+            job.job_type === "sprint" ? "bg-indigo-50 text-indigo-700" : "bg-slate-100 text-slate-500"
           }`}>{typeLabel}</span>
           {dateRange && <span className="text-xs text-slate-400">{dateRange}</span>}
           <span className="text-xs text-slate-400">{t("stories", { count: stories.length })}</span>

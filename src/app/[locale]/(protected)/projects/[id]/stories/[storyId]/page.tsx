@@ -112,7 +112,8 @@ export default function StoryDetailPage({
     setStory((prev) => prev ? { ...prev, ...updated } : prev);
   }
 
-  const notesResize = useResize({ initial: 360, min: 180, max: 700, axis: "y" });
+  const notesResize = useResize({ initial: 360, min: 200, max: 600, axis: "x", reverse: true });
+  const canvasResize = useResize({ initial: 180, min: 120, max: 700, axis: "y", reverse: true });
   const [researchOpen, setResearchOpen] = useState(false);
 
   if (loading) return <div className="p-8 text-slate-400 text-sm">{t("loading")}</div>;
@@ -121,7 +122,7 @@ export default function StoryDetailPage({
   const parentJobId = story.job_id;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="absolute inset-0 flex flex-col overflow-hidden">
       {/* Sticky header strip */}
       <div className="bg-white border-b border-slate-200 px-6 py-4 shrink-0">
         {/* Breadcrumb */}
@@ -280,65 +281,77 @@ export default function StoryDetailPage({
       <div className="flex flex-1 overflow-hidden">
         {/* Main content */}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-          {/* Description */}
-          <div className="shrink-0 bg-white border-b border-slate-200 px-6 py-3">
-            {editingDescription ? (
-              <div className="space-y-2">
-                <MarkdownEditor
-                  value={descriptionValue}
-                  onChange={setDescriptionValue}
-                  placeholder="Add a description…"
-                  height={160}
-                />
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={saveDescription}
-                    className="text-xs font-medium bg-violet-600 text-white px-3 py-1 rounded hover:bg-violet-700 transition-colors"
-                  >
-                    Save
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setEditingDescription(false); setDescriptionValue(story.description ?? ""); }}
-                    className="text-xs font-medium text-slate-500 px-3 py-1 rounded hover:bg-slate-100 transition-colors"
-                  >
-                    Cancel
-                  </button>
+          {/* Top area: description (left) + notes (right), side by side */}
+          <div className="flex flex-1 overflow-hidden border-b border-slate-200">
+            {/* Description — scrollable */}
+            <div className="flex-1 overflow-y-auto bg-white px-6 py-4">
+              {editingDescription ? (
+                <div className="space-y-2">
+                  <MarkdownEditor
+                    value={descriptionValue}
+                    onChange={setDescriptionValue}
+                    placeholder="Add a description…"
+                    height={160}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={saveDescription}
+                      className="text-xs font-medium bg-violet-600 text-white px-3 py-1 rounded hover:bg-violet-700 transition-colors"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setEditingDescription(false); setDescriptionValue(story.description ?? ""); }}
+                      className="text-xs font-medium text-slate-500 px-3 py-1 rounded hover:bg-slate-100 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div
-                onClick={() => setEditingDescription(true)}
-                className="cursor-pointer text-sm text-slate-700 hover:bg-slate-50 rounded px-1 -mx-1 transition-colors prose prose-sm prose-slate max-w-none"
-              >
-                {story.description
-                  ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{story.description}</ReactMarkdown>
-                  : <span className="italic text-slate-400">Add a description…</span>
-                }
-              </div>
-            )}
+              ) : (
+                <div
+                  onClick={() => setEditingDescription(true)}
+                  className="cursor-pointer text-sm text-slate-700 hover:bg-slate-50 rounded px-1 -mx-1 transition-colors prose prose-sm prose-slate max-w-none"
+                >
+                  {story.description
+                    ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{story.description}</ReactMarkdown>
+                    : <span className="italic text-slate-400">Add a description…</span>
+                  }
+                </div>
+              )}
+            </div>
+
+            {/* Horizontal resize handle */}
+            <div
+              onMouseDown={notesResize.onMouseDown}
+              className="w-2 shrink-0 bg-slate-100 hover:bg-violet-100 cursor-col-resize flex items-center justify-center group transition-colors"
+              title="Drag to resize"
+            >
+              <div className="h-8 w-0.5 bg-slate-300 group-hover:bg-violet-400 rounded-full transition-colors" />
+            </div>
+
+            {/* Notes panel */}
+            <div
+              className="shrink-0 overflow-hidden bg-white border-l border-slate-200"
+              style={{ width: notesResize.size }}
+            >
+              <NotesPanel entityType="workflow" entityId={storyId} isTeam={true} twoColumn autoSelectFirst members={teamMembers.map((m) => m.user)} />
+            </div>
           </div>
 
-          {/* Notes — resizable */}
+          {/* Vertical resize handle between top area and canvas */}
           <div
-            className="shrink-0 overflow-hidden bg-white border-b border-slate-200 px-6 py-4"
-            style={{ height: notesResize.size }}
-          >
-            <NotesPanel entityType="workflow" entityId={storyId} isTeam={true} twoColumn autoSelectFirst members={teamMembers.map((m) => m.user)} />
-          </div>
-
-          {/* Resize handle */}
-          <div
-            onMouseDown={notesResize.onMouseDown}
+            onMouseDown={canvasResize.onMouseDown}
             className="h-2 shrink-0 bg-slate-100 hover:bg-violet-100 cursor-row-resize flex items-center justify-center group transition-colors"
             title="Drag to resize"
           >
             <div className="w-8 h-0.5 bg-slate-300 group-hover:bg-violet-400 rounded-full transition-colors" />
           </div>
 
-          {/* Workflow canvas — fills remaining space */}
-          <div className="flex-1 overflow-hidden bg-slate-50">
+          {/* Workflow canvas */}
+          <div className="shrink-0 overflow-hidden bg-slate-50" style={{ height: canvasResize.size }}>
             <WorkflowCanvas
               workflow={story}
               teamMembers={teamMembers}

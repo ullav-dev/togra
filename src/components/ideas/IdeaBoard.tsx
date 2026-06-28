@@ -828,7 +828,7 @@ function CreateStoryFromIdeaModal({
           story_points: pts,
           is_shared: true,
         });
-        await createTask(token, { name: "Define", workflow_id: story.id });
+        await createTask(token, { name: "Define", workflow_id: story.id, is_start: true });
       }
 
       if (noteBody.trim()) {
