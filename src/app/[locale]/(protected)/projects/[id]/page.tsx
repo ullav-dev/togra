@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use, useRef } from "react";
+import { useState, useEffect, use, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useResize } from "@/hooks/useResize";
@@ -22,7 +22,7 @@ import {
   listTeamRoles,
   getJobWorkflowAllocations,
 } from "@/lib/awe-api";
-import { createNote, listIdeaBoards, createIdeaBoard, deleteIdeaBoard, listStickies, listNoteLinks } from "@/lib/notes-api";
+import { createNote, listIdeaBoards, createIdeaBoard, deleteIdeaBoard, listStickies, listNoteLinks, listShapes } from "@/lib/notes-api";
 import IdeaBoardCanvas from "@/components/ideas/IdeaBoard";
 import MarkdownEditor from "@/components/MarkdownEditor";
 import { useRouter } from "@/i18n/navigation";
@@ -54,6 +54,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
   const [confirmDeleteSprintId, setConfirmDeleteSprintId] = useState<string | null>(null);
   const [sprintRefreshMap, setSprintRefreshMap] = useState<Record<string, number>>({});
+  const [backlogRefreshInterval, setBacklogRefreshInterval] = useState(0);
   const [pmName, setPmName] = useState<string | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [teamRoles, setTeamRoles] = useState<TeamRole[]>([]);
@@ -130,6 +131,12 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     if (!token) return [];
     return listWorkflows(token, { job_id: sprintId });
   }
+
+  const refreshBacklog = useCallback(async () => {
+    if (!token || !backlogJob) return;
+    const stories = await listWorkflows(token, { job_id: backlogJob.id });
+    setBacklogStories(stories);
+  }, [token, backlogJob]);
 
   async function onStoryCreated(story: Workflow) {
     setBacklogStories((prev) => [...prev, story]);
@@ -324,6 +331,9 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             onStoryCreated={onStoryCreated}
             onStoryMoved={onStoryMoved}
             onStoryDeleted={onStoryDeleted}
+            onRefresh={refreshBacklog}
+            refreshInterval={backlogRefreshInterval}
+            onRefreshIntervalChange={setBacklogRefreshInterval}
           />
         </div>
 
@@ -458,6 +468,15 @@ function canDeleteProject(roles: string[], token: string | null, teamId: string 
 
 // ── Backlog Panel ─────────────────────────────────────────────────────────────
 
+const REFRESH_INTERVALS = [
+  { label: "Off", secs: 0 },
+  { label: "1 min", secs: 60 },
+  { label: "5 min", secs: 300 },
+  { label: "10 min", secs: 600 },
+  { label: "30 min", secs: 1800 },
+  { label: "60 min", secs: 3600 },
+];
+
 function BacklogPanel({
   backlogJob,
   stories,
@@ -472,6 +491,9 @@ function BacklogPanel({
   onStoryCreated,
   onStoryMoved,
   onStoryDeleted,
+  onRefresh,
+  refreshInterval,
+  onRefreshIntervalChange,
 }: {
   backlogJob: Job | null;
   stories: Workflow[];
@@ -486,13 +508,31 @@ function BacklogPanel({
   onStoryCreated: (s: Workflow) => void;
   onStoryMoved: (storyId: string, targetJobId: string | null) => void;
   onStoryDeleted: (storyId: string) => void;
+  onRefresh: () => Promise<void>;
+  refreshInterval: number;
+  onRefreshIntervalChange: (secs: number) => void;
 }) {
   const t = useTranslations("project");
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
 
   useEffect(() => { setPage(0); }, [search]);
+
+  const doRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try { await onRefresh(); } finally { setIsRefreshing(false); }
+    setLastRefreshed(new Date());
+  }, [onRefresh]);
+
+  // Auto-refresh timer
+  useEffect(() => {
+    if (refreshInterval === 0) return;
+    const id = setInterval(doRefresh, refreshInterval * 1000);
+    return () => clearInterval(id);
+  }, [refreshInterval, doRefresh]);
 
   const filtered = stories.filter((s) =>
     s.name.toLowerCase().includes(search.toLowerCase())
@@ -505,22 +545,59 @@ function BacklogPanel({
     ? t("backlog.storyCountFiltered", { filtered: filtered.length, total: stories.length })
     : t("backlog.storyCount", { count: stories.length });
 
+  const refreshedLabel = lastRefreshed
+    ? `· ${lastRefreshed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+    : "";
+
   return (
     <div className="w-full h-full flex flex-col bg-slate-50 overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-200 bg-white flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-700">{t("backlog.title")}</h2>
-          <p className="text-xs text-slate-400">{countLabel}</p>
+      <div className="px-4 py-3 border-b border-slate-200 bg-white">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-slate-700">{t("backlog.title")}</h2>
+            <p className="text-xs text-slate-400">{countLabel}{refreshedLabel && <span className="ml-1 text-slate-300">{refreshedLabel}</span>}</p>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Auto-refresh interval */}
+            <select
+              value={refreshInterval}
+              onChange={(e) => onRefreshIntervalChange(Number(e.target.value))}
+              className="text-xs text-slate-500 border border-slate-200 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:border-violet-400 cursor-pointer"
+              title="Auto-refresh interval"
+            >
+              {REFRESH_INTERVALS.map(({ label, secs }) => (
+                <option key={secs} value={secs}>{label}</option>
+              ))}
+            </select>
+            {/* Manual refresh */}
+            <button
+              type="button"
+              onClick={doRefresh}
+              disabled={isRefreshing}
+              title="Refresh backlog"
+              className="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-100 text-slate-400 hover:text-violet-600 disabled:opacity-40 transition-colors"
+            >
+              <svg
+                viewBox="0 0 16 16" fill="currentColor"
+                className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`}
+              >
+                <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
+                <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
+              </svg>
+            </button>
+            <div className="w-px h-4 bg-slate-200" />
+            {/* Add story */}
+            <button
+              type="button"
+              disabled={!backlogJob}
+              onClick={() => setShowCreate(true)}
+              className="inline-flex items-center gap-1 text-xs font-medium text-violet-700 hover:text-violet-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M8 2a1 1 0 0 1 1 1v4h4a1 1 0 1 1 0 2H9v4a1 1 0 1 1-2 0V9H3a1 1 0 1 1 0-2h4V3a1 1 0 0 1 1-1Z"/></svg>
+              {t("backlog.addStory")}
+            </button>
+          </div>
         </div>
-        <button
-          type="button"
-          disabled={!backlogJob}
-          onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-violet-700 hover:text-violet-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M8 2a1 1 0 0 1 1 1v4h4a1 1 0 1 1 0 2H9v4a1 1 0 1 1-2 0V9H3a1 1 0 1 1 0-2h4V3a1 1 0 0 1 1-1Z"/></svg>
-          {t("backlog.addStory")}
-        </button>
       </div>
 
       {stories.length > 0 && (
@@ -1610,6 +1687,7 @@ function IdeasPanel({
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
   const [boardStickies, setBoardStickies] = useState<import("@/lib/types").StickyNote[]>([]);
   const [boardLinks, setBoardLinks] = useState<import("@/lib/types").NoteLink[]>([]);
+  const [boardShapes, setBoardShapes] = useState<import("@ullav-dev/diagram-shapes").BoardShape[]>([]);
   const [loadingBoard, setLoadingBoard] = useState(false);
   const autoSelectedRef = useRef(false);
 
@@ -1618,9 +1696,10 @@ function IdeasPanel({
     setSelectedBoardId(boardId);
     setLoadingBoard(true);
     try {
-      const [s, l] = await Promise.all([listStickies(token, boardId), listNoteLinks(token, boardId)]);
+      const [s, l, sh] = await Promise.all([listStickies(token, boardId), listNoteLinks(token, boardId), listShapes(token, boardId)]);
       setBoardStickies(s);
       setBoardLinks(l);
+      setBoardShapes(sh);
     } finally {
       setLoadingBoard(false);
     }
@@ -1688,6 +1767,7 @@ function IdeasPanel({
             templates={templates}
             initialStickies={boardStickies}
             initialLinks={boardLinks}
+            initialShapes={boardShapes}
           />
         )}
       </div>

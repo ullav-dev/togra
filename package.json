@@ -20,6 +20,7 @@
     "@tailwindcss/typography": "^0.5.19",
     "@uiw/react-md-editor": "^4.1.1",
     "@ullav/dam-picker": "file:./packages/dam-picker",
+    "@ullav-dev/diagram-shapes": "file:./packages/diagram-shapes",
     "@xyflow/react": "^12.10.2",
     "ai": "^6.0.211",
     "next": "16.1.6",

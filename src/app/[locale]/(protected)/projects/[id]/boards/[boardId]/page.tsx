@@ -4,10 +4,10 @@ import { use, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrentProject } from "@/contexts/CurrentProjectContext";
 import { Link } from "@/i18n/navigation";
-import { getIdeaBoard, listStickies, listNoteLinks } from "@/lib/notes-api";
+import { getIdeaBoard, listStickies, listNoteLinks, listShapes } from "@/lib/notes-api";
 import { getProject, } from "@/lib/togra-api";
 import { listWorkflows } from "@/lib/awe-api";
-import type { IdeaBoard, StickyNote, NoteLink, Job, Workflow } from "@/lib/types";
+import type { IdeaBoard, StickyNote, NoteLink, Job, Workflow, BoardShape } from "@/lib/types";
 import IdeaBoardCanvas from "@/components/ideas/IdeaBoard";
 import ResearchPanel from "@/components/research/ResearchPanel";
 
@@ -24,6 +24,7 @@ export default function IdeaBoardPage({
   const [researchOpen, setResearchOpen] = useState(false);
   const [stickies, setStickies] = useState<StickyNote[]>([]);
   const [links, setLinks] = useState<NoteLink[]>([]);
+  const [shapes, setShapes] = useState<BoardShape[]>([]);
   const [backlogJob, setBacklogJob] = useState<Job | null>(null);
   const [templates, setTemplates] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,12 +35,14 @@ export default function IdeaBoardPage({
       getIdeaBoard(token, boardId),
       listStickies(token, boardId),
       listNoteLinks(token, boardId),
+      listShapes(token, boardId),
       getProject(token, projectId),
     ])
-      .then(async ([b, s, l, proj]) => {
+      .then(async ([b, s, l, sh, proj]) => {
         setBoard(b);
         setStickies(s);
         setLinks(l);
+        setShapes(sh);
         setCurrentProject({ id: proj.id, name: proj.name });
         localStorage.setItem(`togra_last_idea_board_${projectId}`, boardId);
         const bl = proj.jobs.find((j: Job) => j.job_type === "backlog") ?? null;
@@ -105,6 +108,7 @@ export default function IdeaBoardPage({
             templates={templates}
             initialStickies={stickies}
             initialLinks={links}
+            initialShapes={shapes}
           />
         </div>
         {researchOpen && (
