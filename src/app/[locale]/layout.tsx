@@ -49,7 +49,7 @@ export default async function LocaleLayout({
               <TeamProvider>
                 <CurrentProjectProvider>
                   <Nav />
-                  <main className="flex-1 overflow-auto">{children}</main>
+                  <main className="flex-1 overflow-auto relative">{children}</main>
                   <Footer />
                 </CurrentProjectProvider>
               </TeamProvider>

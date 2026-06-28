@@ -98,6 +98,17 @@ export interface JobWithWorkflows extends Job {
   workflows: Workflow[];
 }
 
+/** First-task allocation summary for a workflow in a Kanban job. */
+export interface WorkflowAllocation {
+  workflow_id: string;
+  /** The is_start task ID, if one exists. */
+  start_task_id: string | null;
+  /** Direct user assignee on the start task. */
+  assigned_to: string | null;
+  /** Team role IDs assigned to the start task. */
+  team_role_ids: string[];
+}
+
 // ── Workflows / Stories ───────────────────────────────────────────────────────
 
 export interface Workflow {

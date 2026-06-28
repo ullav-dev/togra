@@ -157,7 +157,7 @@ function WorkflowCanvasInner({
   const [links, setLinks] = useState<TaskLink[]>(workflow.links);
   const [localTaskTeamRoles, setLocalTaskTeamRoles] = useState<Record<string, TaskTeamRole[]>>(taskTeamRoles);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [isEditMode, setIsEditMode] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(workflow.tasks.length === 0);
   const [saving, setSaving] = useState(false);
 
   // Modals

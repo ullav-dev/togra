@@ -98,6 +98,14 @@ export function hasTograAccess(token: string | null): boolean {
   );
 }
 
+/** Returns the current user's team role names for a given team (from JWT claims).
+ *  Note: the JWT `team_roles` field stores role names, not UUIDs. */
+export function getUserTeamRoleNames(token: string | null, teamId: string | null): string[] {
+  if (!token || !teamId) return [];
+  const claims = getTeamClaims(token);
+  return claims[teamId]?.team_roles ?? [];
+}
+
 /** Returns IDs of teams that grant Togra access. */
 export function getTograTeamIds(token: string | null): string[] {
   const teams = getTeamClaims(token);

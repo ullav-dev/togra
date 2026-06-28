@@ -2,7 +2,7 @@
 // Notes API has moved to notes-api.ts.
 // All browser requests go via /api/* rewrite; server-side uses API_URL directly.
 
-import type { Job, JobWithWorkflows, Task, TaskLink, TaskScript, TaskPortSpec, PortDirection, PortValueType, ExecutionProfile, ScriptType, Workflow, WorkflowWithTasks, TeamSummary, Team, TeamRole, TaskTeamRole, TaskStateHistoryEntry, WorkItem, InstantiateWorkItemResponse } from "./types";
+import type { Job, JobWithWorkflows, Task, TaskLink, TaskScript, TaskPortSpec, PortDirection, PortValueType, ExecutionProfile, ScriptType, Workflow, WorkflowWithTasks, TeamSummary, Team, TeamRole, TaskTeamRole, TaskStateHistoryEntry, WorkItem, InstantiateWorkItemResponse, WorkflowAllocation } from "./types";
 
 const BASE =
   typeof window === "undefined"
@@ -86,6 +86,9 @@ export const updateJob = (
 
 export const deleteJob = (token: string, id: string): Promise<void> =>
   apiRequest(`/jobs/${id}`, token, { method: "DELETE" });
+
+export const getJobWorkflowAllocations = (token: string, jobId: string): Promise<WorkflowAllocation[]> =>
+  apiRequest(`/jobs/${jobId}/workflow-allocations`, token);
 
 // ── Workflows / Stories ───────────────────────────────────────────────────────
 
@@ -241,16 +244,16 @@ export const deleteTaskScript = (token: string, taskId: string): Promise<void> =
 export const listExecutionProfiles = (token: string): Promise<ExecutionProfile[]> =>
   apiRequest("/execution-profiles", token);
 
-// ── Teams (UUM) ───────────────────────────────────────────────────────────────
+// ── Teams (proxied via awe-server → UUM) ─────────────────────────────────────
 
 export const getMyTeams = (token: string): Promise<TeamSummary[]> =>
   authApiRequest("/teams", token);
 
 export const getTeam = (token: string, id: string): Promise<Team> =>
-  authApiRequest(`/teams/${id}`, token);
+  apiRequest(`/teams/${id}`, token);
 
 export const listTeamRoles = (token: string, teamId: string): Promise<TeamRole[]> =>
-  authApiRequest(`/teams/${teamId}/roles`, token);
+  apiRequest(`/teams/${teamId}/roles`, token);
 
 // ── Task State History ────────────────────────────────────────────────────────
 

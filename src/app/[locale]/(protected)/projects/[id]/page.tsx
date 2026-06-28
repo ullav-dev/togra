@@ -20,12 +20,13 @@ import {
   createTask,
   getTeam,
   listTeamRoles,
+  getJobWorkflowAllocations,
 } from "@/lib/awe-api";
 import { createNote, listIdeaBoards, createIdeaBoard, deleteIdeaBoard, listStickies, listNoteLinks } from "@/lib/notes-api";
 import IdeaBoardCanvas from "@/components/ideas/IdeaBoard";
 import MarkdownEditor from "@/components/MarkdownEditor";
 import { useRouter } from "@/i18n/navigation";
-import type { ProjectWithJobs, Job, Workflow, Task, TeamMember, TeamRole, IdeaBoard } from "@/lib/types";
+import type { ProjectWithJobs, Job, Workflow, Task, TeamMember, TeamRole, IdeaBoard, WorkflowAllocation } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import VisibilityToggle from "@/components/VisibilityToggle";
@@ -69,9 +70,14 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const { setCurrentProject } = useCurrentProject();
   const [ideaBoards, setIdeaBoards] = useState<IdeaBoard[]>([]);
 
+  const [backlogAllocations, setBacklogAllocations] = useState<Record<string, WorkflowAllocation>>({});
+
   const backlogJob = project?.jobs.find((j) => j.job_type === "backlog") ?? null;
   const sprints = (project?.jobs ?? [])
     .filter((j) => j.job_type === "sprint")
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  const kanbans = (project?.jobs ?? [])
+    .filter((j) => j.job_type === "kanban")
     .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
   useEffect(() => {
@@ -110,6 +116,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       setBacklogStories(stories);
       setTemplates(tmpl.filter((w) => w.is_template));
       listIdeaBoards(token, id).then(setIdeaBoards).catch(() => {});
+      if (bl) {
+        getJobWorkflowAllocations(token, bl.id).then((allocs) => {
+          setBacklogAllocations(
+            allocs.reduce<Record<string, WorkflowAllocation>>((acc, a) => { acc[a.workflow_id] = a; return acc; }, {})
+          );
+        }).catch(() => {});
+      }
     }).finally(() => setLoading(false));
   }, [token, id]);
 
@@ -120,6 +133,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
   async function onStoryCreated(story: Workflow) {
     setBacklogStories((prev) => [...prev, story]);
+    if (token && backlogJob) {
+      getJobWorkflowAllocations(token, backlogJob.id).then((allocs) => {
+        setBacklogAllocations(
+          allocs.reduce<Record<string, WorkflowAllocation>>((acc, a) => { acc[a.workflow_id] = a; return acc; }, {})
+        );
+      }).catch(() => {});
+    }
   }
 
   async function onStoryMoved(storyId: string, targetJobId: string | null) {
@@ -128,7 +148,14 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     if (!targetId) return;
     await updateWorkflow(token, storyId, { job_id: targetId });
     if (backlogJob) {
-      setBacklogStories(await listWorkflows(token, { job_id: backlogJob.id }));
+      const [newStories, newAllocs] = await Promise.all([
+        listWorkflows(token, { job_id: backlogJob.id }),
+        getJobWorkflowAllocations(token, backlogJob.id),
+      ]);
+      setBacklogStories(newStories);
+      setBacklogAllocations(
+        newAllocs.reduce<Record<string, WorkflowAllocation>>((acc, a) => { acc[a.workflow_id] = a; return acc; }, {})
+      );
     }
     if (targetJobId) {
       setSprintRefreshMap((prev) => ({ ...prev, [targetJobId]: Date.now() }));
@@ -144,6 +171,34 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   async function onSprintCreated(sprint: Job) {
     setProject((prev) =>
       prev ? { ...prev, jobs: [...prev.jobs, sprint] } : prev
+    );
+  }
+
+  async function onKanbanCreated(kanban: Job) {
+    setProject((prev) =>
+      prev ? { ...prev, jobs: [...prev.jobs, kanban] } : prev
+    );
+  }
+
+  async function doDeleteKanban(kanbanId: string) {
+    if (!token) return;
+    if (backlogJob) {
+      const kanbanStories = await listWorkflows(token, { job_id: kanbanId });
+      await Promise.all(
+        kanbanStories.map((s) => updateWorkflow(token, s.id, { job_id: backlogJob.id }))
+      );
+      const [newStories, newAllocs] = await Promise.all([
+        listWorkflows(token, { job_id: backlogJob.id }),
+        getJobWorkflowAllocations(token, backlogJob.id),
+      ]);
+      setBacklogStories(newStories);
+      setBacklogAllocations(
+        newAllocs.reduce<Record<string, WorkflowAllocation>>((acc, a) => { acc[a.workflow_id] = a; return acc; }, {})
+      );
+    }
+    await deleteJob(token, kanbanId);
+    setProject((prev) =>
+      prev ? { ...prev, jobs: prev.jobs.filter((j) => j.id !== kanbanId) } : prev
     );
   }
 
@@ -251,7 +306,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         ))}
       </div>
 
-      {/* Management tab — Three-column pane: Backlog | Sprints | Notes */}
+      {/* Management tab — Three-column pane: Backlog | Sprints+Kanban | Notes */}
       {activeTab === "management" && <div className="flex flex-1 overflow-hidden">
         {/* Left — Backlog (resizable) */}
         <div className="shrink-0 overflow-hidden flex flex-col" style={{ width: backlogResize.size }}>
@@ -259,6 +314,10 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             backlogJob={backlogJob}
             stories={backlogStories}
             sprints={sprints}
+            kanbans={kanbans}
+            allocations={backlogAllocations}
+            teamMembers={teamMembers}
+            teamRoles={teamRoles}
             templates={templates}
             token={token!}
             projectId={id}
@@ -275,25 +334,34 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           title="Drag to resize"
         />
 
-        {/* Centre — Sprints (fills remaining space) */}
-        <SprintsPanel
-          projectId={id}
-          teamId={project?.team_id ?? null}
-          sprints={sprints}
-          backlogJob={backlogJob}
-          token={token!}
-          teamMembers={teamMembers}
-          loadSprintStories={loadSprintStories}
-          onSprintCreated={onSprintCreated}
-          onSprintDeleted={(sprintId) => setConfirmDeleteSprintId(sprintId)}
-          onSprintUpdated={(sprintId, patch) => {
-            setProject((prev) =>
-              prev ? { ...prev, jobs: prev.jobs.map((j) => j.id === sprintId ? { ...j, ...patch } : j) } : prev
-            );
-          }}
-          onStoryMoved={onStoryMoved}
-          sprintRefreshMap={sprintRefreshMap}
-        />
+        {/* Centre — Sprints + Kanban boards (fills remaining space) */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <SprintsPanel
+            projectId={id}
+            sprints={sprints}
+            backlogJob={backlogJob}
+            token={token!}
+            teamMembers={teamMembers}
+            loadSprintStories={loadSprintStories}
+            onSprintCreated={onSprintCreated}
+            onSprintDeleted={(sprintId) => setConfirmDeleteSprintId(sprintId)}
+            onSprintUpdated={(sprintId, patch) => {
+              setProject((prev) =>
+                prev ? { ...prev, jobs: prev.jobs.map((j) => j.id === sprintId ? { ...j, ...patch } : j) } : prev
+              );
+            }}
+            onStoryMoved={onStoryMoved}
+            sprintRefreshMap={sprintRefreshMap}
+          />
+          <div className="border-t border-slate-200 shrink-0" />
+          <KanbanPanel
+            projectId={id}
+            kanbans={kanbans}
+            token={token!}
+            onKanbanCreated={onKanbanCreated}
+            onKanbanDeleted={doDeleteKanban}
+          />
+        </div>
 
         {/* Drag handle — Sprints / Notes */}
         <div
@@ -394,6 +462,10 @@ function BacklogPanel({
   backlogJob,
   stories,
   sprints,
+  kanbans,
+  allocations,
+  teamMembers,
+  teamRoles,
   templates,
   token,
   projectId,
@@ -404,6 +476,10 @@ function BacklogPanel({
   backlogJob: Job | null;
   stories: Workflow[];
   sprints: Job[];
+  kanbans: Job[];
+  allocations: Record<string, WorkflowAllocation>;
+  teamMembers: TeamMember[];
+  teamRoles: TeamRole[];
   templates: Workflow[];
   token: string;
   projectId: string;
@@ -472,8 +548,13 @@ function BacklogPanel({
               key={story.id}
               story={story}
               sprints={sprints}
+              kanbans={kanbans}
+              alloc={allocations[story.id]}
+              teamMembers={teamMembers}
+              teamRoles={teamRoles}
               projectId={projectId}
               onMoveToSprint={(sprintId) => onStoryMoved(story.id, sprintId)}
+              onMoveToKanban={(kanbanId) => onStoryMoved(story.id, kanbanId)}
               onDelete={() => onStoryDeleted(story.id)}
             />
           ))
@@ -518,14 +599,24 @@ function BacklogPanel({
 function BacklogStoryCard({
   story,
   sprints,
+  kanbans,
+  alloc,
+  teamMembers,
+  teamRoles,
   projectId,
   onMoveToSprint,
+  onMoveToKanban,
   onDelete,
 }: {
   story: Workflow;
   sprints: Job[];
+  kanbans: Job[];
+  alloc: WorkflowAllocation | undefined;
+  teamMembers: TeamMember[];
+  teamRoles: TeamRole[];
   projectId: string;
   onMoveToSprint: (sprintId: string) => void;
+  onMoveToKanban: (kanbanId: string) => void;
   onDelete: () => void;
 }) {
   const t = useTranslations("project");
@@ -546,6 +637,10 @@ function BacklogStoryCard({
     e.dataTransfer.setData("source", "backlog");
     e.dataTransfer.effectAllowed = "move";
   }
+
+  const isKanbanEligible = !!(alloc?.start_task_id && (alloc.assigned_to || alloc.team_role_ids.length > 0));
+  const assignedMember = alloc?.assigned_to ? teamMembers.find((m) => m.user.id === alloc.assigned_to) : null;
+  const assignedRoles = (alloc?.team_role_ids ?? []).map((rid) => teamRoles.find((r) => r.id === rid)).filter(Boolean) as TeamRole[];
 
   return (
     <div
@@ -576,7 +671,7 @@ function BacklogStoryCard({
               <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path d="M8 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM1.5 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM14.5 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/></svg>
             </button>
             {menuOpen && (
-              <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl border border-slate-200 shadow-lg py-1 z-20">
+              <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl border border-slate-200 shadow-lg py-1 z-20">
                 {sprints.length > 0 && (
                   <>
                     <p className="px-3 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">{t("backlog.moveToSprint")}</p>
@@ -588,6 +683,24 @@ function BacklogStoryCard({
                         className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-violet-50 hover:text-violet-700 transition-colors truncate"
                       >
                         {sp.name}
+                      </button>
+                    ))}
+                    <div className="my-1 border-t border-slate-100" />
+                  </>
+                )}
+                {kanbans.length > 0 && (
+                  <>
+                    <p className="px-3 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">{t("backlog.moveToKanban")}</p>
+                    {kanbans.map((kb) => (
+                      <button
+                        key={kb.id}
+                        type="button"
+                        disabled={!isKanbanEligible}
+                        title={!isKanbanEligible ? t("backlog.noAllocationTooltip") : undefined}
+                        onClick={() => { if (isKanbanEligible) { onMoveToKanban(kb.id); setMenuOpen(false); } }}
+                        className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-teal-50 hover:text-teal-700 transition-colors truncate disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {kb.name}
                       </button>
                     ))}
                     <div className="my-1 border-t border-slate-100" />
@@ -605,8 +718,23 @@ function BacklogStoryCard({
           </div>
         </div>
       </div>
-      <div className="flex items-center gap-2 mt-2">
+      <div className="flex items-center gap-2 mt-2 flex-wrap">
         <StatusPill status={story.status} />
+        {assignedMember && (
+          <div className="flex items-center gap-1 text-[11px] text-slate-500">
+            <div className="w-4 h-4 rounded-full bg-violet-100 text-violet-700 text-[9px] font-semibold flex items-center justify-center shrink-0">
+              {(assignedMember.user.first_name?.[0] ?? assignedMember.user.username[0]).toUpperCase()}
+            </div>
+            <span className="truncate max-w-[80px]">
+              {[assignedMember.user.first_name, assignedMember.user.last_name].filter(Boolean).join(" ") || assignedMember.user.username}
+            </span>
+          </div>
+        )}
+        {assignedRoles.map((role) => (
+          <span key={role.id} className="text-[11px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full font-medium">
+            {role.name}
+          </span>
+        ))}
       </div>
     </div>
   );
@@ -616,7 +744,6 @@ function BacklogStoryCard({
 
 function SprintsPanel({
   projectId,
-  teamId,
   sprints,
   backlogJob,
   token,
@@ -629,7 +756,6 @@ function SprintsPanel({
   sprintRefreshMap,
 }: {
   projectId: string;
-  teamId: string | null;
   sprints: Job[];
   backlogJob: Job | null;
   token: string;
@@ -687,7 +813,6 @@ function SprintsPanel({
       {showCreate && (
         <CreateSprintModal
           projectId={projectId}
-          teamId={teamId}
           token={token}
           onCreated={(s) => { onSprintCreated(s); setShowCreate(false); }}
           onClose={() => setShowCreate(false)}
@@ -1011,6 +1136,151 @@ function SprintStoryRow({
   );
 }
 
+// ── Kanban Panel ─────────────────────────────────────────────────────────────
+
+function KanbanPanel({
+  projectId,
+  kanbans,
+  token,
+  onKanbanCreated,
+  onKanbanDeleted,
+}: {
+  projectId: string;
+  kanbans: Job[];
+  token: string;
+  onKanbanCreated: (kb: Job) => void;
+  onKanbanDeleted: (id: string) => void;
+}) {
+  const t = useTranslations("project");
+  const [showCreate, setShowCreate] = useState(false);
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-slate-50 min-h-0">
+      <div className="px-6 py-3 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
+        <h2 className="text-sm font-semibold text-slate-700">{t("kanban.title")}</h2>
+        <button
+          type="button"
+          onClick={() => setShowCreate(true)}
+          className="inline-flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M8 2a1 1 0 0 1 1 1v4h4a1 1 0 1 1 0 2H9v4a1 1 0 1 1-2 0V9H3a1 1 0 1 1 0-2h4V3a1 1 0 0 1 1-1Z"/></svg>
+          {t("kanban.newKanban")}
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-2">
+        {kanbans.length === 0 ? (
+          <div className="text-center py-8 text-slate-400">
+            <p className="text-sm mb-1">{t("kanban.empty")}</p>
+            <p className="text-xs">{t("kanban.emptySubtitle")}</p>
+          </div>
+        ) : (
+          kanbans.map((kb) => (
+            <div key={kb.id} className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-3">
+              <span className="text-xs px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-700 font-medium shrink-0">Kanban</span>
+              <span className="text-sm font-medium text-slate-800 flex-1 truncate">{kb.name}</span>
+              <Link
+                href={`/projects/${projectId}/jobs/${kb.id}`}
+                className="text-xs font-medium text-teal-700 hover:text-teal-800 shrink-0 transition-colors"
+              >
+                {t("kanban.board")}
+              </Link>
+              <button
+                type="button"
+                onClick={() => onKanbanDeleted(kb.id)}
+                className="text-slate-400 hover:text-red-500 transition-colors p-1 rounded shrink-0"
+                title="Delete Kanban board"
+              >
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75Zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.559a.75.75 0 1 0-1.492.14l.62 6.498A1.75 1.75 0 0 0 5.365 14.8h5.27a1.75 1.75 0 0 0 1.741-1.603l.62-6.498a.75.75 0 1 0-1.492-.14l-.62 6.498a.25.25 0 0 1-.249.229H5.365a.25.25 0 0 1-.249-.229l-.62-6.498Z"/></svg>
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
+      {showCreate && (
+        <CreateKanbanModal
+          projectId={projectId}
+          token={token}
+          onCreated={(kb) => { onKanbanCreated(kb); setShowCreate(false); }}
+          onClose={() => setShowCreate(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function CreateKanbanModal({
+  projectId,
+  token,
+  onCreated,
+  onClose,
+}: {
+  projectId: string;
+  token: string;
+  onCreated: (kb: Job) => void;
+  onClose: () => void;
+}) {
+  const t = useTranslations("project");
+  const [name, setName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      const kb = await createJob(token, {
+        name: name.trim(),
+        project_id: projectId,
+        job_type: "kanban",
+      });
+      onCreated(kb);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("createKanban.error"));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+        <h2 className="text-lg font-semibold text-slate-800 mb-5">{t("createKanban.title")}</h2>
+        {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">{error}</div>}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="kanban-name" className="text-sm font-medium text-slate-700">{t("createKanban.nameLabel")}</label>
+            <input
+              id="kanban-name"
+              required
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t("createKanban.namePlaceholder")}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+            />
+          </div>
+          <div className="flex gap-3 justify-end pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors">
+              {t("createKanban.cancel")}
+            </button>
+            <button
+              type="submit"
+              disabled={!name.trim() || submitting}
+              className="px-4 py-2 text-sm font-medium bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {submitting ? t("createKanban.creating") : t("createKanban.create")}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── Modals ────────────────────────────────────────────────────────────────────
 
 function CreateStoryModal({
@@ -1061,7 +1331,7 @@ function CreateStoryModal({
           story_points: pts,
           is_shared: isShared,
         });
-        await createTask(token, { name: "Define", workflow_id: story.id });
+        await createTask(token, { name: "Define", workflow_id: story.id, is_start: true });
       }
 
       if (noteBody.trim()) {
@@ -1172,13 +1442,11 @@ function CreateStoryModal({
 
 function CreateSprintModal({
   projectId,
-  teamId,
   token,
   onCreated,
   onClose,
 }: {
   projectId: string;
-  teamId: string | null;
   token: string;
   onCreated: (sprint: Job) => void;
   onClose: () => void;
@@ -1199,7 +1467,6 @@ function CreateSprintModal({
       const sprint = await createJob(token, {
         name: name.trim(),
         project_id: projectId,
-        team_id: teamId ?? undefined,
         job_type: "sprint",
         start_date: startDate || undefined,
         end_date: endDate || undefined,
