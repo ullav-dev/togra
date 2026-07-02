@@ -370,6 +370,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             token={token!}
             onKanbanCreated={onKanbanCreated}
             onKanbanDeleted={doDeleteKanban}
+            onStoryMoved={onStoryMoved}
           />
         </div>
 
@@ -715,7 +716,6 @@ function BacklogStoryCard({
     e.dataTransfer.effectAllowed = "move";
   }
 
-  const isKanbanEligible = !!(alloc?.start_task_id && (alloc.assigned_to || alloc.team_role_ids.length > 0));
   const assignedMember = alloc?.assigned_to ? teamMembers.find((m) => m.user.id === alloc.assigned_to) : null;
   const assignedRoles = (alloc?.team_role_ids ?? []).map((rid) => teamRoles.find((r) => r.id === rid)).filter(Boolean) as TeamRole[];
 
@@ -772,10 +772,8 @@ function BacklogStoryCard({
                       <button
                         key={kb.id}
                         type="button"
-                        disabled={!isKanbanEligible}
-                        title={!isKanbanEligible ? t("backlog.noAllocationTooltip") : undefined}
-                        onClick={() => { if (isKanbanEligible) { onMoveToKanban(kb.id); setMenuOpen(false); } }}
-                        className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-teal-50 hover:text-teal-700 transition-colors truncate disabled:opacity-40 disabled:cursor-not-allowed"
+                        onClick={() => { onMoveToKanban(kb.id); setMenuOpen(false); }}
+                        className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-teal-50 hover:text-teal-700 transition-colors truncate"
                       >
                         {kb.name}
                       </button>
@@ -1221,12 +1219,14 @@ function KanbanPanel({
   token,
   onKanbanCreated,
   onKanbanDeleted,
+  onStoryMoved,
 }: {
   projectId: string;
   kanbans: Job[];
   token: string;
   onKanbanCreated: (kb: Job) => void;
   onKanbanDeleted: (id: string) => void;
+  onStoryMoved: (storyId: string, targetJobId: string) => void;
 }) {
   const t = useTranslations("project");
   const [showCreate, setShowCreate] = useState(false);
@@ -1253,24 +1253,13 @@ function KanbanPanel({
           </div>
         ) : (
           kanbans.map((kb) => (
-            <div key={kb.id} className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-3">
-              <span className="text-xs px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-700 font-medium shrink-0">Kanban</span>
-              <span className="text-sm font-medium text-slate-800 flex-1 truncate">{kb.name}</span>
-              <Link
-                href={`/projects/${projectId}/jobs/${kb.id}`}
-                className="text-xs font-medium text-teal-700 hover:text-teal-800 shrink-0 transition-colors"
-              >
-                {t("kanban.board")}
-              </Link>
-              <button
-                type="button"
-                onClick={() => onKanbanDeleted(kb.id)}
-                className="text-slate-400 hover:text-red-500 transition-colors p-1 rounded shrink-0"
-                title="Delete Kanban board"
-              >
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75Zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.559a.75.75 0 1 0-1.492.14l.62 6.498A1.75 1.75 0 0 0 5.365 14.8h5.27a1.75 1.75 0 0 0 1.741-1.603l.62-6.498a.75.75 0 1 0-1.492-.14l-.62 6.498a.25.25 0 0 1-.249.229H5.365a.25.25 0 0 1-.249-.229l-.62-6.498Z"/></svg>
-              </button>
-            </div>
+            <KanbanRow
+              key={kb.id}
+              kb={kb}
+              projectId={projectId}
+              onDelete={() => onKanbanDeleted(kb.id)}
+              onDropStory={(storyId) => onStoryMoved(storyId, kb.id)}
+            />
           ))
         )}
       </div>
@@ -1283,6 +1272,74 @@ function KanbanPanel({
           onClose={() => setShowCreate(false)}
         />
       )}
+    </div>
+  );
+}
+
+function KanbanRow({
+  kb,
+  projectId,
+  onDelete,
+  onDropStory,
+}: {
+  kb: Job;
+  projectId: string;
+  onDelete: () => void;
+  onDropStory: (storyId: string) => void;
+}) {
+  const t = useTranslations("project");
+  const [isDropOver, setIsDropOver] = useState(false);
+  const dropCounter = useRef(0);
+
+  function handleDragEnter(e: React.DragEvent) {
+    if (!e.dataTransfer.types.includes("storyid")) return;
+    e.preventDefault();
+    dropCounter.current++;
+    setIsDropOver(true);
+  }
+  function handleDragLeave() {
+    dropCounter.current--;
+    if (dropCounter.current === 0) setIsDropOver(false);
+  }
+  function handleDragOver(e: React.DragEvent) {
+    if (!e.dataTransfer.types.includes("storyid")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  }
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    dropCounter.current = 0;
+    setIsDropOver(false);
+    const storyId = e.dataTransfer.getData("storyId");
+    if (storyId) onDropStory(storyId);
+  }
+
+  return (
+    <div
+      className={`bg-white rounded-xl px-4 py-3 flex items-center gap-3 transition-all ${
+        isDropOver ? "border-2 border-teal-400 shadow-md" : "border border-slate-200"
+      }`}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      <span className="text-xs px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-700 font-medium shrink-0">Kanban</span>
+      <span className="text-sm font-medium text-slate-800 flex-1 truncate">{kb.name}</span>
+      <Link
+        href={`/projects/${projectId}/jobs/${kb.id}`}
+        className="text-xs font-medium text-teal-700 hover:text-teal-800 shrink-0 transition-colors"
+      >
+        {t("kanban.board")}
+      </Link>
+      <button
+        type="button"
+        onClick={onDelete}
+        className="text-slate-400 hover:text-red-500 transition-colors p-1 rounded shrink-0"
+        title="Delete Kanban board"
+      >
+        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75Zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.559a.75.75 0 1 0-1.492.14l.62 6.498A1.75 1.75 0 0 0 5.365 14.8h5.27a1.75 1.75 0 0 0 1.741-1.603l.62-6.498a.75.75 0 1 0-1.492-.14l-.62 6.498a.25.25 0 0 1-.249.229H5.365a.25.25 0 0 1-.249-.229l-.62-6.498Z"/></svg>
+      </button>
     </div>
   );
 }
