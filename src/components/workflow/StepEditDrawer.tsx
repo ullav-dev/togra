@@ -250,7 +250,10 @@ export default function StepEditDrawer({
           {/* End step toggle — a workflow may have any number of end steps, including
               the start step itself (e.g. a fresh single-step story is both); this must
               stay editable regardless of is_start so it can be unset once another end
-              step exists (extending a single-task story into a longer one). */}
+              step exists (extending a single-task story into a longer one). Decision
+              steps never get this toggle — completing one means a branch was chosen,
+              not that the story finished. */}
+          {task.task_type !== "decision" && (
           <div className={sectionCls}>
             <label className="flex items-center gap-2 text-sm text-slate-600">
               <input
@@ -266,6 +269,7 @@ export default function StepEditDrawer({
               <p className="text-xs text-slate-400">This is the story&apos;s only end step — add another before removing this one.</p>
             )}
           </div>
+          )}
 
           {/* Assignee */}
           <div className={sectionCls}>
