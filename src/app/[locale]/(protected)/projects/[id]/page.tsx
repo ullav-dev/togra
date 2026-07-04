@@ -1465,7 +1465,10 @@ function CreateStoryModal({
           story_points: pts,
           is_shared: isShared,
         });
-        await createTask(token, { name: "Define", workflow_id: story.id, is_start: true });
+        // is_end too — a fresh story is a single-task workflow until more steps are
+        // added; whoever adds the next step should mark the real final one as the
+        // end task instead (see WorkflowCanvas's "End task" checkbox on Add Step).
+        await createTask(token, { name: "Define", workflow_id: story.id, is_start: true, is_end: true });
       }
 
       if (noteBody.trim()) {
