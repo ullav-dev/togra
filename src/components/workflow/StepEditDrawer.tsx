@@ -45,6 +45,7 @@ export default function StepEditDrawer({
   const [draftName, setDraftName] = useState(task.name);
   const [draftDesc, setDraftDesc] = useState(task.description ?? "");
   const [draftAssignee, setDraftAssignee] = useState<string | null>(task.assigned_to ?? null);
+  const [draftIsEnd, setDraftIsEnd] = useState(task.is_end);
 
   const resize = useResize({ initial: 288, min: 220, max: 560, axis: "x", reverse: true });
 
@@ -69,6 +70,7 @@ export default function StepEditDrawer({
     setDraftName(task.name);
     setDraftDesc(task.description ?? "");
     setDraftAssignee(task.assigned_to ?? null);
+    setDraftIsEnd(task.is_end);
   }, [task.id]);
 
   // Load ports when task changes
@@ -80,10 +82,15 @@ export default function StepEditDrawer({
       .finally(() => setPortsLoading(false));
   }, [task.id, token]);
 
+  // Whether another end step exists in this workflow besides `task` itself —
+  // false means `task` is the only end step, so it must not lose the flag or be deleted.
+  const canRemoveEndFlag = allTasks.some((t) => t.is_end && t.id !== task.id);
+
   const isDirty =
     draftName.trim() !== task.name ||
     draftDesc.trim() !== (task.description ?? "") ||
-    draftAssignee !== (task.assigned_to ?? null);
+    draftAssignee !== (task.assigned_to ?? null) ||
+    draftIsEnd !== task.is_end;
 
   async function handleSave() {
     setSaving(true);
@@ -92,12 +99,16 @@ export default function StepEditDrawer({
       if (draftName.trim() !== task.name) patch.name = draftName.trim();
       if (draftDesc.trim() !== (task.description ?? "")) patch.description = draftDesc.trim() || undefined;
       if (draftAssignee !== (task.assigned_to ?? null)) patch.assigned_to = draftAssignee;
+      if (draftIsEnd !== task.is_end) patch.is_end = draftIsEnd;
       const updated = await updateTask(token, task.id, patch);
       onTaskUpdated(updated);
     } finally { setSaving(false); }
   }
 
+  const canDelete = !task.is_start && (!task.is_end || canRemoveEndFlag);
+
   async function handleDelete() {
+    if (!canDelete) return;
     setDeleting(true);
     setConfirmDelete(false);
     try {
@@ -235,6 +246,30 @@ export default function StepEditDrawer({
               </span>
             )}
           </div>
+
+          {/* End step toggle — a workflow may have any number of end steps, including
+              the start step itself (e.g. a fresh single-step story is both); this must
+              stay editable regardless of is_start so it can be unset once another end
+              step exists (extending a single-task story into a longer one). Decision
+              steps never get this toggle — completing one means a branch was chosen,
+              not that the story finished. */}
+          {task.task_type !== "decision" && (
+          <div className={sectionCls}>
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={draftIsEnd}
+                disabled={saving || (draftIsEnd && !canRemoveEndFlag)}
+                onChange={(e) => setDraftIsEnd(e.target.checked)}
+                className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+              />
+              This step marks the end of the story
+            </label>
+            {draftIsEnd && !canRemoveEndFlag && (
+              <p className="text-xs text-slate-400">This is the story&apos;s only end step — add another before removing this one.</p>
+            )}
+          </div>
+          )}
 
           {/* Assignee */}
           <div className={sectionCls}>
@@ -416,10 +451,16 @@ export default function StepEditDrawer({
 
         {/* Footer */}
         <div className="px-4 py-3 border-t border-slate-200 shrink-0 flex items-center justify-between gap-2">
-          <button type="button" onClick={() => setConfirmDelete(true)} disabled={deleting || saving}
-            className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-40 transition-colors">
-            {deleting ? "Deleting…" : "Delete step"}
-          </button>
+          {canDelete ? (
+            <button type="button" onClick={() => setConfirmDelete(true)} disabled={deleting || saving}
+              className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-40 transition-colors">
+              {deleting ? "Deleting…" : "Delete step"}
+            </button>
+          ) : (
+            <span className="text-xs text-slate-400" title={task.is_start ? "Start steps cannot be deleted." : "The story's only end step cannot be deleted."}>
+              {task.is_start ? "Start step" : "Only end step"} — cannot be deleted
+            </span>
+          )}
           <button type="button" onClick={() => void handleSave()} disabled={!isDirty || saving}
             className="px-4 py-1.5 text-sm font-medium rounded-lg transition-colors bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-40 disabled:cursor-not-allowed">
             {saving ? "Saving…" : "Save"}

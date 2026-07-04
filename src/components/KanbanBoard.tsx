@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { getUserTeamRoleNames } from "@/lib/auth-api";
 import {
   listWorkflows,
-  getJobWorkflowAllocations,
+  listTasks,
   updateTask,
   assignTaskTeamRole,
   removeTaskTeamRole,
@@ -15,7 +15,7 @@ import {
   getTeam,
   listTeamRoles,
 } from "@/lib/awe-api";
-import type { Job, Workflow, WorkflowAllocation, TeamMember, TeamRole } from "@/lib/types";
+import type { Job, Workflow, Task, TeamMember, TeamRole, Status } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 import RefreshControl from "@/components/RefreshControl";
 
@@ -24,9 +24,26 @@ const PRIORITY_RANK: Record<string, number> = {
   high: 1,
   medium: 2,
   low: 3,
+  none: 4,
 };
 
-type SortKey = "priority" | "created" | "updated";
+const PRIORITY_COLORS: Record<string, string> = {
+  critical: "bg-red-100 text-red-700",
+  high: "bg-orange-100 text-orange-700",
+  medium: "bg-yellow-100 text-yellow-700",
+  low: "bg-slate-100 text-slate-500",
+  none: "bg-slate-50 text-slate-400",
+};
+
+// A task is groomable (selectable, editable, quickpick-able) only before work
+// has started. Once it moves past Ready it may be driven externally (e.g. an
+// MCP call) and the board shows it read-only.
+function isGroomable(task: Task): boolean {
+  return task.status === "Not Started" || task.status === "Ready";
+}
+
+type SortKey = "task" | "story" | "priority" | "effort" | "due" | "allocated" | "status";
+type SortDir = "asc" | "desc";
 type FilterMode = "all" | "mine";
 
 interface Props {
@@ -34,144 +51,219 @@ interface Props {
   projectId: string;
 }
 
+interface Row {
+  task: Task;
+  story: Workflow;
+  roles: TeamRole[];
+}
+
 export default function KanbanBoard({ job, projectId }: Props) {
   const t = useTranslations("board");
   const { token, user } = useAuth();
 
   const [stories, setStories] = useState<Workflow[]>([]);
-  const [allocations, setAllocations] = useState<WorkflowAllocation[]>([]);
+  const [storyTasks, setStoryTasks] = useState<Record<string, Task[]>>({});
+  const [taskRoleIds, setTaskRoleIds] = useState<Record<string, string[]>>({});
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [teamRoles, setTeamRoles] = useState<TeamRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<SortKey>("priority");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [filterMode, setFilterMode] = useState<FilterMode>("mine");
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const [reassignTaskId, setReassignTaskId] = useState<string | null>(null);
+  const [takingId, setTakingId] = useState<string | null>(null);
+  const promotedRef = useRef(false);
 
-  // JWT team_roles holds role names (not UUIDs); used for "mine" filter
   const userRoleNames = getUserTeamRoleNames(token, job.team_id ?? null);
-
-  const allocationMap = allocations.reduce<Record<string, WorkflowAllocation>>(
-    (acc, a) => { acc[a.workflow_id] = a; return acc; },
-    {}
-  );
 
   const loadData = useCallback(async () => {
     if (!token) return;
-    const [wfs, allocs] = await Promise.all([
-      listWorkflows(token, { job_id: job.id }),
-      getJobWorkflowAllocations(token, job.id),
-    ]);
+    const wfs = await listWorkflows(token, { job_id: job.id });
     setStories(wfs);
-    setAllocations(allocs);
+    const results = await Promise.all(
+      wfs.map((s) => listTasks(token, s.id).then((tasks) => ({ id: s.id, tasks })))
+    );
+    const nextStoryTasks: Record<string, Task[]> = {};
+    results.forEach(({ id, tasks }) => { nextStoryTasks[id] = tasks; });
+    setStoryTasks(nextStoryTasks);
+
+    const allTasks = results.flatMap((r) => r.tasks);
+    const roleResults = await Promise.all(
+      allTasks.map((task) =>
+        listTaskTeamRoles(token, task.id)
+          .then((links) => ({ id: task.id, roleIds: links.map((l) => l.team_role_id) }))
+          .catch(() => ({ id: task.id, roleIds: [] as string[] }))
+      )
+    );
+    const nextTaskRoleIds: Record<string, string[]> = {};
+    roleResults.forEach(({ id, roleIds }) => { nextTaskRoleIds[id] = roleIds; });
+    setTaskRoleIds(nextTaskRoleIds);
   }, [token, job.id]);
 
   useEffect(() => {
     if (!token) return;
     setLoading(true);
     const teamId = job.team_id ?? null;
-    Promise.all([
-      loadData(),
-      teamId ? getTeam(token, teamId).then((team) => setTeamMembers(team.members.filter((m) => m.status === "active"))).catch(() => {}) : Promise.resolve(),
-      teamId ? listTeamRoles(token, teamId).then(setTeamRoles).catch(() => {}) : Promise.resolve(),
-    ]).finally(() => setLoading(false));
-  }, [token, job.id, job.team_id, loadData]);
+    (async () => {
+      let roles: TeamRole[] = [];
+      if (teamId) {
+        roles = await listTeamRoles(token, teamId).catch(() => []);
+        setTeamRoles(roles);
+        const team = await getTeam(token, teamId).catch(() => null);
+        if (team) setTeamMembers(team.members.filter((m) => m.status === "active"));
+      }
+      await loadData();
+    })().finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, job.id, job.team_id]);
 
-  function matchesFilter(story: Workflow): boolean {
+  // Promote is_start tasks from Not Started → Ready (once per board load)
+  useEffect(() => {
+    if (!token || promotedRef.current) return;
+    const allTasks = Object.values(storyTasks).flat();
+    if (allTasks.length === 0) return;
+    const toPromote = allTasks.filter((tsk) => tsk.is_start && tsk.status === "Not Started");
+    if (toPromote.length === 0) { promotedRef.current = true; return; }
+    promotedRef.current = true;
+    Promise.all(toPromote.map((tsk) => updateTask(token, tsk.id, { status: "Ready" })))
+      .then((updated) => {
+        setStoryTasks((prev) => {
+          const next = { ...prev };
+          updated.forEach((u) => {
+            if (next[u.workflow_id]) {
+              next[u.workflow_id] = next[u.workflow_id].map((tsk) => tsk.id === u.id ? u : tsk);
+            }
+          });
+          return next;
+        });
+      })
+      .catch(() => {});
+  }, [storyTasks, token]);
+
+  const rows: Row[] = useMemo(() => {
+    return stories.flatMap((story) =>
+      (storyTasks[story.id] ?? []).map((task) => ({
+        task,
+        story,
+        roles: (taskRoleIds[task.id] ?? []).map((rid) => teamRoles.find((r) => r.id === rid)).filter(Boolean) as TeamRole[],
+      }))
+    );
+  }, [stories, storyTasks, taskRoleIds, teamRoles]);
+
+  function matchesFilter(row: Row): boolean {
     if (filterMode === "all") return true;
-    const alloc = allocationMap[story.id];
-    if (!alloc) return false;
-    if (alloc.assigned_to === user?.id) return true;
-    // Map role UUIDs from the allocation to names, then compare against
-    // the role names in the JWT (which stores names, not IDs)
-    const allocRoleNames = alloc.team_role_ids
-      .map((rid) => teamRoles.find((r) => r.id === rid)?.name)
-      .filter(Boolean) as string[];
-    return allocRoleNames.some((name) => userRoleNames.includes(name));
+    if (row.task.assigned_to === user?.id) return true;
+    return row.roles.some((r) => userRoleNames.includes(r.name));
   }
 
-  function sortStories(list: Workflow[]): Workflow[] {
-    return [...list].sort((a, b) => {
-      if (sortBy === "priority") {
-        const ra = PRIORITY_RANK[a.priority ?? ""] ?? 99;
-        const rb = PRIORITY_RANK[b.priority ?? ""] ?? 99;
-        if (ra !== rb) return ra - rb;
-      }
-      if (sortBy === "created") {
-        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      }
-      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+  function allocatedLabel(row: Row): string {
+    if (row.roles.length > 0) return row.roles.map((r) => r.name).join(", ");
+    if (row.task.assigned_to) {
+      const m = teamMembers.find((mm) => mm.user.id === row.task.assigned_to);
+      if (m) return [m.user.first_name, m.user.last_name].filter(Boolean).join(" ") || m.user.username;
+    }
+    return "";
+  }
+
+  function sortValue(row: Row): string | number {
+    switch (sortBy) {
+      case "task": return row.task.name.toLowerCase();
+      case "story": return row.story.name.toLowerCase();
+      case "priority": return PRIORITY_RANK[row.task.priority ?? "none"] ?? 99;
+      case "effort": return row.task.effort ?? -1;
+      case "due": return row.task.due_time ? new Date(row.task.due_time).getTime() : Number.MAX_SAFE_INTEGER;
+      case "allocated": return allocatedLabel(row).toLowerCase();
+      case "status": return row.task.status;
+    }
+  }
+
+  const sorted = useMemo(() => {
+    const filtered = rows.filter(matchesFilter);
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      const va = sortValue(a);
+      const vb = sortValue(b);
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, filterMode, sortBy, sortDir, teamMembers, userRoleNames]);
+
+  function handleSort(key: SortKey) {
+    if (sortBy === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortDir("asc");
+    }
   }
 
-  const filtered = sortStories(stories.filter(matchesFilter));
-
-  async function handleTake(story: Workflow) {
+  async function handleQuickPick(task: Task) {
     if (!token || !user) return;
-    const alloc = allocationMap[story.id];
-    if (!alloc?.start_task_id) return;
-    await updateTask(token, alloc.start_task_id, { assigned_to: user.id });
-    setAllocations((prev) =>
-      prev.map((a) => a.workflow_id === story.id ? { ...a, assigned_to: user.id } : a)
-    );
+    setTakingId(task.id);
+    try {
+      const updated = await updateTask(token, task.id, { assigned_to: user.id, status: "In Progress" });
+      setStoryTasks((prev) => ({
+        ...prev,
+        [updated.workflow_id]: (prev[updated.workflow_id] ?? []).map((tsk) => tsk.id === updated.id ? updated : tsk),
+      }));
+    } finally {
+      setTakingId(null);
+    }
   }
 
-  async function handleAssignToUser(story: Workflow, userId: string) {
+  async function handleAssignToUser(task: Task, userId: string) {
     if (!token) return;
-    const alloc = allocationMap[story.id];
-    if (!alloc?.start_task_id) return;
-    await updateTask(token, alloc.start_task_id, { assigned_to: userId });
-    setAllocations((prev) =>
-      prev.map((a) => a.workflow_id === story.id ? { ...a, assigned_to: userId } : a)
-    );
+    const updated = await updateTask(token, task.id, { assigned_to: userId });
+    setStoryTasks((prev) => ({
+      ...prev,
+      [updated.workflow_id]: (prev[updated.workflow_id] ?? []).map((tsk) => tsk.id === updated.id ? updated : tsk),
+    }));
+    setTaskRoleIds((prev) => ({ ...prev, [task.id]: [] }));
+    const existing = await listTaskTeamRoles(token, task.id);
+    await Promise.all(existing.map((r) => removeTaskTeamRole(token, task.id, r.team_role_id)));
   }
 
-  async function handleAssignToRole(story: Workflow, roleId: string) {
+  async function handleAssignToRole(task: Task, roleId: string) {
     if (!token) return;
-    const alloc = allocationMap[story.id];
-    if (!alloc?.start_task_id) return;
-    // Clear user assignee and existing roles, then add new role
-    await updateTask(token, alloc.start_task_id, { assigned_to: null });
-    const existing = await listTaskTeamRoles(token, alloc.start_task_id);
-    await Promise.all(existing.map((r) => removeTaskTeamRole(token, alloc.start_task_id!, r.team_role_id)));
-    await assignTaskTeamRole(token, alloc.start_task_id, roleId);
-    setAllocations((prev) =>
-      prev.map((a) =>
-        a.workflow_id === story.id
-          ? { ...a, assigned_to: null, team_role_ids: [roleId] }
-          : a
-      )
-    );
+    const updated = await updateTask(token, task.id, { assigned_to: null });
+    setStoryTasks((prev) => ({
+      ...prev,
+      [updated.workflow_id]: (prev[updated.workflow_id] ?? []).map((tsk) => tsk.id === updated.id ? updated : tsk),
+    }));
+    const existing = await listTaskTeamRoles(token, task.id);
+    await Promise.all(existing.map((r) => removeTaskTeamRole(token, task.id, r.team_role_id)));
+    await assignTaskTeamRole(token, task.id, roleId);
+    setTaskRoleIds((prev) => ({ ...prev, [task.id]: [roleId] }));
   }
 
-  if (loading) return <div className="p-8 text-slate-400 text-sm">{t("kanbanBoard.sortLabel")}</div>;
+  function onTaskUpdated(updated: Task) {
+    setStoryTasks((prev) => ({
+      ...prev,
+      [updated.workflow_id]: (prev[updated.workflow_id] ?? []).map((tsk) => tsk.id === updated.id ? updated : tsk),
+    }));
+  }
+
+  const openRow = openTaskId ? rows.find((r) => r.task.id === openTaskId) ?? null : null;
+
+  if (loading) return <div className="p-8 text-slate-400 text-sm">{t("loading")}</div>;
+
+  const columns: { key: SortKey; label: string; className?: string }[] = [
+    { key: "task", label: t("kanbanBoard.colTask"), className: "flex-1 min-w-[12rem]" },
+    { key: "story", label: t("kanbanBoard.colStory"), className: "w-44 shrink-0" },
+    { key: "priority", label: t("kanbanBoard.colPriority"), className: "w-28 shrink-0" },
+    { key: "effort", label: t("kanbanBoard.colEffort"), className: "w-20 shrink-0" },
+    { key: "due", label: t("kanbanBoard.colDue"), className: "w-32 shrink-0" },
+    { key: "allocated", label: t("kanbanBoard.colAllocated"), className: "w-40 shrink-0" },
+    { key: "status", label: t("kanbanBoard.colStatus"), className: "w-32 shrink-0" },
+  ];
 
   return (
     <div className="flex-1 overflow-auto p-6">
       {/* Controls bar */}
       <div className="flex items-center gap-4 mb-4 flex-wrap">
-        {/* Sort */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-slate-500 font-medium">{t("kanbanBoard.sortLabel")}</span>
-          <div className="flex rounded-full border border-slate-200 overflow-hidden text-xs font-medium">
-            {(["priority", "created", "updated"] as SortKey[]).map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setSortBy(key)}
-                className={`px-3 py-1 transition-colors border-l first:border-l-0 border-slate-200 ${
-                  sortBy === key
-                    ? "bg-teal-600 text-white border-teal-600"
-                    : "bg-white text-slate-500 hover:text-teal-700"
-                }`}
-              >
-                {key === "priority" ? t("kanbanBoard.sortPriority") :
-                 key === "created"  ? t("kanbanBoard.sortCreated") :
-                                      t("kanbanBoard.sortUpdated")}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Filter */}
         <div className="flex items-center gap-1 bg-slate-100 rounded-full p-0.5">
           <button
             type="button"
@@ -198,52 +290,82 @@ export default function KanbanBoard({ job, projectId }: Props) {
         </div>
       </div>
 
-      {/* Story cards */}
-      {filtered.length === 0 ? (
+      {/* Task table */}
+      {sorted.length === 0 ? (
         <div className="text-center py-20 text-slate-400">
-          <p className="text-sm">{filterMode === "mine" ? t("kanbanBoard.noStoriesMine") : t("kanbanBoard.noStoriesAll")}</p>
+          <p className="text-sm">{filterMode === "mine" ? t("kanbanBoard.noTasksMine") : t("kanbanBoard.noTasksAll")}</p>
         </div>
       ) : (
-        <div className="space-y-3 max-w-2xl">
-          {filtered.map((story) => (
-            <KanbanStoryCard
-              key={story.id}
-              story={story}
-              alloc={allocationMap[story.id]}
-              projectId={projectId}
-              teamMembers={teamMembers}
-              teamRoles={teamRoles}
-              currentUserId={user?.id ?? null}
-              onTake={() => handleTake(story)}
-              onAssignToUser={(uid) => handleAssignToUser(story, uid)}
-              onAssignToRole={(rid) => handleAssignToRole(story, rid)}
-            />
-          ))}
+        <div className="min-w-max border border-slate-200 rounded-xl overflow-hidden">
+          {/* Header row */}
+          <div className="flex items-center gap-2 bg-slate-50 border-b border-slate-200 px-3 py-2">
+            {columns.map((col) => (
+              <button
+                key={col.key}
+                type="button"
+                onClick={() => handleSort(col.key)}
+                className={`flex items-center gap-1 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-teal-700 transition-colors ${col.className ?? ""}`}
+              >
+                {col.label}
+                {sortBy === col.key && (
+                  <span className="text-teal-600">{sortDir === "asc" ? "▲" : "▼"}</span>
+                )}
+              </button>
+            ))}
+            <div className="w-40 shrink-0" />
+          </div>
+
+          {/* Rows */}
+          <div className="divide-y divide-slate-100">
+            {sorted.map((row) => (
+              <TaskRow
+                key={row.task.id}
+                row={row}
+                projectId={projectId}
+                teamMembers={teamMembers}
+                teamRoles={teamRoles}
+                currentUserId={user?.id ?? null}
+                taking={takingId === row.task.id}
+                reassignOpen={reassignTaskId === row.task.id}
+                onOpenReassign={() => setReassignTaskId(row.task.id)}
+                onCloseReassign={() => setReassignTaskId(null)}
+                onOpenDetail={() => setOpenTaskId(row.task.id)}
+                onQuickPick={() => handleQuickPick(row.task)}
+                onAssignToUser={(uid) => handleAssignToUser(row.task, uid)}
+                onAssignToRole={(rid) => handleAssignToRole(row.task, rid)}
+              />
+            ))}
+          </div>
         </div>
+      )}
+
+      {openRow && (
+        <TaskDetailModal
+          task={openRow.task}
+          storyName={openRow.story.name}
+          roles={openRow.roles}
+          teamMembers={teamMembers}
+          teamRoles={teamRoles}
+          onTaskUpdated={onTaskUpdated}
+          onRolesUpdated={(roleIds) => setTaskRoleIds((prev) => ({ ...prev, [openRow.task.id]: roleIds }))}
+          onClose={() => setOpenTaskId(null)}
+        />
       )}
     </div>
   );
 }
 
-// ── Story card ────────────────────────────────────────────────────────────────
+// ── Task row ────────────────────────────────────────────────────────────────
 
-const PRIORITY_COLORS: Record<string, string> = {
-  critical: "bg-red-100 text-red-700",
-  high:     "bg-orange-100 text-orange-700",
-  medium:   "bg-yellow-100 text-yellow-700",
-  low:      "bg-slate-100 text-slate-500",
-};
-
-function formatAgo(iso: string): string {
-  const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  return `${Math.floor(seconds / 86400)}d ago`;
+function formatDue(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " " +
+    d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
 function MemberAvatar({ member, size = "md" }: { member: TeamMember; size?: "sm" | "md" }) {
-  const { first_name, last_name, username, avatar_url } = member.user;
+  const { first_name, username, avatar_url } = member.user;
   const initials = (first_name?.[0] ?? username[0]).toUpperCase();
   const dim = size === "sm" ? "w-6 h-6 text-[10px]" : "w-7 h-7 text-xs";
   return avatar_url ? (
@@ -260,120 +382,153 @@ function MemberAvatar({ member, size = "md" }: { member: TeamMember; size?: "sm"
   );
 }
 
-function KanbanStoryCard({
-  story,
-  alloc,
+function TaskRow({
+  row,
   projectId,
   teamMembers,
   teamRoles,
   currentUserId,
-  onTake,
+  taking,
+  reassignOpen,
+  onOpenReassign,
+  onCloseReassign,
+  onOpenDetail,
+  onQuickPick,
   onAssignToUser,
   onAssignToRole,
 }: {
-  story: Workflow;
-  alloc: WorkflowAllocation | undefined;
+  row: Row;
   projectId: string;
   teamMembers: TeamMember[];
   teamRoles: TeamRole[];
   currentUserId: string | null;
-  onTake: () => Promise<void>;
+  taking: boolean;
+  reassignOpen: boolean;
+  onOpenReassign: () => void;
+  onCloseReassign: () => void;
+  onOpenDetail: () => void;
+  onQuickPick: () => Promise<void>;
   onAssignToUser: (uid: string) => Promise<void>;
   onAssignToRole: (rid: string) => Promise<void>;
 }) {
   const t = useTranslations("board");
-  const [reassignOpen, setReassignOpen] = useState(false);
-  const [taking, setTaking] = useState(false);
   const reassignRef = useRef<HTMLDivElement>(null);
+  const { task, story, roles } = row;
+  const groomable = isGroomable(task);
+  const overdue = task.due_time != null && task.status !== "Complete" && task.status !== "Cancelled" && new Date(task.due_time).getTime() < Date.now();
 
   useEffect(() => {
     if (!reassignOpen) return;
     const handler = (e: MouseEvent) => {
-      if (reassignRef.current && !reassignRef.current.contains(e.target as Node)) setReassignOpen(false);
+      if (reassignRef.current && !reassignRef.current.contains(e.target as Node)) onCloseReassign();
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [reassignOpen]);
+  }, [reassignOpen, onCloseReassign]);
 
-  const assignedMember = alloc?.assigned_to
-    ? teamMembers.find((m) => m.user.id === alloc.assigned_to)
-    : null;
-
-  const assignedRoles = alloc?.team_role_ids
-    .map((rid) => teamRoles.find((r) => r.id === rid))
-    .filter(Boolean) as TeamRole[];
-
-  const isAllocated = !!(alloc?.assigned_to || (alloc?.team_role_ids ?? []).length > 0);
-
-  async function handleTake() {
-    setTaking(true);
-    try { await onTake(); } finally { setTaking(false); }
-  }
+  const assignedMember = task.assigned_to ? teamMembers.find((m) => m.user.id === task.assigned_to) : null;
+  const isAllocated = !!(task.assigned_to || roles.length > 0);
+  const priority = task.priority ?? "none";
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 hover:border-teal-200 hover:shadow-sm transition-all group">
-      {/* Top row: name + badges */}
-      <div className="flex items-start gap-2 mb-3">
-        <div className="flex-1 min-w-0">
-          <Link
-            href={`/projects/${projectId}/stories/${story.id}`}
-            className="text-sm font-medium text-slate-800 hover:text-teal-700 transition-colors leading-snug"
-          >
-            {story.name}
-          </Link>
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-          {story.priority && (
-            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full capitalize ${PRIORITY_COLORS[story.priority] ?? "bg-slate-100 text-slate-500"}`}>
-              {story.priority}
-            </span>
+    <div
+      className={`flex items-center gap-2 px-3 py-2.5 transition-colors ${
+        groomable ? "hover:bg-teal-50/50 cursor-pointer" : "bg-slate-50/60"
+      }`}
+      onClick={groomable ? onOpenDetail : undefined}
+    >
+      {/* Task name */}
+      <div className="flex-1 min-w-[12rem] pr-2">
+        <p className={`text-sm font-medium leading-snug ${groomable ? "text-slate-800" : "text-slate-500"}`}>
+          {task.name}
+          {!groomable && (
+            <svg viewBox="0 0 16 16" fill="currentColor" className="inline-block w-3 h-3 ml-1.5 text-slate-400 align-text-top">
+              <title>{t("kanbanBoard.readOnly")}</title>
+              <path d="M4 6V4.5a4 4 0 1 1 8 0V6h.25c.966 0 1.75.784 1.75 1.75v5.5A1.75 1.75 0 0 1 12.25 15h-8.5A1.75 1.75 0 0 1 2 13.25v-5.5C2 6.784 2.784 6 3.75 6H4Zm1.5-1.5V6h5V4.5a2.5 2.5 0 0 0-5 0Z" />
+            </svg>
           )}
-          {story.story_points != null && (
-            <span className="text-xs bg-teal-100 text-teal-700 font-semibold px-1.5 py-0.5 rounded-full">
-              {story.story_points}{t("kanbanBoard.pts") !== "pts" ? ` ${t("kanbanBoard.pts")}` : "p"}
-            </span>
-          )}
-        </div>
+        </p>
       </div>
 
-      {/* Middle row: status + allocation */}
-      <div className="flex items-center gap-2 mb-3">
-        <StatusPill status={story.status} />
+      {/* Story */}
+      <div className="w-44 shrink-0 pr-2">
+        <Link
+          href={`/projects/${projectId}/stories/${story.id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="text-xs text-slate-500 hover:text-teal-700 transition-colors truncate block"
+        >
+          {story.name}
+        </Link>
+      </div>
+
+      {/* Priority */}
+      <div className="w-28 shrink-0">
+        {priority !== "none" ? (
+          <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full capitalize ${PRIORITY_COLORS[priority] ?? PRIORITY_COLORS.none}`}>
+            {priority}
+          </span>
+        ) : (
+          <span className="text-[11px] text-slate-300">—</span>
+        )}
+      </div>
+
+      {/* Effort */}
+      <div className="w-20 shrink-0">
+        {task.effort != null ? (
+          <span className="text-xs bg-teal-100 text-teal-700 font-semibold px-1.5 py-0.5 rounded-full">{task.effort}p</span>
+        ) : (
+          <span className="text-[11px] text-slate-300">—</span>
+        )}
+      </div>
+
+      {/* Due */}
+      <div className={`w-32 shrink-0 text-xs ${overdue ? "text-red-600 font-medium" : "text-slate-500"}`}>
+        {formatDue(task.due_time)}
+      </div>
+
+      {/* Allocated */}
+      <div className="w-40 shrink-0">
         {isAllocated ? (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 min-w-0">
             {assignedMember && <MemberAvatar member={assignedMember} size="sm" />}
-            {assignedRoles.map((role) => (
-              <span key={role.id} className="text-[11px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full font-medium">
+            {roles.map((role) => (
+              <span key={role.id} className="text-[11px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full font-medium truncate">
                 {role.name}
               </span>
             ))}
-            {!assignedMember && assignedRoles.length === 0 && (
-              <span className="text-[11px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">{t("kanbanBoard.unallocated")}</span>
+            {assignedMember && (
+              <span className="text-xs text-slate-500 truncate">
+                {[assignedMember.user.first_name, assignedMember.user.last_name].filter(Boolean).join(" ") || assignedMember.user.username}
+              </span>
             )}
           </div>
         ) : (
           <span className="text-[11px] text-slate-400 italic">{t("kanbanBoard.unallocated")}</span>
         )}
-        <span className="ml-auto text-[11px] text-slate-400">{t("kanbanBoard.updatedAgo").replace("{ago}", formatAgo(story.updated_at))}</span>
       </div>
 
-      {/* Actions row */}
-      {alloc?.start_task_id && (
-        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          {alloc.assigned_to !== currentUserId && (
-            <button
-              type="button"
-              disabled={taking}
-              onClick={handleTake}
-              className="text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-full transition-colors disabled:opacity-50"
-            >
-              {t("kanbanBoard.take")}
-            </button>
-          )}
+      {/* Status */}
+      <div className="w-32 shrink-0">
+        <StatusPill status={task.status} />
+      </div>
+
+      {/* Actions */}
+      <div className="w-40 shrink-0 flex items-center justify-end gap-2">
+        {groomable && task.status === "Ready" && task.assigned_to !== currentUserId && (
+          <button
+            type="button"
+            disabled={taking}
+            onClick={(e) => { e.stopPropagation(); onQuickPick(); }}
+            className="text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-full transition-colors disabled:opacity-50"
+          >
+            {t("kanbanBoard.quickPick")}
+          </button>
+        )}
+        {groomable && (
           <div className="relative" ref={reassignRef}>
             <button
               type="button"
-              onClick={() => setReassignOpen((v) => !v)}
+              onClick={(e) => { e.stopPropagation(); reassignOpen ? onCloseReassign() : onOpenReassign(); }}
               className="text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-full transition-colors"
             >
               {t("kanbanBoard.reassign")}
@@ -382,13 +537,13 @@ function KanbanStoryCard({
               <ReassignPopover
                 teamMembers={teamMembers}
                 teamRoles={teamRoles}
-                onAssignUser={(uid) => { onAssignToUser(uid); setReassignOpen(false); }}
-                onAssignRole={(rid) => { onAssignToRole(rid); setReassignOpen(false); }}
+                onAssignUser={(uid) => { onAssignToUser(uid); onCloseReassign(); }}
+                onAssignRole={(rid) => { onAssignToRole(rid); onCloseReassign(); }}
               />
             )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -408,7 +563,7 @@ function ReassignPopover({
 }) {
   const t = useTranslations("board");
   return (
-    <div className="absolute left-0 top-full mt-1 w-52 bg-white rounded-xl border border-slate-200 shadow-lg py-1 z-30">
+    <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl border border-slate-200 shadow-lg py-1 z-30" onClick={(e) => e.stopPropagation()}>
       {teamMembers.length > 0 && (
         <>
           <p className="px-3 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">{t("kanbanBoard.members")}</p>
@@ -447,6 +602,238 @@ function ReassignPopover({
       {teamMembers.length === 0 && teamRoles.length === 0 && (
         <p className="px-3 py-2 text-xs text-slate-400">{t("kanbanBoard.noMembers")}</p>
       )}
+    </div>
+  );
+}
+
+// ── Task detail modal (grooming) ─────────────────────────────────────────────
+
+const PRIORITY_OPTIONS = ["none", "low", "medium", "high", "critical"] as const;
+
+function toDatetimeLocal(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function TaskDetailModal({
+  task,
+  storyName,
+  roles,
+  teamMembers,
+  teamRoles,
+  onTaskUpdated,
+  onRolesUpdated,
+  onClose,
+}: {
+  task: Task;
+  storyName: string;
+  roles: TeamRole[];
+  teamMembers: TeamMember[];
+  teamRoles: TeamRole[];
+  onTaskUpdated: (t: Task) => void;
+  onRolesUpdated: (roleIds: string[]) => void;
+  onClose: () => void;
+}) {
+  const t = useTranslations("board");
+  const [draftName, setDraftName] = useState(task.name);
+  const [draftDesc, setDraftDesc] = useState(task.description ?? "");
+  const [draftStatus, setDraftStatus] = useState<Status>(task.status);
+  const [draftEffort, setDraftEffort] = useState(task.effort != null ? String(task.effort) : "");
+  const [draftPriority, setDraftPriority] = useState(task.priority ?? "none");
+  const [draftDue, setDraftDue] = useState(toDatetimeLocal(task.due_time));
+  const [draftAssignee, setDraftAssignee] = useState<string | null>(task.assigned_to ?? null);
+  const [draftRoleId, setDraftRoleId] = useState<string | null>(roles[0]?.id ?? null);
+  const [saving, setSaving] = useState(false);
+  const { token } = useAuth();
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  const isDirty =
+    draftName.trim() !== task.name ||
+    draftDesc.trim() !== (task.description ?? "") ||
+    draftStatus !== task.status ||
+    (draftEffort.trim() === "" ? null : parseInt(draftEffort, 10)) !== task.effort ||
+    draftPriority !== (task.priority ?? "none") ||
+    toDatetimeLocal(task.due_time) !== draftDue ||
+    draftAssignee !== (task.assigned_to ?? null) ||
+    draftRoleId !== (roles[0]?.id ?? null);
+
+  async function handleSave() {
+    if (!token) return;
+    setSaving(true);
+    try {
+      const patch: Parameters<typeof updateTask>[2] = {};
+      if (draftName.trim() !== task.name) patch.name = draftName.trim();
+      if (draftDesc.trim() !== (task.description ?? "")) patch.description = draftDesc.trim() || undefined;
+      if (draftStatus !== task.status) patch.status = draftStatus;
+      const parsedEffort = draftEffort.trim() === "" ? null : parseInt(draftEffort, 10);
+      if (parsedEffort !== task.effort) patch.effort = parsedEffort;
+      if (draftPriority !== (task.priority ?? "none")) patch.priority = draftPriority;
+      const dueIso = draftDue ? new Date(draftDue).toISOString() : null;
+      if (dueIso !== task.due_time) patch.due_time = dueIso;
+      if (draftAssignee !== (task.assigned_to ?? null)) patch.assigned_to = draftAssignee;
+
+      let updated = task;
+      if (Object.keys(patch).length > 0) {
+        updated = await updateTask(token, task.id, patch);
+        onTaskUpdated(updated);
+      }
+
+      if (draftRoleId !== (roles[0]?.id ?? null)) {
+        await Promise.all(roles.map((r) => removeTaskTeamRole(token, task.id, r.id)));
+        if (draftRoleId) {
+          await assignTaskTeamRole(token, task.id, draftRoleId);
+          onRolesUpdated([draftRoleId]);
+        } else {
+          onRolesUpdated([]);
+        }
+      }
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function memberName(m: TeamMember) {
+    return `${m.user.first_name ?? ""} ${m.user.last_name ?? ""}`.trim() || m.user.username;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl flex flex-col relative w-full max-w-xl max-h-[90vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-6 pt-5 pb-4 border-b border-slate-100 flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-slate-400 mb-1 truncate">{storyName}</p>
+            <input
+              type="text"
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              className="w-full text-lg font-semibold text-slate-800 bg-transparent border-0 outline-none focus:ring-0 p-0 leading-snug"
+              placeholder={t("kanbanBoard.taskNamePlaceholder")}
+            />
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors mt-0.5 shrink-0">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5">
+              <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">{t("kanbanBoard.statusLabel")}</label>
+              <select
+                value={draftStatus}
+                onChange={(e) => setDraftStatus(e.target.value as Status)}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 outline-none focus:border-violet-400"
+              >
+                <option value="Not Started">Not Started</option>
+                <option value="Ready">Ready</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">{t("kanbanBoard.priorityLabel")}</label>
+              <select
+                value={draftPriority}
+                onChange={(e) => setDraftPriority(e.target.value)}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 outline-none focus:border-violet-400 capitalize"
+              >
+                {PRIORITY_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">{t("kanbanBoard.effortLabel")}</label>
+              <input
+                type="number"
+                min="0"
+                value={draftEffort}
+                onChange={(e) => setDraftEffort(e.target.value)}
+                placeholder="—"
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 outline-none focus:border-violet-400"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">{t("kanbanBoard.dueLabel")}</label>
+              <input
+                type="datetime-local"
+                value={draftDue}
+                onChange={(e) => setDraftDue(e.target.value)}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 outline-none focus:border-violet-400"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">{t("kanbanBoard.assigneeLabel")}</label>
+              <select
+                value={draftAssignee ?? ""}
+                onChange={(e) => { setDraftAssignee(e.target.value || null); if (e.target.value) setDraftRoleId(null); }}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 outline-none focus:border-violet-400"
+              >
+                <option value="">{t("kanbanBoard.unallocated")}</option>
+                {teamMembers.map((m) => (
+                  <option key={m.user.id} value={m.user.id}>{memberName(m)}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">{t("kanbanBoard.roleLabel")}</label>
+              <select
+                value={draftRoleId ?? ""}
+                onChange={(e) => { setDraftRoleId(e.target.value || null); if (e.target.value) setDraftAssignee(null); }}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 outline-none focus:border-violet-400"
+              >
+                <option value="">{t("kanbanBoard.noRoles")}</option>
+                {teamRoles.map((role) => (
+                  <option key={role.id} value={role.id}>{role.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">{t("kanbanBoard.descriptionLabel")}</label>
+            <textarea
+              value={draftDesc}
+              onChange={(e) => setDraftDesc(e.target.value)}
+              rows={4}
+              placeholder={t("kanbanBoard.descriptionPlaceholder")}
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white text-slate-700 outline-none focus:border-violet-400 resize-none"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100">
+          <button type="button" onClick={onClose} className="text-sm px-4 py-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors">
+            {t("kanbanBoard.cancel")}
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !isDirty}
+            className="text-sm px-4 py-2 rounded-lg bg-violet-600 text-white font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {saving ? t("kanbanBoard.saving") : t("kanbanBoard.save")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

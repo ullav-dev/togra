@@ -18,6 +18,7 @@ import {
   deleteWorkflow,
   cloneWorkflowFromTemplate,
   createTask,
+  updateTask,
   getTeam,
   listTeamRoles,
   getJobWorkflowAllocations,
@@ -149,11 +150,21 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     }
   }
 
-  async function onStoryMoved(storyId: string, targetJobId: string | null) {
-    if (!token) return;
+  async function onStoryMoved(storyId: string, targetJobId: string | null): Promise<boolean> {
+    if (!token) return false;
     const targetId = targetJobId ?? backlogJob?.id;
-    if (!targetId) return;
+    if (!targetId) return false;
+    const targetJob = targetJobId ? project?.jobs.find((j) => j.id === targetJobId) : null;
+    const isKanbanTarget = targetJob?.job_type === "kanban";
+    const alloc = backlogAllocations[storyId];
+    // A story can only join a Kanban board once it has a Start Task —
+    // Kanban tasks are otherwise driven externally (e.g. MCP calls) with
+    // nothing for the board to promote to Ready.
+    if (isKanbanTarget && !alloc?.start_task_id) return false;
     await updateWorkflow(token, storyId, { job_id: targetId });
+    if (isKanbanTarget && alloc?.start_task_id) {
+      await updateTask(token, alloc.start_task_id, { status: "Ready" }).catch(() => {});
+    }
     if (backlogJob) {
       const [newStories, newAllocs] = await Promise.all([
         listWorkflows(token, { job_id: backlogJob.id }),
@@ -167,6 +178,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     if (targetJobId) {
       setSprintRefreshMap((prev) => ({ ...prev, [targetJobId]: Date.now() }));
     }
+    return true;
   }
 
   async function onStoryDeleted(storyId: string) {
@@ -507,7 +519,7 @@ function BacklogPanel({
   token: string;
   projectId: string;
   onStoryCreated: (s: Workflow) => void;
-  onStoryMoved: (storyId: string, targetJobId: string | null) => void;
+  onStoryMoved: (storyId: string, targetJobId: string | null) => Promise<boolean>;
   onStoryDeleted: (storyId: string) => void;
   onRefresh: () => Promise<void>;
   refreshInterval: number;
@@ -716,6 +728,7 @@ function BacklogStoryCard({
     e.dataTransfer.effectAllowed = "move";
   }
 
+  const hasStartTask = !!alloc?.start_task_id;
   const assignedMember = alloc?.assigned_to ? teamMembers.find((m) => m.user.id === alloc.assigned_to) : null;
   const assignedRoles = (alloc?.team_role_ids ?? []).map((rid) => teamRoles.find((r) => r.id === rid)).filter(Boolean) as TeamRole[];
 
@@ -768,16 +781,20 @@ function BacklogStoryCard({
                 {kanbans.length > 0 && (
                   <>
                     <p className="px-3 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">{t("backlog.moveToKanban")}</p>
-                    {kanbans.map((kb) => (
-                      <button
-                        key={kb.id}
-                        type="button"
-                        onClick={() => { onMoveToKanban(kb.id); setMenuOpen(false); }}
-                        className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-teal-50 hover:text-teal-700 transition-colors truncate"
-                      >
-                        {kb.name}
-                      </button>
-                    ))}
+                    {hasStartTask ? (
+                      kanbans.map((kb) => (
+                        <button
+                          key={kb.id}
+                          type="button"
+                          onClick={() => { onMoveToKanban(kb.id); setMenuOpen(false); }}
+                          className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-teal-50 hover:text-teal-700 transition-colors truncate"
+                        >
+                          {kb.name}
+                        </button>
+                      ))
+                    ) : (
+                      <p className="px-3 py-1.5 text-xs text-slate-400 italic leading-snug">{t("backlog.kanbanNeedsStartTask")}</p>
+                    )}
                     <div className="my-1 border-t border-slate-100" />
                   </>
                 )}
@@ -839,7 +856,7 @@ function SprintsPanel({
   onSprintCreated: (sprint: Job) => void;
   onSprintDeleted: (sprintId: string) => void;
   onSprintUpdated: (sprintId: string, patch: Partial<Job>) => void;
-  onStoryMoved: (storyId: string, targetJobId: string | null) => void;
+  onStoryMoved: (storyId: string, targetJobId: string | null) => Promise<boolean>;
   sprintRefreshMap: Record<string, number>;
 }) {
   const t = useTranslations("project");
@@ -1226,7 +1243,7 @@ function KanbanPanel({
   token: string;
   onKanbanCreated: (kb: Job) => void;
   onKanbanDeleted: (id: string) => void;
-  onStoryMoved: (storyId: string, targetJobId: string) => void;
+  onStoryMoved: (storyId: string, targetJobId: string) => Promise<boolean>;
 }) {
   const t = useTranslations("project");
   const [showCreate, setShowCreate] = useState(false);
@@ -1285,11 +1302,13 @@ function KanbanRow({
   kb: Job;
   projectId: string;
   onDelete: () => void;
-  onDropStory: (storyId: string) => void;
+  onDropStory: (storyId: string) => Promise<boolean>;
 }) {
   const t = useTranslations("project");
   const [isDropOver, setIsDropOver] = useState(false);
+  const [rejected, setRejected] = useState(false);
   const dropCounter = useRef(0);
+  const rejectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleDragEnter(e: React.DragEvent) {
     if (!e.dataTransfer.types.includes("storyid")) return;
@@ -1311,35 +1330,47 @@ function KanbanRow({
     dropCounter.current = 0;
     setIsDropOver(false);
     const storyId = e.dataTransfer.getData("storyId");
-    if (storyId) onDropStory(storyId);
+    if (!storyId) return;
+    onDropStory(storyId).then((moved) => {
+      if (!moved) {
+        setRejected(true);
+        if (rejectTimeoutRef.current) clearTimeout(rejectTimeoutRef.current);
+        rejectTimeoutRef.current = setTimeout(() => setRejected(false), 4000);
+      }
+    });
   }
 
   return (
-    <div
-      className={`bg-white rounded-xl px-4 py-3 flex items-center gap-3 transition-all ${
-        isDropOver ? "border-2 border-teal-400 shadow-md" : "border border-slate-200"
-      }`}
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
-    >
-      <span className="text-xs px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-700 font-medium shrink-0">Kanban</span>
-      <span className="text-sm font-medium text-slate-800 flex-1 truncate">{kb.name}</span>
-      <Link
-        href={`/projects/${projectId}/jobs/${kb.id}`}
-        className="text-xs font-medium text-teal-700 hover:text-teal-800 shrink-0 transition-colors"
+    <div className="space-y-1">
+      <div
+        className={`bg-white rounded-xl px-4 py-3 flex items-center gap-3 transition-all ${
+          isDropOver ? "border-2 border-teal-400 shadow-md" : rejected ? "border-2 border-red-300" : "border border-slate-200"
+        }`}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
       >
-        {t("kanban.board")}
-      </Link>
-      <button
-        type="button"
-        onClick={onDelete}
-        className="text-slate-400 hover:text-red-500 transition-colors p-1 rounded shrink-0"
-        title="Delete Kanban board"
-      >
-        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75Zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.559a.75.75 0 1 0-1.492.14l.62 6.498A1.75 1.75 0 0 0 5.365 14.8h5.27a1.75 1.75 0 0 0 1.741-1.603l.62-6.498a.75.75 0 1 0-1.492-.14l-.62 6.498a.25.25 0 0 1-.249.229H5.365a.25.25 0 0 1-.249-.229l-.62-6.498Z"/></svg>
-      </button>
+        <span className="text-xs px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-700 font-medium shrink-0">Kanban</span>
+        <span className="text-sm font-medium text-slate-800 flex-1 truncate">{kb.name}</span>
+        <Link
+          href={`/projects/${projectId}/jobs/${kb.id}`}
+          className="text-xs font-medium text-teal-700 hover:text-teal-800 shrink-0 transition-colors"
+        >
+          {t("kanban.board")}
+        </Link>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="text-slate-400 hover:text-red-500 transition-colors p-1 rounded shrink-0"
+          title="Delete Kanban board"
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75Zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.559a.75.75 0 1 0-1.492.14l.62 6.498A1.75 1.75 0 0 0 5.365 14.8h5.27a1.75 1.75 0 0 0 1.741-1.603l.62-6.498a.75.75 0 1 0-1.492-.14l-.62 6.498a.25.25 0 0 1-.249.229H5.365a.25.25 0 0 1-.249-.229l-.62-6.498Z"/></svg>
+        </button>
+      </div>
+      {rejected && (
+        <p className="text-xs text-red-500 px-1">{t("backlog.kanbanNeedsStartTask")}</p>
+      )}
     </div>
   );
 }
@@ -1465,7 +1496,10 @@ function CreateStoryModal({
           story_points: pts,
           is_shared: isShared,
         });
-        await createTask(token, { name: "Define", workflow_id: story.id, is_start: true });
+        // is_end too — a fresh story is a single-task workflow until more steps are
+        // added; whoever adds the next step should mark the real final one as the
+        // end task instead (see WorkflowCanvas's "End task" checkbox on Add Step).
+        await createTask(token, { name: "Define", workflow_id: story.id, is_start: true, is_end: true });
       }
 
       if (noteBody.trim()) {

@@ -151,7 +151,7 @@ interface InnerProps {
 function WorkflowCanvasInner({
   workflow, teamMembers, teamRoles, taskTeamRoles, token, onTaskUpdated,
 }: InnerProps) {
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
 
   const [tasks, setTasks] = useState<Task[]>(workflow.tasks);
   const [links, setLinks] = useState<TaskLink[]>(workflow.links);
@@ -237,6 +237,10 @@ function WorkflowCanvasInner({
     const toTask = tasks.find((t) => t.id === connection.target);
     if (!fromTask || !toTask || connection.source === connection.target) return;
 
+    // Start steps may have no incoming connectors; end steps may have no
+    // outgoing connectors.
+    if (toTask.is_start || fromTask.is_end) return;
+
     // Decision nodes require a branch label
     if (fromTask.task_type === "decision") {
       setPendingConnection({ connection, fromTask, toTask });
@@ -298,6 +302,7 @@ function WorkflowCanvasInner({
     const fromTask = tasks.find((t) => t.id === newConnection.source);
     const toTask = tasks.find((t) => t.id === newConnection.target);
     if (!fromTask || !toTask || newConnection.source === newConnection.target) return;
+    if (toTask.is_start || fromTask.is_end) return;
 
     // Optimistic visual update
     setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds));
@@ -336,11 +341,11 @@ function WorkflowCanvasInner({
 
   // ── Add step ────────────────────────────────────────────────────────────────
 
-  async function handleAddStep(name: string, taskType: "standard" | "decision" | "automated") {
+  async function handleAddStep(name: string, taskType: "standard" | "decision" | "automated", isEnd: boolean) {
     setLastTaskType(taskType);
     // Place near centre of viewport
     const centre = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-    const newTask = await createTask(token, { name, workflow_id: workflow.id, task_type: taskType });
+    const newTask = await createTask(token, { name, workflow_id: workflow.id, task_type: taskType, is_end: isEnd || undefined });
     // Save position
     await updateTask(token, newTask.id, { canvas_x: centre.x, canvas_y: centre.y });
     const positioned = { ...newTask, canvas_x: centre.x, canvas_y: centre.y };
@@ -451,6 +456,7 @@ function WorkflowCanvasInner({
       const pos = newLayout.get(n.id);
       return pos ? { ...n, position: pos } : n;
     }));
+    setTimeout(() => fitView({ padding: 0.25 }), 0);
     // Persist positions
     await Promise.all(
       [...newLayout.entries()].map(([id, pos]) =>

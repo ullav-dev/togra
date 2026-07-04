@@ -4,13 +4,14 @@ import { useState } from "react";
 
 interface Props {
   defaultType?: "standard" | "decision" | "automated";
-  onAdd: (name: string, taskType: "standard" | "decision" | "automated") => Promise<void>;
+  onAdd: (name: string, taskType: "standard" | "decision" | "automated", isEnd: boolean) => Promise<void>;
   onClose: () => void;
 }
 
 export default function AddStepModal({ defaultType = "standard", onAdd, onClose }: Props) {
   const [name, setName] = useState("");
   const [taskType, setTaskType] = useState<"standard" | "decision" | "automated">(defaultType);
+  const [isEnd, setIsEnd] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,7 +21,7 @@ export default function AddStepModal({ defaultType = "standard", onAdd, onClose 
     setBusy(true);
     setError(null);
     try {
-      await onAdd(name.trim(), taskType as "standard" | "decision" | "automated");
+      await onAdd(name.trim(), taskType as "standard" | "decision" | "automated", isEnd);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add step");
@@ -73,6 +74,17 @@ export default function AddStepModal({ defaultType = "standard", onAdd, onClose 
               ))}
             </div>
           </div>
+          {taskType === "standard" && (
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={isEnd}
+                onChange={(e) => setIsEnd(e.target.checked)}
+                className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+              />
+              Mark as end step
+            </label>
+          )}
           <div className="flex gap-3 justify-end pt-1">
             <button
               type="button"

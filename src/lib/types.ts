@@ -166,6 +166,10 @@ export interface Task {
   effort: number | null;
   decision_outcome: string | null;
   decision_input_port: string | null;
+  /** `"none"` (default), `"low"`, `"medium"`, `"high"`, or `"critical"`. */
+  priority: string;
+  /** Optional point in time the task is due. */
+  due_time: string | null;
 }
 
 export interface TaskLink {
