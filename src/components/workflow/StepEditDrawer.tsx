@@ -247,25 +247,25 @@ export default function StepEditDrawer({
             )}
           </div>
 
-          {/* End step toggle — a workflow may have any number of end steps but
-              the start step doesn't get this toggle (only settable at story creation). */}
-          {!task.is_start && (
-            <div className={sectionCls}>
-              <label className="flex items-center gap-2 text-sm text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={draftIsEnd}
-                  disabled={saving || (draftIsEnd && !canRemoveEndFlag)}
-                  onChange={(e) => setDraftIsEnd(e.target.checked)}
-                  className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
-                />
-                This step marks the end of the story
-              </label>
-              {draftIsEnd && !canRemoveEndFlag && (
-                <p className="text-xs text-slate-400">This is the story&apos;s only end step — add another before removing this one.</p>
-              )}
-            </div>
-          )}
+          {/* End step toggle — a workflow may have any number of end steps, including
+              the start step itself (e.g. a fresh single-step story is both); this must
+              stay editable regardless of is_start so it can be unset once another end
+              step exists (extending a single-task story into a longer one). */}
+          <div className={sectionCls}>
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={draftIsEnd}
+                disabled={saving || (draftIsEnd && !canRemoveEndFlag)}
+                onChange={(e) => setDraftIsEnd(e.target.checked)}
+                className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+              />
+              This step marks the end of the story
+            </label>
+            {draftIsEnd && !canRemoveEndFlag && (
+              <p className="text-xs text-slate-400">This is the story&apos;s only end step — add another before removing this one.</p>
+            )}
+          </div>
 
           {/* Assignee */}
           <div className={sectionCls}>
