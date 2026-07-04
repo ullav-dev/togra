@@ -167,6 +167,8 @@ export const updateTask = (
     is_start?: boolean; is_end?: boolean;
     canvas_x?: number | null; canvas_y?: number | null;
     effort?: number | null;
+    priority?: string;
+    due_time?: string | null;
   }
 ): Promise<Task> =>
   apiRequest(`/tasks/${id}`, token, { method: "PUT", body: JSON.stringify(patch) });
