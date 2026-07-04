@@ -151,7 +151,7 @@ interface InnerProps {
 function WorkflowCanvasInner({
   workflow, teamMembers, teamRoles, taskTeamRoles, token, onTaskUpdated,
 }: InnerProps) {
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
 
   const [tasks, setTasks] = useState<Task[]>(workflow.tasks);
   const [links, setLinks] = useState<TaskLink[]>(workflow.links);
@@ -456,6 +456,7 @@ function WorkflowCanvasInner({
       const pos = newLayout.get(n.id);
       return pos ? { ...n, position: pos } : n;
     }));
+    setTimeout(() => fitView({ padding: 0.25 }), 0);
     // Persist positions
     await Promise.all(
       [...newLayout.entries()].map(([id, pos]) =>
