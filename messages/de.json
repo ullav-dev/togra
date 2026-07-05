@@ -111,7 +111,7 @@
       "namePlaceholder": "z. B. Ullav Portal v2",
       "codeLabel": "Projektcode",
       "codePlaceholder": "z. B. P1",
-      "codeHint": "1-8 Buchstaben/Ziffern, wird als Präfix für Aufgabenreferenzen verwendet (z. B. P1-0001). Kann später geändert werden.",
+      "codeHint": "1-8 Buchstaben/Ziffern, wird als Präfix für Aufgabenreferenzen verwendet (z. B. P1-0001). Kann nach dem Erstellen des Projekts nicht mehr geändert werden.",
       "descLabel": "Beschreibung",
       "optional": "(optional)",
       "teamLabel": "Team",
