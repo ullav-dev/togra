@@ -111,7 +111,7 @@
       "namePlaceholder": "m.sh. Ullav Portal v2",
       "codeLabel": "Cód tionscadail",
       "codePlaceholder": "m.sh. P1",
-      "codeHint": "1-8 litir/uimhir, úsáidte mar réimír do thagairtí tascanna (m.sh. P1-0001). Is féidir é a athrú níos déanaí.",
+      "codeHint": "1-8 litir/uimhir, úsáidte mar réimír do thagairtí tascanna (m.sh. P1-0001). Ní féidir é a athrú tar éis an tionscadal a chruthú.",
       "descLabel": "Cur síos",
       "optional": "(roghnach)",
       "teamLabel": "Foireann",

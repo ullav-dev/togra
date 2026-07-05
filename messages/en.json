@@ -111,7 +111,7 @@
       "namePlaceholder": "e.g. Ullav Portal v2",
       "codeLabel": "Project code",
       "codePlaceholder": "e.g. P1",
-      "codeHint": "1-8 letters/digits, used as the prefix for task references (e.g. P1-0001). Can be changed later.",
+      "codeHint": "1-8 letters/digits, used as the prefix for task references (e.g. P1-0001). Cannot be changed after the project is created.",
       "descLabel": "Description",
       "optional": "(optional)",
       "teamLabel": "Team",

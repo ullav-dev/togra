@@ -25,6 +25,7 @@ import ResearchPanel from "@/components/research/ResearchPanel";
 import MarkdownEditor from "@/components/MarkdownEditor";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { workflowRef } from "@/lib/reference";
 
 export default function StoryDetailPage({
   params,
@@ -166,6 +167,11 @@ export default function StoryDetailPage({
                 onClick={() => setEditingName(true)}
               >
                 <h1 className="text-xl font-bold text-slate-800 group-hover:text-violet-700 transition-colors leading-snug">
+                  {workflowRef(project?.project_code, story.workflow_number) && (
+                    <span className="text-slate-400 font-mono font-normal mr-2">
+                      {workflowRef(project?.project_code, story.workflow_number)}
+                    </span>
+                  )}
                   {story.name}
                 </h1>
                 <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 mt-1 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
