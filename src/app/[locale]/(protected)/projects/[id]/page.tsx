@@ -35,6 +35,7 @@ import NotesPanel from "@/components/notes/NotesPanel";
 import TeamView from "@/components/TeamView";
 import ReportsTab from "@/components/reports/ReportsTab";
 import { useCurrentProject } from "@/contexts/CurrentProjectContext";
+import { workflowRef } from "@/lib/reference";
 
 const BACKLOG_PAGE_SIZE = 20;
 
@@ -381,6 +382,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             templates={templates}
             token={token!}
             projectId={id}
+            projectCode={project?.project_code ?? null}
             onStoryCreated={onStoryCreated}
             onStoryMoved={onStoryMoved}
             onStoryDeleted={onStoryDeleted}
@@ -542,6 +544,7 @@ function BacklogPanel({
   templates,
   token,
   projectId,
+  projectCode,
   onStoryCreated,
   onStoryMoved,
   onStoryDeleted,
@@ -559,6 +562,7 @@ function BacklogPanel({
   templates: Workflow[];
   token: string;
   projectId: string;
+  projectCode: string | null;
   onStoryCreated: (s: Workflow) => void;
   onStoryMoved: (storyId: string, targetJobId: string | null) => Promise<boolean>;
   onStoryDeleted: (storyId: string) => void;
@@ -684,6 +688,7 @@ function BacklogPanel({
               teamMembers={teamMembers}
               teamRoles={teamRoles}
               projectId={projectId}
+              projectCode={projectCode}
               onMoveToSprint={(sprintId) => onStoryMoved(story.id, sprintId)}
               onMoveToKanban={(kanbanId) => onStoryMoved(story.id, kanbanId)}
               onDelete={() => onStoryDeleted(story.id)}
@@ -735,6 +740,7 @@ function BacklogStoryCard({
   teamMembers,
   teamRoles,
   projectId,
+  projectCode,
   onMoveToSprint,
   onMoveToKanban,
   onDelete,
@@ -746,6 +752,7 @@ function BacklogStoryCard({
   teamMembers: TeamMember[];
   teamRoles: TeamRole[];
   projectId: string;
+  projectCode: string | null;
   onMoveToSprint: (sprintId: string) => void;
   onMoveToKanban: (kanbanId: string) => void;
   onDelete: () => void;
@@ -785,6 +792,9 @@ function BacklogStoryCard({
           className="flex-1 min-w-0 text-sm font-medium text-slate-800 hover:text-violet-700 transition-colors leading-snug"
           onClick={(e) => e.stopPropagation()}
         >
+          {workflowRef(projectCode, story.workflow_number) && (
+            <span className="text-slate-400 font-normal mr-1">{workflowRef(projectCode, story.workflow_number)}</span>
+          )}
           {story.name}
         </Link>
         <div className="flex items-center gap-1.5 shrink-0">
