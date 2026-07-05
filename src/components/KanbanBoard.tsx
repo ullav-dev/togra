@@ -203,11 +203,15 @@ export default function KanbanBoard({ job, projectId, projectCode }: Props) {
 
   const rows: Row[] = useMemo(() => {
     return stories.flatMap((story) =>
-      (storyTasks[story.id] ?? []).map((task) => ({
-        task,
-        story,
-        roles: (taskRoleIds[task.id] ?? []).map((rid) => teamRoles.find((r) => r.id === rid)).filter(Boolean) as TeamRole[],
-      }))
+      (storyTasks[story.id] ?? [])
+        // Decision and automated tasks are driven by the workflow engine, not
+        // groomed/worked by a person — they don't belong on this board.
+        .filter((task) => task.task_type !== "decision" && task.task_type !== "automated")
+        .map((task) => ({
+          task,
+          story,
+          roles: (taskRoleIds[task.id] ?? []).map((rid) => teamRoles.find((r) => r.id === rid)).filter(Boolean) as TeamRole[],
+        }))
     );
   }, [stories, storyTasks, taskRoleIds, teamRoles]);
 
