@@ -36,7 +36,7 @@ export const listProjects = (token: string, teamId?: string): Promise<Project[]>
 /** Create a project, then immediately create its Backlog job. Returns both. */
 export async function createProjectWithBacklog(
   token: string,
-  payload: { name: string; description?: string; team_id?: string; project_manager_id?: string }
+  payload: { name: string; description?: string; team_id?: string; project_manager_id?: string; project_code: string }
 ): Promise<{ project: Project; backlogJob: Job }> {
   const project = await apiRequest<Project>("/projects", token, {
     method: "POST",
@@ -57,7 +57,7 @@ export const getProject = (token: string, id: string): Promise<ProjectWithJobs> 
 export const updateProject = (
   token: string,
   id: string,
-  patch: { name?: string; description?: string; status?: string; project_manager_id?: string }
+  patch: { name?: string; description?: string; status?: string; project_manager_id?: string; project_code?: string }
 ): Promise<Project> =>
   apiRequest(`/projects/${id}`, token, { method: "PUT", body: JSON.stringify(patch) });
 

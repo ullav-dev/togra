@@ -11,6 +11,7 @@ import NotesPanel from "@/components/notes/NotesPanel";
 import ResearchPanel from "@/components/research/ResearchPanel";
 import KanbanBoard from "@/components/KanbanBoard";
 import { useCurrentProject } from "@/contexts/CurrentProjectContext";
+import { taskRef, workflowRef } from "@/lib/reference";
 
 const TASK_COLUMNS: {
   status: Status;
@@ -204,7 +205,7 @@ export default function SprintBoardPage({
             <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-teal-50 text-teal-700">{t("kanban")}</span>
           </div>
         </div>
-        <KanbanBoard job={job} projectId={projectId} />
+        <KanbanBoard job={job} projectId={projectId} projectCode={project?.project_code ?? null} />
       </div>
     );
   }
@@ -374,6 +375,7 @@ export default function SprintBoardPage({
                     story={story}
                     tasks={visibleTasks}
                     projectId={projectId}
+                    projectCode={project?.project_code ?? null}
                     teamMembers={teamMembers}
                     columns={columns}
                     collapsedColumns={collapsedColumns}
@@ -400,6 +402,7 @@ export default function SprintBoardPage({
                   member={member}
                   allStoryTasks={storyTasks}
                   stories={stories}
+                  projectCode={project?.project_code ?? null}
                   teamMembers={teamMembers}
                   columns={columns}
                   collapsedColumns={collapsedColumns}
@@ -453,6 +456,7 @@ function StoryLane({
   story,
   tasks,
   projectId,
+  projectCode,
   teamMembers,
   columns,
   collapsedColumns,
@@ -466,6 +470,7 @@ function StoryLane({
   story: Workflow;
   tasks: Task[];
   projectId: string;
+  projectCode: string | null;
   teamMembers: TeamMember[];
   columns: (typeof TASK_COLUMNS[number] & { label: string })[];
   collapsedColumns: Set<Status>;
@@ -490,6 +495,9 @@ function StoryLane({
           href={`/projects/${projectId}/stories/${story.id}`}
           className="text-sm font-semibold text-slate-700 hover:text-violet-700 transition-colors leading-snug line-clamp-2"
         >
+          {workflowRef(projectCode, story.workflow_number) && (
+            <span className="text-slate-400 font-normal mr-1">{workflowRef(projectCode, story.workflow_number)}</span>
+          )}
           {story.name}
         </Link>
         <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -511,6 +519,7 @@ function StoryLane({
           column={col}
           tasks={tasks.filter((t) => t.status === col.status)}
           workflowId={story.id}
+          projectCode={projectCode}
           teamMembers={teamMembers}
           showStoryName={false}
           storyName={story.name}
@@ -533,6 +542,7 @@ function MemberLane({
   member,
   allStoryTasks,
   stories,
+  projectCode,
   teamMembers,
   columns,
   collapsedColumns,
@@ -546,6 +556,7 @@ function MemberLane({
   member: TeamMember | null;
   allStoryTasks: Record<string, Task[]>;
   stories: Workflow[];
+  projectCode: string | null;
   teamMembers: TeamMember[];
   columns: (typeof TASK_COLUMNS[number] & { label: string })[];
   collapsedColumns: Set<Status>;
@@ -594,6 +605,7 @@ function MemberLane({
             column={col}
             tasks={colItems.map(({ task }) => task)}
             workflowId=""
+            projectCode={projectCode}
             teamMembers={teamMembers}
             showStoryName
             storyName=""
@@ -618,6 +630,7 @@ function SwimCell({
   column,
   tasks,
   workflowId,
+  projectCode,
   teamMembers,
   showStoryName,
   storyName,
@@ -633,6 +646,7 @@ function SwimCell({
   column: typeof TASK_COLUMNS[number] & { label: string };
   tasks: Task[];
   workflowId: string;
+  projectCode: string | null;
   teamMembers: TeamMember[];
   showStoryName: boolean;
   storyName: string;
@@ -692,6 +706,7 @@ function SwimCell({
         <TaskCard
           key={task.id}
           task={task}
+          projectCode={projectCode}
           teamMembers={teamMembers}
           showStoryName={showStoryName}
           storyName={storyNameMap ? (storyNameMap[task.id] ?? storyName) : storyName}
@@ -714,6 +729,7 @@ function SwimCell({
 
 function TaskCard({
   task,
+  projectCode,
   teamMembers,
   showStoryName,
   storyName,
@@ -725,6 +741,7 @@ function TaskCard({
   onOpen,
 }: {
   task: Task;
+  projectCode: string | null;
   teamMembers: TeamMember[];
   showStoryName: boolean;
   storyName: string;
@@ -793,7 +810,12 @@ function TaskCard({
 
       {/* Task name + badges row */}
       <div className="flex items-start gap-1 mb-1.5">
-        <p className={`flex-1 text-xs font-medium leading-snug ${isAutomated ? "text-slate-500" : "text-slate-700"}`}>{task.name}</p>
+        <p className={`flex-1 text-xs font-medium leading-snug ${isAutomated ? "text-slate-500" : "text-slate-700"}`}>
+          {taskRef(projectCode, task.task_number) && (
+            <span className="text-slate-400 font-normal mr-1">{taskRef(projectCode, task.task_number)}</span>
+          )}
+          {task.name}
+        </p>
         <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
           {task.is_start && (
             <span title="Start task" className="w-3.5 h-3.5 rounded-full bg-emerald-100 flex items-center justify-center">

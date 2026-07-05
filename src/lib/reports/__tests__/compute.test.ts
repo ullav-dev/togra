@@ -49,6 +49,7 @@ const wf = (id: string, points: number, status: Workflow["status"] = "Not Starte
   description: null,
   ticket_type: null,
   ticket_number: null,
+  workflow_number: null,
   priority: null,
   reporter_id: null,
   created_by: "user-1",

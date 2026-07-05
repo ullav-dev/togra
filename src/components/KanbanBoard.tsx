@@ -18,6 +18,7 @@ import {
 import type { Job, Workflow, Task, TeamMember, TeamRole, Status } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 import RefreshControl from "@/components/RefreshControl";
+import { taskRef, workflowRef } from "@/lib/reference";
 
 const PRIORITY_RANK: Record<string, number> = {
   critical: 0,
@@ -49,6 +50,7 @@ type FilterMode = "all" | "mine";
 interface Props {
   job: Job;
   projectId: string;
+  projectCode: string | null;
 }
 
 interface Row {
@@ -57,7 +59,7 @@ interface Row {
   roles: TeamRole[];
 }
 
-export default function KanbanBoard({ job, projectId }: Props) {
+export default function KanbanBoard({ job, projectId, projectCode }: Props) {
   const t = useTranslations("board");
   const { token, user } = useAuth();
 
@@ -322,6 +324,7 @@ export default function KanbanBoard({ job, projectId }: Props) {
                 key={row.task.id}
                 row={row}
                 projectId={projectId}
+                projectCode={projectCode}
                 teamMembers={teamMembers}
                 teamRoles={teamRoles}
                 currentUserId={user?.id ?? null}
@@ -342,6 +345,7 @@ export default function KanbanBoard({ job, projectId }: Props) {
       {openRow && (
         <TaskDetailModal
           task={openRow.task}
+          projectCode={projectCode}
           storyName={openRow.story.name}
           roles={openRow.roles}
           teamMembers={teamMembers}
@@ -385,6 +389,7 @@ function MemberAvatar({ member, size = "md" }: { member: TeamMember; size?: "sm"
 function TaskRow({
   row,
   projectId,
+  projectCode,
   teamMembers,
   teamRoles,
   currentUserId,
@@ -399,6 +404,7 @@ function TaskRow({
 }: {
   row: Row;
   projectId: string;
+  projectCode: string | null;
   teamMembers: TeamMember[];
   teamRoles: TeamRole[];
   currentUserId: string | null;
@@ -440,6 +446,9 @@ function TaskRow({
       {/* Task name */}
       <div className="flex-1 min-w-[12rem] pr-2">
         <p className={`text-sm font-medium leading-snug ${groomable ? "text-slate-800" : "text-slate-500"}`}>
+          {taskRef(projectCode, task.task_number) && (
+            <span className="text-slate-400 font-normal mr-1">{taskRef(projectCode, task.task_number)}</span>
+          )}
           {task.name}
           {!groomable && (
             <svg viewBox="0 0 16 16" fill="currentColor" className="inline-block w-3 h-3 ml-1.5 text-slate-400 align-text-top">
@@ -457,6 +466,9 @@ function TaskRow({
           onClick={(e) => e.stopPropagation()}
           className="text-xs text-slate-500 hover:text-teal-700 transition-colors truncate block"
         >
+          {workflowRef(projectCode, story.workflow_number) && (
+            <span className="text-slate-400 mr-1">{workflowRef(projectCode, story.workflow_number)}</span>
+          )}
           {story.name}
         </Link>
       </div>
@@ -619,6 +631,7 @@ function toDatetimeLocal(iso: string | null): string {
 
 function TaskDetailModal({
   task,
+  projectCode,
   storyName,
   roles,
   teamMembers,
@@ -628,6 +641,7 @@ function TaskDetailModal({
   onClose,
 }: {
   task: Task;
+  projectCode: string | null;
   storyName: string;
   roles: TeamRole[];
   teamMembers: TeamMember[];
@@ -713,7 +727,10 @@ function TaskDetailModal({
         {/* Header */}
         <div className="px-6 pt-5 pb-4 border-b border-slate-100 flex items-start gap-3">
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-slate-400 mb-1 truncate">{storyName}</p>
+            <p className="text-xs text-slate-400 mb-1 truncate">
+              {taskRef(projectCode, task.task_number) && <span className="font-mono mr-1">{taskRef(projectCode, task.task_number)}</span>}
+              {storyName}
+            </p>
             <input
               type="text"
               value={draftName}
