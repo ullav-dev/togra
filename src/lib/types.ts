@@ -66,6 +66,8 @@ export interface Project {
   status: Status;
   team_id: string | null;
   project_manager_id: string | null;
+  /** Short unique code (e.g. "P1"), used as the prefix for task/workflow references. */
+  project_code: string;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -96,6 +98,8 @@ export interface Job {
 
 export interface JobWithWorkflows extends Job {
   workflows: Workflow[];
+  /** The linked project's code, if any — shared by every workflow in `workflows`. */
+  project_code: string | null;
 }
 
 /** First-task allocation summary for a workflow in a Kanban job. */
@@ -133,11 +137,15 @@ export interface Workflow {
   ticket_number: number | null;
   priority: string | null;
   reporter_id: string | null;
+  /** Sequence number within the owning project's workflow numbering (e.g. `4` in "P1-W0004"). Null for templates/jobless workflows. */
+  workflow_number: number | null;
 }
 
 export interface WorkflowWithTasks extends Workflow {
   tasks: Task[];
   links: TaskLink[];
+  /** The owning project's code, if the workflow's job is linked to one. */
+  project_code: string | null;
 }
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
@@ -170,6 +178,8 @@ export interface Task {
   priority: string;
   /** Optional point in time the task is due. */
   due_time: string | null;
+  /** Sequence number within the owning project's task numbering (e.g. `4` in "P1-0004"). Null for templates/jobless workflows. */
+  task_number: number | null;
 }
 
 export interface TaskLink {

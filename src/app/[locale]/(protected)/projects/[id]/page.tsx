@@ -52,6 +52,9 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [loading, setLoading] = useState(true);
   const [renamingProject, setRenamingProject] = useState(false);
   const [renameValue, setRenameValue] = useState("");
+  const [editingCode, setEditingCode] = useState(false);
+  const [codeValue, setCodeValue] = useState("");
+  const [codeError, setCodeError] = useState<string | null>(null);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
   const [confirmDeleteSprintId, setConfirmDeleteSprintId] = useState<string | null>(null);
   const [sprintRefreshMap, setSprintRefreshMap] = useState<Record<string, number>>({});
@@ -246,6 +249,24 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     setRenamingProject(false);
   }
 
+  async function onRenameCode() {
+    if (!token || !project) { setEditingCode(false); return; }
+    const trimmed = codeValue.trim().toUpperCase();
+    if (!trimmed || trimmed === project.project_code) {
+      setEditingCode(false);
+      setCodeError(null);
+      return;
+    }
+    try {
+      const updated = await updateProject(token, id, { project_code: trimmed });
+      setProject((prev) => prev ? { ...prev, project_code: updated.project_code } : prev);
+      setEditingCode(false);
+      setCodeError(null);
+    } catch (err) {
+      setCodeError(err instanceof Error ? err.message : "Failed to update project code");
+    }
+  }
+
   async function doDeleteProject() {
     if (!token) return;
     await deleteProject(token, id);
@@ -283,6 +304,25 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               {project.name}
             </h1>
           )}
+          {editingCode ? (
+            <input
+              autoFocus
+              maxLength={8}
+              value={codeValue}
+              onChange={(e) => setCodeValue(e.target.value.toUpperCase())}
+              onBlur={onRenameCode}
+              onKeyDown={(e) => { if (e.key === "Enter") onRenameCode(); if (e.key === "Escape") { setEditingCode(false); setCodeError(null); } }}
+              className="text-xs font-mono uppercase w-16 border-b border-violet-400 outline-none bg-transparent text-slate-500"
+            />
+          ) : (
+            <span
+              className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full cursor-pointer hover:text-violet-700 transition-colors"
+              onClick={() => { setCodeValue(project.project_code); setEditingCode(true); }}
+              title="Click to edit project code"
+            >
+              {project.project_code}
+            </span>
+          )}
           <StatusPill status={project.status} />
           {pmName && (
             <span className="inline-flex items-center gap-1.5 text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
@@ -305,6 +345,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             </button>
           )}
         </div>
+        {codeError && <p className="text-xs text-red-600 mt-1">{codeError}</p>}
       </div>
 
       {/* Tab bar */}

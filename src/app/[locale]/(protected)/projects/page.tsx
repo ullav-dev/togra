@@ -217,6 +217,7 @@ function CreateProjectModal({
 }) {
   const t = useTranslations("projects");
   const [name, setName] = useState("");
+  const [projectCode, setProjectCode] = useState("");
   const [description, setDescription] = useState("");
   const [teamId, setTeamId] = useState(
     defaultTeamId ?? (teams.length === 1 ? teams[0].id : "")
@@ -242,12 +243,13 @@ function CreateProjectModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !teamId) return;
+    if (!name.trim() || !teamId || !projectCode.trim()) return;
     setError(null);
     setSubmitting(true);
     try {
       const { project: p } = await createProjectWithBacklog(token, {
         name: name.trim(),
+        project_code: projectCode.trim(),
         description: description.trim() || undefined,
         team_id: teamId,
         project_manager_id: pmId || undefined,
@@ -272,6 +274,13 @@ function CreateProjectModal({
             <label htmlFor="proj-name" className="text-sm font-medium text-slate-700">{t("modal.nameLabel")}</label>
             <input id="proj-name" required autoFocus value={name} onChange={(e) => setName(e.target.value)}
               className={inputCls} placeholder={t("modal.namePlaceholder")} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="proj-code" className="text-sm font-medium text-slate-700">{t("modal.codeLabel")}</label>
+            <input id="proj-code" required maxLength={8} value={projectCode}
+              onChange={(e) => setProjectCode(e.target.value.toUpperCase())}
+              className={`${inputCls} uppercase`} placeholder={t("modal.codePlaceholder")} />
+            <p className="text-xs text-slate-400">{t("modal.codeHint")}</p>
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="proj-desc" className="text-sm font-medium text-slate-700">
@@ -312,7 +321,7 @@ function CreateProjectModal({
             </button>
             <button
               type="submit"
-              disabled={submitting || !name.trim() || !teamId}
+              disabled={submitting || !name.trim() || !teamId || !projectCode.trim()}
               className="px-4 py-2 text-sm font-medium bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
             >
               {submitting ? t("modal.creating") : t("modal.create")}
