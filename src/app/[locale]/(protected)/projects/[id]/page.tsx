@@ -35,6 +35,7 @@ import NotesPanel from "@/components/notes/NotesPanel";
 import TeamView from "@/components/TeamView";
 import ReportsTab from "@/components/reports/ReportsTab";
 import { useCurrentProject } from "@/contexts/CurrentProjectContext";
+import { workflowRef } from "@/lib/reference";
 
 const BACKLOG_PAGE_SIZE = 20;
 
@@ -52,9 +53,6 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [loading, setLoading] = useState(true);
   const [renamingProject, setRenamingProject] = useState(false);
   const [renameValue, setRenameValue] = useState("");
-  const [editingCode, setEditingCode] = useState(false);
-  const [codeValue, setCodeValue] = useState("");
-  const [codeError, setCodeError] = useState<string | null>(null);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
   const [confirmDeleteSprintId, setConfirmDeleteSprintId] = useState<string | null>(null);
   const [sprintRefreshMap, setSprintRefreshMap] = useState<Record<string, number>>({});
@@ -249,24 +247,6 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     setRenamingProject(false);
   }
 
-  async function onRenameCode() {
-    if (!token || !project) { setEditingCode(false); return; }
-    const trimmed = codeValue.trim().toUpperCase();
-    if (!trimmed || trimmed === project.project_code) {
-      setEditingCode(false);
-      setCodeError(null);
-      return;
-    }
-    try {
-      const updated = await updateProject(token, id, { project_code: trimmed });
-      setProject((prev) => prev ? { ...prev, project_code: updated.project_code } : prev);
-      setEditingCode(false);
-      setCodeError(null);
-    } catch (err) {
-      setCodeError(err instanceof Error ? err.message : "Failed to update project code");
-    }
-  }
-
   async function doDeleteProject() {
     if (!token) return;
     await deleteProject(token, id);
@@ -304,25 +284,12 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               {project.name}
             </h1>
           )}
-          {editingCode ? (
-            <input
-              autoFocus
-              maxLength={8}
-              value={codeValue}
-              onChange={(e) => setCodeValue(e.target.value.toUpperCase())}
-              onBlur={onRenameCode}
-              onKeyDown={(e) => { if (e.key === "Enter") onRenameCode(); if (e.key === "Escape") { setEditingCode(false); setCodeError(null); } }}
-              className="text-xs font-mono uppercase w-16 border-b border-violet-400 outline-none bg-transparent text-slate-500"
-            />
-          ) : (
-            <span
-              className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full cursor-pointer hover:text-violet-700 transition-colors"
-              onClick={() => { setCodeValue(project.project_code); setEditingCode(true); }}
-              title="Click to edit project code"
-            >
-              {project.project_code}
-            </span>
-          )}
+          <span
+            className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full"
+            title="Project code"
+          >
+            {project.project_code}
+          </span>
           <StatusPill status={project.status} />
           {pmName && (
             <span className="inline-flex items-center gap-1.5 text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
@@ -345,7 +312,6 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             </button>
           )}
         </div>
-        {codeError && <p className="text-xs text-red-600 mt-1">{codeError}</p>}
       </div>
 
       {/* Tab bar */}
@@ -381,6 +347,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             templates={templates}
             token={token!}
             projectId={id}
+            projectCode={project?.project_code ?? null}
             onStoryCreated={onStoryCreated}
             onStoryMoved={onStoryMoved}
             onStoryDeleted={onStoryDeleted}
@@ -542,6 +509,7 @@ function BacklogPanel({
   templates,
   token,
   projectId,
+  projectCode,
   onStoryCreated,
   onStoryMoved,
   onStoryDeleted,
@@ -559,6 +527,7 @@ function BacklogPanel({
   templates: Workflow[];
   token: string;
   projectId: string;
+  projectCode: string | null;
   onStoryCreated: (s: Workflow) => void;
   onStoryMoved: (storyId: string, targetJobId: string | null) => Promise<boolean>;
   onStoryDeleted: (storyId: string) => void;
@@ -684,6 +653,7 @@ function BacklogPanel({
               teamMembers={teamMembers}
               teamRoles={teamRoles}
               projectId={projectId}
+              projectCode={projectCode}
               onMoveToSprint={(sprintId) => onStoryMoved(story.id, sprintId)}
               onMoveToKanban={(kanbanId) => onStoryMoved(story.id, kanbanId)}
               onDelete={() => onStoryDeleted(story.id)}
@@ -735,6 +705,7 @@ function BacklogStoryCard({
   teamMembers,
   teamRoles,
   projectId,
+  projectCode,
   onMoveToSprint,
   onMoveToKanban,
   onDelete,
@@ -746,6 +717,7 @@ function BacklogStoryCard({
   teamMembers: TeamMember[];
   teamRoles: TeamRole[];
   projectId: string;
+  projectCode: string | null;
   onMoveToSprint: (sprintId: string) => void;
   onMoveToKanban: (kanbanId: string) => void;
   onDelete: () => void;
@@ -785,6 +757,9 @@ function BacklogStoryCard({
           className="flex-1 min-w-0 text-sm font-medium text-slate-800 hover:text-violet-700 transition-colors leading-snug"
           onClick={(e) => e.stopPropagation()}
         >
+          {workflowRef(projectCode, story.workflow_number) && (
+            <span className="text-slate-400 font-normal mr-1">{workflowRef(projectCode, story.workflow_number)}</span>
+          )}
           {story.name}
         </Link>
         <div className="flex items-center gap-1.5 shrink-0">

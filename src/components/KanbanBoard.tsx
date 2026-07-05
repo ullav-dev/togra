@@ -47,6 +47,63 @@ type SortKey = "task" | "story" | "priority" | "effort" | "due" | "allocated" | 
 type SortDir = "asc" | "desc";
 type FilterMode = "all" | "mine";
 
+// Only Task and Story are resizable — the other columns hold short, fixed-shape
+// content (pills, dates, avatars) that doesn't benefit from resizing.
+type ResizableKey = "task" | "story";
+
+const DEFAULT_COL_WIDTHS: Record<ResizableKey, number> = {
+  task: 240,
+  story: 176,
+};
+
+// Fixed widths (Tailwind classes) for the non-resizable columns, shared between
+// the header and each TaskRow so they stay aligned.
+const FIXED_COL_CLASS: Record<Exclude<SortKey, ResizableKey>, string> = {
+  priority: "w-28",
+  effort: "w-20",
+  due: "w-32",
+  allocated: "w-40",
+  status: "w-32",
+};
+
+const MIN_COL_WIDTH = 70;
+
+function useColumnResize(initial: Record<ResizableKey, number>) {
+  const [widths, setWidths] = useState(initial);
+  const widthsRef = useRef(widths);
+  widthsRef.current = widths;
+
+  const startResize = useCallback((key: ResizableKey) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startWidth = widthsRef.current[key];
+
+    function onMove(ev: MouseEvent) {
+      const next = Math.max(MIN_COL_WIDTH, startWidth + (ev.clientX - startX));
+      setWidths((prev) => ({ ...prev, [key]: next }));
+    }
+    function onUp() {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, []);
+
+  return { widths, startResize };
+}
+
+function ColumnResizeHandle({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
+  return (
+    <div
+      onMouseDown={onMouseDown}
+      onClick={(e) => e.stopPropagation()}
+      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-violet-300/60 transition-colors"
+    />
+  );
+}
+
 interface Props {
   job: Job;
   projectId: string;
@@ -76,6 +133,7 @@ export default function KanbanBoard({ job, projectId, projectCode }: Props) {
   const [reassignTaskId, setReassignTaskId] = useState<string | null>(null);
   const [takingId, setTakingId] = useState<string | null>(null);
   const promotedRef = useRef(false);
+  const { widths: colWidths, startResize } = useColumnResize(DEFAULT_COL_WIDTHS);
 
   const userRoleNames = getUserTeamRoleNames(token, job.team_id ?? null);
 
@@ -145,11 +203,15 @@ export default function KanbanBoard({ job, projectId, projectCode }: Props) {
 
   const rows: Row[] = useMemo(() => {
     return stories.flatMap((story) =>
-      (storyTasks[story.id] ?? []).map((task) => ({
-        task,
-        story,
-        roles: (taskRoleIds[task.id] ?? []).map((rid) => teamRoles.find((r) => r.id === rid)).filter(Boolean) as TeamRole[],
-      }))
+      (storyTasks[story.id] ?? [])
+        // Decision and automated tasks are driven by the workflow engine, not
+        // groomed/worked by a person — they don't belong on this board.
+        .filter((task) => task.task_type !== "decision" && task.task_type !== "automated")
+        .map((task) => ({
+          task,
+          story,
+          roles: (taskRoleIds[task.id] ?? []).map((rid) => teamRoles.find((r) => r.id === rid)).filter(Boolean) as TeamRole[],
+        }))
     );
   }, [stories, storyTasks, taskRoleIds, teamRoles]);
 
@@ -252,14 +314,14 @@ export default function KanbanBoard({ job, projectId, projectCode }: Props) {
 
   if (loading) return <div className="p-8 text-slate-400 text-sm">{t("loading")}</div>;
 
-  const columns: { key: SortKey; label: string; className?: string }[] = [
-    { key: "task", label: t("kanbanBoard.colTask"), className: "flex-1 min-w-[12rem]" },
-    { key: "story", label: t("kanbanBoard.colStory"), className: "w-44 shrink-0" },
-    { key: "priority", label: t("kanbanBoard.colPriority"), className: "w-28 shrink-0" },
-    { key: "effort", label: t("kanbanBoard.colEffort"), className: "w-20 shrink-0" },
-    { key: "due", label: t("kanbanBoard.colDue"), className: "w-32 shrink-0" },
-    { key: "allocated", label: t("kanbanBoard.colAllocated"), className: "w-40 shrink-0" },
-    { key: "status", label: t("kanbanBoard.colStatus"), className: "w-32 shrink-0" },
+  const columns: { key: SortKey; label: string }[] = [
+    { key: "task", label: t("kanbanBoard.colTask") },
+    { key: "story", label: t("kanbanBoard.colStory") },
+    { key: "priority", label: t("kanbanBoard.colPriority") },
+    { key: "effort", label: t("kanbanBoard.colEffort") },
+    { key: "due", label: t("kanbanBoard.colDue") },
+    { key: "allocated", label: t("kanbanBoard.colAllocated") },
+    { key: "status", label: t("kanbanBoard.colStatus") },
   ];
 
   return (
@@ -298,23 +360,32 @@ export default function KanbanBoard({ job, projectId, projectCode }: Props) {
           <p className="text-sm">{filterMode === "mine" ? t("kanbanBoard.noTasksMine") : t("kanbanBoard.noTasksAll")}</p>
         </div>
       ) : (
-        <div className="min-w-max border border-slate-200 rounded-xl overflow-hidden">
+        <div className="w-full border border-slate-200 rounded-xl overflow-hidden">
           {/* Header row */}
-          <div className="flex items-center gap-2 bg-slate-50 border-b border-slate-200 px-3 py-2">
-            {columns.map((col) => (
-              <button
-                key={col.key}
-                type="button"
-                onClick={() => handleSort(col.key)}
-                className={`flex items-center gap-1 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-teal-700 transition-colors ${col.className ?? ""}`}
-              >
-                {col.label}
-                {sortBy === col.key && (
-                  <span className="text-teal-600">{sortDir === "asc" ? "▲" : "▼"}</span>
-                )}
-              </button>
-            ))}
-            <div className="w-40 shrink-0" />
+          <div className="flex items-stretch bg-slate-50 border-b border-slate-200 px-3 py-2">
+            {columns.map((col) => {
+              const resizable = col.key === "task" || col.key === "story";
+              return (
+                <div
+                  key={col.key}
+                  className={`relative pr-2 min-w-0 ${resizable ? "" : `shrink-0 ${FIXED_COL_CLASS[col.key as Exclude<SortKey, ResizableKey>]}`}`}
+                  style={resizable ? { flexGrow: 1, flexShrink: 1, flexBasis: colWidths[col.key as ResizableKey] } : undefined}
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleSort(col.key)}
+                    className="flex items-center gap-1 w-full text-left text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-teal-700 transition-colors truncate"
+                  >
+                    {col.label}
+                    {sortBy === col.key && (
+                      <span className="text-teal-600">{sortDir === "asc" ? "▲" : "▼"}</span>
+                    )}
+                  </button>
+                  {resizable && <ColumnResizeHandle onMouseDown={startResize(col.key as ResizableKey)} />}
+                </div>
+              );
+            })}
+            <div className="shrink-0" />
           </div>
 
           {/* Rows */}
@@ -325,6 +396,7 @@ export default function KanbanBoard({ job, projectId, projectCode }: Props) {
                 row={row}
                 projectId={projectId}
                 projectCode={projectCode}
+                colWidths={colWidths}
                 teamMembers={teamMembers}
                 teamRoles={teamRoles}
                 currentUserId={user?.id ?? null}
@@ -390,6 +462,7 @@ function TaskRow({
   row,
   projectId,
   projectCode,
+  colWidths,
   teamMembers,
   teamRoles,
   currentUserId,
@@ -405,6 +478,7 @@ function TaskRow({
   row: Row;
   projectId: string;
   projectCode: string | null;
+  colWidths: Record<ResizableKey, number>;
   teamMembers: TeamMember[];
   teamRoles: TeamRole[];
   currentUserId: string | null;
@@ -438,14 +512,14 @@ function TaskRow({
 
   return (
     <div
-      className={`flex items-center gap-2 px-3 py-2.5 transition-colors ${
+      className={`flex items-center px-3 py-2.5 transition-colors ${
         groomable ? "hover:bg-teal-50/50 cursor-pointer" : "bg-slate-50/60"
       }`}
       onClick={groomable ? onOpenDetail : undefined}
     >
       {/* Task name */}
-      <div className="flex-1 min-w-[12rem] pr-2">
-        <p className={`text-sm font-medium leading-snug ${groomable ? "text-slate-800" : "text-slate-500"}`}>
+      <div className="pr-2 min-w-0" style={{ flexGrow: 1, flexShrink: 1, flexBasis: colWidths.task }}>
+        <p className={`text-sm font-medium leading-snug truncate ${groomable ? "text-slate-800" : "text-slate-500"}`}>
           {taskRef(projectCode, task.task_number) && (
             <span className="text-slate-400 font-normal mr-1">{taskRef(projectCode, task.task_number)}</span>
           )}
@@ -460,7 +534,7 @@ function TaskRow({
       </div>
 
       {/* Story */}
-      <div className="w-44 shrink-0 pr-2">
+      <div className="pr-2 min-w-0" style={{ flexGrow: 1, flexShrink: 1, flexBasis: colWidths.story }}>
         <Link
           href={`/projects/${projectId}/stories/${story.id}`}
           onClick={(e) => e.stopPropagation()}
@@ -474,7 +548,7 @@ function TaskRow({
       </div>
 
       {/* Priority */}
-      <div className="w-28 shrink-0">
+      <div className={`shrink-0 pr-2 ${FIXED_COL_CLASS.priority}`}>
         {priority !== "none" ? (
           <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full capitalize ${PRIORITY_COLORS[priority] ?? PRIORITY_COLORS.none}`}>
             {priority}
@@ -485,7 +559,7 @@ function TaskRow({
       </div>
 
       {/* Effort */}
-      <div className="w-20 shrink-0">
+      <div className={`shrink-0 pr-2 ${FIXED_COL_CLASS.effort}`}>
         {task.effort != null ? (
           <span className="text-xs bg-teal-100 text-teal-700 font-semibold px-1.5 py-0.5 rounded-full">{task.effort}p</span>
         ) : (
@@ -494,12 +568,12 @@ function TaskRow({
       </div>
 
       {/* Due */}
-      <div className={`w-32 shrink-0 text-xs ${overdue ? "text-red-600 font-medium" : "text-slate-500"}`}>
+      <div className={`shrink-0 pr-2 text-xs ${FIXED_COL_CLASS.due} ${overdue ? "text-red-600 font-medium" : "text-slate-500"}`}>
         {formatDue(task.due_time)}
       </div>
 
       {/* Allocated */}
-      <div className="w-40 shrink-0">
+      <div className={`shrink-0 pr-2 min-w-0 ${FIXED_COL_CLASS.allocated}`}>
         {isAllocated ? (
           <div className="flex items-center gap-1.5 min-w-0">
             {assignedMember && <MemberAvatar member={assignedMember} size="sm" />}
@@ -520,12 +594,12 @@ function TaskRow({
       </div>
 
       {/* Status */}
-      <div className="w-32 shrink-0">
+      <div className={`shrink-0 pr-2 ${FIXED_COL_CLASS.status}`}>
         <StatusPill status={task.status} />
       </div>
 
-      {/* Actions */}
-      <div className="w-40 shrink-0 flex items-center justify-end gap-2">
+      {/* Actions — sized to its own buttons, not stretched to a fixed box */}
+      <div className="shrink-0 flex items-center justify-end gap-2">
         {groomable && task.status === "Ready" && task.assigned_to !== currentUserId && (
           <button
             type="button"
