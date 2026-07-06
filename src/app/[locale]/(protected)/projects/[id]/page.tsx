@@ -420,6 +420,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           token={token!}
           backlogJobId={backlogJob?.id ?? null}
           templates={templates}
+          teamMembers={teamMembers}
           onBoardCreated={(b) => setIdeaBoards((prev) => [...prev, b])}
           onBoardDeleted={(boardId) => setIdeaBoards((prev) => prev.filter((b) => b.id !== boardId))}
         />
@@ -1779,6 +1780,7 @@ function IdeasPanel({
   token,
   backlogJobId,
   templates,
+  teamMembers,
   onBoardCreated,
   onBoardDeleted,
 }: {
@@ -1787,6 +1789,7 @@ function IdeasPanel({
   token: string;
   backlogJobId: string | null;
   templates: Workflow[];
+  teamMembers: TeamMember[];
   onBoardCreated: (b: IdeaBoard) => void;
   onBoardDeleted: (id: string) => void;
 }) {
@@ -1875,6 +1878,7 @@ function IdeasPanel({
             initialStickies={boardStickies}
             initialLinks={boardLinks}
             initialShapes={boardShapes}
+            teamMembers={teamMembers}
           />
         )}
       </div>

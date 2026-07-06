@@ -6,8 +6,8 @@ import { useCurrentProject } from "@/contexts/CurrentProjectContext";
 import { Link } from "@/i18n/navigation";
 import { getIdeaBoard, listStickies, listNoteLinks, listShapes } from "@/lib/notes-api";
 import { getProject, } from "@/lib/togra-api";
-import { listWorkflows } from "@/lib/awe-api";
-import type { IdeaBoard, StickyNote, NoteLink, Job, Workflow, BoardShape } from "@/lib/types";
+import { listWorkflows, getTeam } from "@/lib/awe-api";
+import type { IdeaBoard, StickyNote, NoteLink, Job, Workflow, BoardShape, TeamMember } from "@/lib/types";
 import IdeaBoardCanvas from "@/components/ideas/IdeaBoard";
 import ResearchPanel from "@/components/research/ResearchPanel";
 
@@ -27,6 +27,7 @@ export default function IdeaBoardPage({
   const [shapes, setShapes] = useState<BoardShape[]>([]);
   const [backlogJob, setBacklogJob] = useState<Job | null>(null);
   const [templates, setTemplates] = useState<Workflow[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -50,6 +51,8 @@ export default function IdeaBoardPage({
         if (proj.team_id) {
           const tmpl = await listWorkflows(token, { team_id: proj.team_id }).catch(() => []);
           setTemplates(tmpl.filter((w: Workflow) => w.is_template));
+          const team = await getTeam(token, proj.team_id).catch(() => null);
+          if (team) setTeamMembers(team.members.filter((m) => m.status === "active"));
         }
       })
       .finally(() => setLoading(false));
@@ -109,6 +112,7 @@ export default function IdeaBoardPage({
             initialStickies={stickies}
             initialLinks={links}
             initialShapes={shapes}
+            teamMembers={teamMembers}
           />
         </div>
         {researchOpen && (

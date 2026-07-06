@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
-import type { StickyNote, NoteLink, StickyColor, Port, Workflow } from "@/lib/types";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import Dagre from "@dagrejs/dagre";
+import type { StickyNote, NoteLink, StickyColor, Port, Workflow, TeamMember } from "@/lib/types";
 import type { BoardShape, ShapeType, ShapePort } from "@ullav-dev/diagram-shapes";
 import { ShapeNode, ShapeIcon, SHAPE_LABELS, DEFAULT_SHAPE_SIZES, shapePortPos, bestShapePortTo } from "@ullav-dev/diagram-shapes";
 import {
@@ -11,11 +12,14 @@ import {
   createBoardLink,
   updateNoteLink,
   deleteNoteLink,
+  listStickies,
+  listNoteLinks,
   listShapes,
   createShape,
   updateShape,
   deleteShape,
 } from "@/lib/notes-api";
+import RefreshControl from "@/components/RefreshControl";
 import {
   createWorkflow,
   updateWorkflow,
@@ -130,6 +134,129 @@ function bestPortFromSticky(s: StickyNote, link: NoteLink): Port {
   return s.id === link.from_note_id ? "right" : "left";
 }
 
+// ── Auto Layout ───────────────────────────────────────────────────────────────
+// Runs Dagre (left-to-right) per connected component of the sticky/shape graph,
+// then tiles the components in rows so unconnected clusters never overlap.
+
+const AUTO_LAYOUT_MAX_ROW_WIDTH = 2400;
+const AUTO_LAYOUT_COMPONENT_GAP = 80;
+
+interface LayoutNode {
+  key: string; // "sticky:<id>" or "shape:<id>"
+  id: string;
+  kind: "sticky" | "shape";
+  width: number;
+  height: number;
+}
+
+function autoLayoutBoard(
+  stickies: StickyNote[],
+  shapes: BoardShape[],
+  links: NoteLink[],
+): { stickyPositions: Map<string, { x: number; y: number }>; shapePositions: Map<string, { x: number; y: number }> } {
+  const nodes: LayoutNode[] = [
+    ...stickies.map((s) => ({ key: `sticky:${s.id}`, id: s.id, kind: "sticky" as const, width: s.width, height: s.height })),
+    ...shapes.map((s) => ({ key: `shape:${s.id}`, id: s.id, kind: "shape" as const, width: s.width, height: s.height })),
+  ];
+  const nodeByKey = new Map(nodes.map((n) => [n.key, n]));
+
+  const edges: { from: string; to: string }[] = [];
+  for (const l of links) {
+    const from = l.from_note_id ? `sticky:${l.from_note_id}` : l.from_shape_id ? `shape:${l.from_shape_id}` : null;
+    const to   = l.to_note_id   ? `sticky:${l.to_note_id}`   : l.to_shape_id   ? `shape:${l.to_shape_id}`   : null;
+    if (from && to && from !== to && nodeByKey.has(from) && nodeByKey.has(to)) edges.push({ from, to });
+  }
+
+  // Union-find to group nodes into connected components — Dagre lays out one
+  // graph at a time, so disconnected clusters must be tiled separately below.
+  const parent = new Map<string, string>();
+  nodes.forEach((n) => parent.set(n.key, n.key));
+  function find(k: string): string {
+    let root = k;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    parent.set(k, root);
+    return root;
+  }
+  function union(a: string, b: string) {
+    const ra = find(a), rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  }
+  edges.forEach((e) => union(e.from, e.to));
+
+  const componentMap = new Map<string, LayoutNode[]>();
+  nodes.forEach((n) => {
+    const root = find(n.key);
+    if (!componentMap.has(root)) componentMap.set(root, []);
+    componentMap.get(root)!.push(n);
+  });
+
+  interface ComponentLayout {
+    positions: Map<string, { x: number; y: number }>;
+    width: number;
+    height: number;
+  }
+
+  const components: ComponentLayout[] = [];
+  for (const compNodes of componentMap.values()) {
+    if (compNodes.length === 1) {
+      const n = compNodes[0];
+      components.push({ positions: new Map([[n.key, { x: 0, y: 0 }]]), width: n.width, height: n.height });
+      continue;
+    }
+
+    const g = new Dagre.graphlib.Graph();
+    g.setDefaultEdgeLabel(() => ({}));
+    g.setGraph({ rankdir: "LR", ranksep: 90, nodesep: 50, marginx: 20, marginy: 20 });
+    compNodes.forEach((n) => g.setNode(n.key, { width: n.width, height: n.height }));
+    const compKeys = new Set(compNodes.map((n) => n.key));
+    edges.filter((e) => compKeys.has(e.from) && compKeys.has(e.to)).forEach((e) => g.setEdge(e.from, e.to));
+
+    Dagre.layout(g);
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const raw = new Map<string, { x: number; y: number }>();
+    compNodes.forEach((n) => {
+      const node = g.node(n.key);
+      const x = node.x - n.width / 2;
+      const y = node.y - n.height / 2;
+      raw.set(n.key, { x, y });
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x + n.width);
+      maxY = Math.max(maxY, y + n.height);
+    });
+    const positions = new Map<string, { x: number; y: number }>();
+    raw.forEach((p, key) => positions.set(key, { x: p.x - minX, y: p.y - minY }));
+    components.push({ positions, width: maxX - minX, height: maxY - minY });
+  }
+
+  // Tile components largest-first, wrapping into new rows to keep the board roughly square.
+  components.sort((a, b) => b.width * b.height - a.width * a.height);
+
+  const finalPositions = new Map<string, { x: number; y: number }>();
+  let cursorX = 0, cursorY = 0, rowHeight = 0;
+  for (const comp of components) {
+    if (cursorX > 0 && cursorX + comp.width > AUTO_LAYOUT_MAX_ROW_WIDTH) {
+      cursorX = 0;
+      cursorY += rowHeight + AUTO_LAYOUT_COMPONENT_GAP;
+      rowHeight = 0;
+    }
+    comp.positions.forEach((p, key) => finalPositions.set(key, { x: p.x + cursorX, y: p.y + cursorY }));
+    cursorX += comp.width + AUTO_LAYOUT_COMPONENT_GAP;
+    rowHeight = Math.max(rowHeight, comp.height);
+  }
+
+  const stickyPositions = new Map<string, { x: number; y: number }>();
+  const shapePositions = new Map<string, { x: number; y: number }>();
+  finalPositions.forEach((pos, key) => {
+    const n = nodeByKey.get(key)!;
+    if (n.kind === "sticky") stickyPositions.set(n.id, pos);
+    else shapePositions.set(n.id, pos);
+  });
+
+  return { stickyPositions, shapePositions };
+}
+
 interface Props {
   boardId: string;
   token: string;
@@ -139,6 +266,7 @@ interface Props {
   initialStickies: StickyNote[];
   initialLinks: NoteLink[];
   initialShapes: BoardShape[];
+  teamMembers: TeamMember[];
 }
 
 let nextOffset = 0;
@@ -155,9 +283,30 @@ function checkDamAccess(token: string): boolean {
 
 const SHAPE_TYPES: ShapeType[] = ["rect", "circle", "diamond", "database", "cloud", "actor"];
 
-export default function IdeaBoard({ boardId, token, projectId, backlogJobId, templates, initialStickies, initialLinks, initialShapes }: Props) {
+export default function IdeaBoard({ boardId, token, projectId, backlogJobId, templates, initialStickies, initialLinks, initialShapes, teamMembers }: Props) {
   const [stickies, setStickies] = useState<StickyNote[]>(initialStickies);
   const [links, setLinks] = useState<NoteLink[]>(initialLinks);
+
+  // Surfaces failed saves instead of letting them fail silently — the change
+  // still shows in the UI (optimistic update) until a reload, so a swallowed
+  // error here looks exactly like data loss.
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const saveErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reportSaveError = useCallback((err: unknown) => {
+    setSaveError(err instanceof Error ? err.message : "Failed to save change");
+    if (saveErrorTimerRef.current) clearTimeout(saveErrorTimerRef.current);
+    saveErrorTimerRef.current = setTimeout(() => setSaveError(null), 6000);
+  }, []);
+
+  const creatorNames = useMemo(() => {
+    const map = new Map<string, string>();
+    teamMembers.forEach((m) => {
+      const name = [m.user.first_name, m.user.last_name].filter(Boolean).join(" ").trim();
+      if (name) map.set(m.user.id, name);
+    });
+    return map;
+  }, [teamMembers]);
+
   const [shapes, setShapes] = useState<BoardShape[]>(initialShapes);
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
   const [addingShapeType, setAddingShapeType] = useState<ShapeType | null>(null);
@@ -249,29 +398,88 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
     setZoom(z);
   }
 
-  function fitToSize() {
-    const allItems = [
-      ...stickies.map((s) => ({ x: s.x, y: s.y, x2: s.x + s.width, y2: s.y + s.height })),
-      ...shapes.map((s) => ({ x: s.x, y: s.y, x2: s.x + s.width, y2: s.y + s.height })),
-    ];
-    if (allItems.length === 0) return;
+  // Pure calculation so callers can fit to positions that haven't landed in
+  // state yet (e.g. right after computing an auto-layout), not just the
+  // currently-rendered stickies/shapes.
+  function computeFit(items: { x: number; y: number; width: number; height: number }[]) {
+    if (items.length === 0) return null;
     const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
+    if (!rect) return null;
     const padding = 60;
-    const minX = Math.min(...allItems.map((i) => i.x));
-    const minY = Math.min(...allItems.map((i) => i.y));
-    const maxX = Math.max(...allItems.map((i) => i.x2));
-    const maxY = Math.max(...allItems.map((i) => i.y2));
+    const minX = Math.min(...items.map((i) => i.x));
+    const minY = Math.min(...items.map((i) => i.y));
+    const maxX = Math.max(...items.map((i) => i.x + i.width));
+    const maxY = Math.max(...items.map((i) => i.y + i.height));
     const contentW = maxX - minX + padding * 2;
     const contentH = maxY - minY + padding * 2;
     const newZoom = Math.min(1, Math.min(rect.width / contentW, rect.height / contentH));
     // Center content: panX + (minX - padding) * zoom = (vw - contentW * zoom) / 2
-    const newPan = {
-      x: (rect.width  - contentW * newZoom) / 2 - (minX - padding) * newZoom,
-      y: (rect.height - contentH * newZoom) / 2 - (minY - padding) * newZoom,
+    return {
+      zoom: newZoom,
+      pan: {
+        x: (rect.width  - contentW * newZoom) / 2 - (minX - padding) * newZoom,
+        y: (rect.height - contentH * newZoom) / 2 - (minY - padding) * newZoom,
+      },
     };
-    setZoom(newZoom);
-    setPan(newPan);
+  }
+
+  function fitToSize() {
+    const fit = computeFit([
+      ...stickies.map((s) => ({ x: s.x, y: s.y, width: s.width, height: s.height })),
+      ...shapes.map((s) => ({ x: s.x, y: s.y, width: s.width, height: s.height })),
+    ]);
+    if (!fit) return;
+    setZoom(fit.zoom);
+    setPan(fit.pan);
+  }
+
+  const [autoLayingOut, setAutoLayingOut] = useState(false);
+
+  async function handleAutoLayout() {
+    if (autoLayingOut || (stickies.length === 0 && shapes.length === 0)) return;
+    setAutoLayingOut(true);
+    try {
+      const { stickyPositions, shapePositions } = autoLayoutBoard(stickies, shapes, links);
+
+      setStickies((prev) => prev.map((s) => {
+        const pos = stickyPositions.get(s.id);
+        return pos ? { ...s, x: pos.x, y: pos.y } : s;
+      }));
+      setShapes((prev) => prev.map((s) => {
+        const pos = shapePositions.get(s.id);
+        return pos ? { ...s, x: pos.x, y: pos.y } : s;
+      }));
+
+      const fit = computeFit([
+        ...stickies.map((s) => { const p = stickyPositions.get(s.id); return { x: p?.x ?? s.x, y: p?.y ?? s.y, width: s.width, height: s.height }; }),
+        ...shapes.map((s) => { const p = shapePositions.get(s.id); return { x: p?.x ?? s.x, y: p?.y ?? s.y, width: s.width, height: s.height }; }),
+      ]);
+      if (fit) { setZoom(fit.zoom); setPan(fit.pan); }
+
+      await Promise.all([
+        ...[...stickyPositions.entries()].map(([id, pos]) =>
+          updateSticky(token, boardId, id, { x: pos.x, y: pos.y }).catch(reportSaveError)
+        ),
+        ...[...shapePositions.entries()].map(([id, pos]) =>
+          updateShape(token, boardId, id, { x: pos.x, y: pos.y }).catch(reportSaveError)
+        ),
+      ]);
+    } finally {
+      setAutoLayingOut(false);
+    }
+  }
+
+  // ── Refresh — pulls in stickies/links/shapes created elsewhere (e.g. via MCP) ──
+
+  async function handleRefresh() {
+    const [s, l, sh] = await Promise.all([
+      listStickies(token, boardId),
+      listNoteLinks(token, boardId),
+      listShapes(token, boardId),
+    ]);
+    setStickies(s);
+    setLinks(l);
+    setShapes(sh);
   }
 
   // ── Canvas mouse tracking for in-progress link line ──────────────────────
@@ -344,7 +552,7 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
       dragRafRef.current = null;
     }
     setStickies((prev) => prev.map((s) => s.id === id ? { ...s, x, y } : s));
-    await updateSticky(token, boardId, id, { x, y }).catch(() => {});
+    await updateSticky(token, boardId, id, { x, y }).catch(reportSaveError);
   }, [token, boardId]);
 
   const resizeRafRef = useRef<number | null>(null);
@@ -363,7 +571,7 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
       resizeRafRef.current = null;
     }
     setStickies((prev) => prev.map((s) => s.id === id ? { ...s, width, height } : s));
-    await updateSticky(token, boardId, id, { width, height }).catch(() => {});
+    await updateSticky(token, boardId, id, { width, height }).catch(reportSaveError);
   }, [token, boardId]);
 
   const stickiesRef = useRef(stickies);
@@ -371,7 +579,7 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
 
   const handleUpdate = useCallback(async (id: string, patch: { title?: string; body?: string; color?: StickyColor }) => {
     setStickies((prev) => prev.map((s) => s.id === id ? { ...s, ...patch } : s));
-    await updateSticky(token, boardId, id, patch).catch(() => {});
+    await updateSticky(token, boardId, id, patch).catch(reportSaveError);
     // If content (not just color) changed on a story-linked sticky, mark for update
     if (patch.title !== undefined || patch.body !== undefined) {
       const sticky = stickiesRef.current.find((s) => s.id === id);
@@ -410,7 +618,7 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
       { noteId: targetId },
       linkingFromPort ?? undefined,
       targetPort,
-    ).catch(() => null);
+    ).catch((err) => { reportSaveError(err); return null; });
     if (link) setLinks((prev) => [...prev, link]);
     setLinkingFrom(null);
     setLinkingFromPort(null);
@@ -431,7 +639,7 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
   }
 
   async function handleStoryCreated(stickyId: string, workflowId: string) {
-    await updateSticky(token, boardId, stickyId, { workflow_id: workflowId }).catch(() => {});
+    await updateSticky(token, boardId, stickyId, { workflow_id: workflowId }).catch(reportSaveError);
     setStickies((prev) => prev.map((s) => s.id === stickyId ? { ...s, workflow_id: workflowId } : s));
     setCreateStoryStickyId(null);
   }
@@ -470,7 +678,7 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
   const handleShapeDragEnd = useCallback(async (id: string, x: number, y: number) => {
     if (shapeDragRafRef.current !== null) { cancelAnimationFrame(shapeDragRafRef.current); shapeDragRafRef.current = null; }
     setShapes((prev) => prev.map((s) => s.id === id ? { ...s, x, y } : s));
-    await updateShape(token, boardId, id, { x, y }).catch(() => {});
+    await updateShape(token, boardId, id, { x, y }).catch(reportSaveError);
   }, [token, boardId]);
 
   const shapeResizeRafRef = useRef<number | null>(null);
@@ -478,12 +686,12 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
   const handleShapeResizeEnd = useCallback(async (id: string, width: number, height: number) => {
     if (shapeResizeRafRef.current !== null) { cancelAnimationFrame(shapeResizeRafRef.current); shapeResizeRafRef.current = null; }
     setShapes((prev) => prev.map((s) => s.id === id ? { ...s, width, height } : s));
-    await updateShape(token, boardId, id, { width, height }).catch(() => {});
+    await updateShape(token, boardId, id, { width, height }).catch(reportSaveError);
   }, [token, boardId]);
 
   const handleShapePropsUpdate = useCallback(async (id: string, patch: Partial<BoardShape>) => {
     setShapes((prev) => prev.map((s) => s.id === id ? { ...s, ...patch } : s));
-    await updateShape(token, boardId, id, patch).catch(() => {});
+    await updateShape(token, boardId, id, patch).catch(reportSaveError);
   }, [token, boardId]);
 
   async function handleDeleteShape(id: string) {
@@ -516,7 +724,7 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
       { shapeId: targetId },
       linkingFromPort ?? undefined,
       targetPort,
-    ).catch(() => null);
+    ).catch((err) => { reportSaveError(err); return null; });
     if (link) setLinks((prev) => [...prev, link]);
     setLinkingFrom(null); setLinkingFromPort(null); setPendingLine(null);
   }, [linkingFrom, linkingFromKind, linkingFromPort, token, boardId]);
@@ -530,13 +738,20 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
     const timestamp = new Date().toLocaleString(undefined, {
       dateStyle: "medium", timeStyle: "short",
     });
-    await createNote(token, {
-      entity_type: "workflow",
-      entity_id: sticky.workflow_id,
-      title: `${sticky.title} — ${timestamp}`,
-      body: sticky.body ?? undefined,
-      is_shared: true,
-    }).catch(() => {});
+    try {
+      await createNote(token, {
+        entity_type: "workflow",
+        entity_id: sticky.workflow_id,
+        title: `${sticky.title} — ${timestamp}`,
+        body: sticky.body ?? undefined,
+        is_shared: true,
+      });
+    } catch (err) {
+      // Leave the pending-update pill showing — the story note was NOT created,
+      // so silently clearing it here would hide the fact that nothing synced.
+      reportSaveError(err);
+      return;
+    }
     setPendingStoryUpdates((prev) => { const next = new Set(prev); next.delete(stickyId); return next; });
   }
 
@@ -610,6 +825,22 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
           </button>
         </div>
 
+        {/* Auto Layout */}
+        <div className="pl-3 border-l border-slate-200">
+          <button
+            type="button"
+            onClick={() => void handleAutoLayout()}
+            disabled={autoLayingOut}
+            title="Auto-layout — arrange stickies and shapes with no overlap"
+            className="inline-flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 shadow-sm transition-colors disabled:opacity-50"
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3.5 h-3.5 ${autoLayingOut ? "animate-spin" : ""}`}>
+              <path d="M8 2a.75.75 0 0 1 .553.244l4.25 4.5a.75.75 0 0 1-1.106 1.012L8 3.836 4.303 7.756a.75.75 0 0 1-1.106-1.012l4.25-4.5A.75.75 0 0 1 8 2Zm-4.553 8.256a.75.75 0 0 1 1.106 0L8 14.164l3.447-3.908a.75.75 0 1 1 1.106 1.012l-4 4.536a.75.75 0 0 1-1.106 0l-4-4.536a.75.75 0 0 1 0-1.012Z" />
+            </svg>
+            Auto Layout
+          </button>
+        </div>
+
         {/* Shape picker */}
         <div className="flex items-center gap-1 pl-3 border-l border-slate-200">
           {SHAPE_TYPES.map((type) => (
@@ -634,8 +865,27 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
           </div>
         )}
 
-        <span className="ml-auto text-xs text-slate-400">{stickies.length + shapes.length} items</span>
+        <div className="ml-auto flex items-center gap-3">
+          <span className="text-xs text-slate-400">{stickies.length + shapes.length} items</span>
+          <RefreshControl onRefresh={handleRefresh} storageKey="togra_ideas_refresh_interval" />
+        </div>
       </div>
+
+      {/* Save error banner — a save that fails here would otherwise look fine
+          until the next reload, since state is updated optimistically. */}
+      {saveError && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-red-50 border-b border-red-200 text-xs text-red-700 shrink-0">
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 shrink-0">
+            <path d="M8.982 1.566a1.13 1.13 0 0 0-1.964 0L.165 13.233c-.457.778.091 1.767.982 1.767h13.706c.89 0 1.438-.99.982-1.767L8.982 1.566ZM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5Zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z"/>
+          </svg>
+          <span className="flex-1">Failed to save: {saveError}</span>
+          <button type="button" onClick={() => setSaveError(null)} className="text-red-400 hover:text-red-600 transition-colors shrink-0">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+              <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Canvas viewport */}
       <div
@@ -837,6 +1087,7 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
             <StickyCard
               key={s.id}
               sticky={s}
+              creatorName={creatorNames.get(s.created_by) ?? null}
               token={token}
               zoom={zoom}
               hasDamAccess={checkDamAccess(token)}

@@ -51,6 +51,7 @@ const HEADER_DOT: Record<StickyColor, string> = {
 
 interface Props {
   sticky: StickyNote;
+  creatorName: string | null;
   token: string;
   zoom: number;
   hasDamAccess: boolean;
@@ -74,6 +75,7 @@ interface Props {
 
 export default function StickyCard({
   sticky,
+  creatorName,
   token,
   zoom,
   hasDamAccess,
@@ -422,6 +424,13 @@ export default function StickyCard({
           </div>
         )}
       </div>
+
+      {/* Creator byline */}
+      {creatorName && (
+        <div className="px-2 py-0.5 text-[9px] text-slate-400 border-t border-black/5 shrink-0 truncate">
+          Added by {creatorName}
+        </div>
+      )}
 
       {/* Resize handle — bottom-right corner */}
       <div
