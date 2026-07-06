@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 const DEFAULT_STORAGE_KEY = "togra_kanban_refresh_interval";
 const DEFAULT_INTERVAL_SECS = 30;
 
-const REFRESH_INTERVALS = [
+export const DEFAULT_REFRESH_INTERVALS = [
   { label: "Off", secs: 0 },
   { label: "30 sec", secs: 30 },
   { label: "1 min", secs: 60 },
@@ -18,9 +18,11 @@ interface Props {
   onRefresh: () => Promise<void>;
   /** localStorage key for the persisted interval — pass a distinct key per board type. */
   storageKey?: string;
+  /** Override the offered intervals — defaults to the standard Togra set. */
+  intervals?: { label: string; secs: number }[];
 }
 
-export default function RefreshControl({ onRefresh, storageKey = DEFAULT_STORAGE_KEY }: Props) {
+export default function RefreshControl({ onRefresh, storageKey = DEFAULT_STORAGE_KEY, intervals = DEFAULT_REFRESH_INTERVALS }: Props) {
   const [intervalSecs, setIntervalSecs] = useState<number>(() => {
     if (typeof window === "undefined") return DEFAULT_INTERVAL_SECS;
     const stored = localStorage.getItem(storageKey);
@@ -62,7 +64,7 @@ export default function RefreshControl({ onRefresh, storageKey = DEFAULT_STORAGE
         title="Auto-refresh interval"
         className="text-xs text-slate-500 border border-slate-200 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:border-violet-400 cursor-pointer"
       >
-        {REFRESH_INTERVALS.map(({ label, secs }) => (
+        {intervals.map(({ label, secs }) => (
           <option key={secs} value={secs}>{label}</option>
         ))}
       </select>

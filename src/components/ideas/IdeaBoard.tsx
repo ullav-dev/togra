@@ -19,7 +19,10 @@ import {
   updateShape,
   deleteShape,
 } from "@/lib/notes-api";
-import RefreshControl from "@/components/RefreshControl";
+import RefreshControl, { DEFAULT_REFRESH_INTERVALS } from "@/components/RefreshControl";
+
+const IDEAS_REFRESH_INTERVALS = [...DEFAULT_REFRESH_INTERVALS, { label: "10 sec", secs: 10 }]
+  .sort((a, b) => a.secs - b.secs);
 import {
   createWorkflow,
   updateWorkflow,
@@ -867,7 +870,7 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
 
         <div className="ml-auto flex items-center gap-3">
           <span className="text-xs text-slate-400">{stickies.length + shapes.length} items</span>
-          <RefreshControl onRefresh={handleRefresh} storageKey="togra_ideas_refresh_interval" />
+          <RefreshControl onRefresh={handleRefresh} storageKey="togra_ideas_refresh_interval" intervals={IDEAS_REFRESH_INTERVALS} />
         </div>
       </div>
 
