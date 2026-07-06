@@ -330,20 +330,46 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
   const [pendingStoryUpdates, setPendingStoryUpdates] = useState<Set<string>>(new Set());
 
   // ── Zoom / pan ────────────────────────────────────────────────────────────
+  // Persisted per-board so the view (including a Fit-to-screen zoom) survives
+  // navigating away and back, instead of resetting to 100% on remount.
 
-  const [zoom, setZoomState] = useState(1);
-  const [pan, setPanState] = useState({ x: 40, y: 40 });
+  const viewStorageKey = `togra_idea_board_view_${boardId}`;
+
+  function loadStoredView(): { zoom: number; pan: { x: number; y: number } } {
+    if (typeof window === "undefined") return { zoom: 1, pan: { x: 40, y: 40 } };
+    try {
+      const raw = localStorage.getItem(viewStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.zoom === "number" && parsed.pan) return parsed;
+      }
+    } catch { /* ignore */ }
+    return { zoom: 1, pan: { x: 40, y: 40 } };
+  }
+
+  const [zoom, setZoomState] = useState(() => loadStoredView().zoom);
+  const [pan, setPanState] = useState(() => loadStoredView().pan);
   // Refs so event handlers always read the latest values without closure stale issues
   const zoomRef = useRef(zoom);
   const panRef  = useRef(pan);
 
+  const persistViewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function persistView(z: number, p: { x: number; y: number }) {
+    if (persistViewTimerRef.current) clearTimeout(persistViewTimerRef.current);
+    persistViewTimerRef.current = setTimeout(() => {
+      try { localStorage.setItem(viewStorageKey, JSON.stringify({ zoom: z, pan: p })); } catch { /* ignore */ }
+    }, 250);
+  }
+
   function setZoom(z: number) {
     zoomRef.current = z;
     setZoomState(z);
+    persistView(z, panRef.current);
   }
   function setPan(p: { x: number; y: number }) {
     panRef.current = p;
     setPanState(p);
+    persistView(zoomRef.current, p);
   }
 
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -373,6 +399,7 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
         panRef.current  = newPan;
         setZoomState(newZoom);
         setPanState(newPan);
+        persistView(newZoom, newPan);
       } else {
         const newPan = {
           x: panRef.current.x - e.deltaX,
@@ -380,10 +407,12 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
         };
         panRef.current = newPan;
         setPanState(newPan);
+        persistView(zoomRef.current, newPan);
       }
     }
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Zoom toward viewport center
@@ -933,6 +962,7 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
             };
             panRef.current = newPan;
             setPanState(newPan);
+            persistView(zoomRef.current, newPan);
           }}
           onPointerUp={() => {
             panStart.current = null;
