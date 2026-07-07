@@ -5,6 +5,8 @@ import Dagre from "@dagrejs/dagre";
 import type { StickyNote, NoteLink, StickyColor, Port, Workflow, TeamMember } from "@/lib/types";
 import type { BoardShape, ShapeType, ShapePort } from "@ullav-dev/diagram-shapes";
 import { ShapeNode, ShapeIcon, SHAPE_LABELS, DEFAULT_SHAPE_SIZES, shapePortPos, bestShapePortTo } from "@ullav-dev/diagram-shapes";
+import type { PickedAsset } from "@ullav/dam-picker";
+import DamPickerModal from "./DamPickerModal";
 import {
   createSticky,
   updateSticky,
@@ -284,7 +286,7 @@ function checkDamAccess(token: string): boolean {
   } catch { return false; }
 }
 
-const SHAPE_TYPES: ShapeType[] = ["rect", "circle", "diamond", "database", "cloud", "actor"];
+const SHAPE_TYPES: ShapeType[] = ["rect", "circle", "diamond", "database", "cloud", "actor", "image"];
 
 export default function IdeaBoard({ boardId, token, projectId, backlogJobId, templates, initialStickies, initialLinks, initialShapes, teamMembers }: Props) {
   const [stickies, setStickies] = useState<StickyNote[]>(initialStickies);
@@ -314,6 +316,9 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
   const [addingShapeType, setAddingShapeType] = useState<ShapeType | null>(null);
   const [confirmDeleteShapeId, setConfirmDeleteShapeId] = useState<string | null>(null);
+  const [imagePickerOpen, setImagePickerOpen] = useState(false);
+  const [replacingImageShapeId, setReplacingImageShapeId] = useState<string | null>(null);
+  const hasDamAccess = useMemo(() => checkDamAccess(token), [token]);
 
   // linkingFrom is either a sticky ID or shape ID; linkingFromKind discriminates
   const [linkingFrom, setLinkingFrom] = useState<string | null>(null);
@@ -679,6 +684,12 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
   // ── Shape actions ─────────────────────────────────────────────────────────
 
   async function handleAddShape(type: ShapeType) {
+    if (type === "image") {
+      setAddingShapeType(type);
+      setReplacingImageShapeId(null);
+      setImagePickerOpen(true);
+      return;
+    }
     const rect = canvasRef.current?.getBoundingClientRect() ?? { width: 800, height: 600 };
     const cx = Math.round((rect.width  / 2 - panRef.current.x) / zoomRef.current);
     const cy = Math.round((rect.height / 2 - panRef.current.y) / zoomRef.current);
@@ -695,6 +706,39 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
     setShapes((prev) => [...prev, s]);
     setSelectedShapeId(s.id);
     setAddingShapeType(null);
+  }
+
+  async function handleImagePicked(asset: PickedAsset) {
+    if (replacingImageShapeId) {
+      const id = replacingImageShapeId;
+      setImagePickerOpen(false);
+      setReplacingImageShapeId(null);
+      await handleShapePropsUpdate(id, { image_url: asset.thumbnailUrl });
+      return;
+    }
+    await handleInsertImageShape(asset);
+  }
+
+  async function handleInsertImageShape(asset: PickedAsset) {
+    setImagePickerOpen(false);
+    const rect = canvasRef.current?.getBoundingClientRect() ?? { width: 800, height: 600 };
+    const cx = Math.round((rect.width  / 2 - panRef.current.x) / zoomRef.current);
+    const cy = Math.round((rect.height / 2 - panRef.current.y) / zoomRef.current);
+    const { width, height } = DEFAULT_SHAPE_SIZES.image;
+    const cascade = (nextOffset % 6) * 20;
+    nextOffset++;
+    const s = await createShape(token, boardId, {
+      shape_type: "image",
+      x: cx - width / 2 + cascade,
+      y: cy - height / 2 + cascade,
+      width,
+      height,
+      image_url: asset.thumbnailUrl,
+    }).catch((err) => { reportSaveError(err); return null; });
+    setAddingShapeType(null);
+    if (!s) return;
+    setShapes((prev) => [...prev, s]);
+    setSelectedShapeId(s.id);
   }
 
   const shapeDragRafRef = useRef<number | null>(null);
@@ -875,7 +919,7 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
 
         {/* Shape picker */}
         <div className="flex items-center gap-1 pl-3 border-l border-slate-200">
-          {SHAPE_TYPES.map((type) => (
+          {SHAPE_TYPES.filter((type) => type !== "image" || hasDamAccess).map((type) => (
             <button
               key={type}
               type="button"
@@ -887,6 +931,14 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
             </button>
           ))}
         </div>
+
+        {imagePickerOpen && (
+          <DamPickerModal
+            token={token}
+            onSelect={handleImagePicked}
+            onClose={() => { setImagePickerOpen(false); setAddingShapeType(null); setReplacingImageShapeId(null); }}
+          />
+        )}
 
         {linkingFrom && (
           <div className="flex items-center gap-2 text-xs text-violet-700 bg-violet-50 border border-violet-200 px-3 py-1.5 rounded-lg">
@@ -1179,6 +1231,11 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
               shape={shape}
               onUpdate={(patch) => handleShapePropsUpdate(selectedShapeId, patch as Partial<BoardShape>)}
               onDelete={() => setConfirmDeleteShapeId(selectedShapeId)}
+              onReplaceImage={() => {
+                setReplacingImageShapeId(selectedShapeId);
+                setAddingShapeType(null);
+                setImagePickerOpen(true);
+              }}
             />
           );
         })()}

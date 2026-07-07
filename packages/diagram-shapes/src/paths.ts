@@ -4,6 +4,7 @@ import type { ShapeType, ShapePortPoint } from "./types";
 export function getShapePath(type: ShapeType, w: number, h: number): string {
   switch (type) {
     case "rect":
+    case "image":
       return `M0,0 H${w} V${h} H0 Z`;
 
     case "circle":
@@ -62,6 +63,7 @@ export function getShapePorts(type: ShapeType, w: number, h: number): ShapePortP
   switch (type) {
     case "rect":
     case "cloud":
+    case "image":
       return cardinalPorts(w, h);
 
     case "circle":

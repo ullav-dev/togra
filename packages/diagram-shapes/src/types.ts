@@ -1,4 +1,4 @@
-export type ShapeType = "rect" | "circle" | "diamond" | "database" | "cloud" | "actor";
+export type ShapeType = "rect" | "circle" | "diamond" | "database" | "cloud" | "actor" | "image";
 
 export type ShapePort = "top" | "right" | "bottom" | "left";
 
@@ -22,6 +22,7 @@ export interface BoardShape {
   label: string | null;
   label_color: string;
   label_size: number;
+  image_url: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -39,6 +40,7 @@ export interface CreateBoardShape {
   label?: string;
   label_color?: string;
   label_size?: number;
+  image_url?: string;
 }
 
 export interface UpdateBoardShape {
@@ -52,6 +54,8 @@ export interface UpdateBoardShape {
   label?: string | null;
   label_color?: string;
   label_size?: number;
+  // null is a no-op server-side (the column is only ever COALESCE-replaced, never cleared)
+  image_url?: string | null;
 }
 
 export const DEFAULT_SHAPE_SIZES: Record<ShapeType, { width: number; height: number }> = {
@@ -61,4 +65,5 @@ export const DEFAULT_SHAPE_SIZES: Record<ShapeType, { width: number; height: num
   database: { width: 120, height: 140 },
   cloud:    { width: 180, height: 120 },
   actor:    { width:  80, height: 140 },
+  image:    { width: 220, height: 160 },
 };
