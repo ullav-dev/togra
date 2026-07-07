@@ -17,9 +17,11 @@ interface Props {
   shape: BoardShape;
   onUpdate: (patch: Partial<BoardShape>) => void;
   onDelete: () => void;
+  onReplaceImage?: () => void;
 }
 
-export default function ShapePropsPanel({ shape, onUpdate, onDelete }: Props) {
+export default function ShapePropsPanel({ shape, onUpdate, onDelete, onReplaceImage }: Props) {
+  const isImage = shape.shape_type === "image";
   const [label, setLabel] = useState(shape.label ?? "");
 
   useEffect(() => { setLabel(shape.label ?? ""); }, [shape.id, shape.label]);
@@ -100,6 +102,26 @@ export default function ShapePropsPanel({ shape, onUpdate, onDelete }: Props) {
           <option value={20}>XL</option>
         </select>
       </div>
+
+      {isImage && onReplaceImage && (
+        <>
+          <div className="h-5 w-px bg-slate-200" />
+          <button
+            type="button"
+            onClick={onReplaceImage}
+            className="flex items-center gap-1.5 text-slate-500 hover:text-violet-700 transition-colors"
+            title="Replace image"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+              <rect x="1.5" y="2.5" width="9" height="9" rx="1.2" />
+              <circle cx="4.5" cy="5.5" r="0.9" fill="currentColor" stroke="none" />
+              <path d="M2.5 9.5 L5 7 L7 8.7 L8.5 7 L10.5 9" />
+              <path d="M12.5 3v3M12.5 3l-1.4 1.4M12.5 3l1.4 1.4M12.5 13v-3M12.5 13l-1.4-1.4M12.5 13l1.4-1.4" />
+            </svg>
+            Replace image
+          </button>
+        </>
+      )}
 
       <div className="h-5 w-px bg-slate-200" />
 

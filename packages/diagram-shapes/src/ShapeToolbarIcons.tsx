@@ -54,6 +54,14 @@ export function ShapeIcon({ type, size = 20 }: { type: ShapeType; size?: number 
           <line x1="10" y1="13" x2="14" y2="19" />
         </svg>
       );
+    case "image":
+      return (
+        <svg width={s} height={s} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinejoin="round">
+          <rect x="2" y="3" width="16" height="14" rx="1.5" />
+          <circle cx="7" cy="8" r="1.6" fill="currentColor" stroke="none" />
+          <path d="M2 14.5 L7.5 10 L11 13 L14 10.5 L18 14" strokeLinecap="round" />
+        </svg>
+      );
   }
 }
 
@@ -64,4 +72,5 @@ export const SHAPE_LABELS: Record<ShapeType, string> = {
   database: "Database",
   cloud:    "Cloud",
   actor:    "Actor",
+  image:    "Image",
 };

@@ -95,7 +95,7 @@ export default function ShapeNode({
   function onMouseDownResize(e: React.MouseEvent, corner: string) {
     e.stopPropagation();
     e.preventDefault();
-    const keepAspect = shape_type === "circle" || shape_type === "actor";
+    const keepAspect = shape_type === "circle" || shape_type === "actor" || shape_type === "image";
     resizeStart.current  = { mx: e.clientX, my: e.clientY, ow: w, oh: h, corner, keepAspect };
     currentSize.current  = { width: w, height: h };
 
@@ -146,9 +146,10 @@ export default function ShapeNode({
     ? path.split(/(?=M)/).filter(Boolean)
     : null;
 
+  const isImage = shape_type === "image";
   const labelX = liveW / 2;
-  const labelY = shape_type === "actor" ? liveH + 14 : liveH / 2;
-  const labelDominantBaseline = shape_type === "actor" ? "auto" : "middle";
+  const labelY = shape_type === "actor" || isImage ? liveH + 14 : liveH / 2;
+  const labelDominantBaseline = shape_type === "actor" || isImage ? "auto" : "middle";
 
   return (
     <g
@@ -172,6 +173,28 @@ export default function ShapeNode({
         </>
       ) : shape_type === "database" ? (
         <DatabaseShape w={liveW} h={liveH} fill={shape.fill_color} stroke={shape.stroke_color} strokeWidth={shape.stroke_width} />
+      ) : isImage ? (
+        <>
+          <clipPath id={`shape-clip-${shape.id}`}>
+            <rect x={0} y={0} width={liveW} height={liveH} rx={4} />
+          </clipPath>
+          <rect x={0} y={0} width={liveW} height={liveH} rx={4} fill={shape.fill_color} />
+          {shape.image_url && (
+            <image
+              href={shape.image_url}
+              x={0} y={0} width={liveW} height={liveH}
+              preserveAspectRatio="xMidYMid slice"
+              clipPath={`url(#shape-clip-${shape.id})`}
+              style={{ pointerEvents: "none" }}
+            />
+          )}
+          <rect
+            x={0} y={0} width={liveW} height={liveH} rx={4}
+            fill="none"
+            stroke={shape.stroke_color}
+            strokeWidth={shape.stroke_width}
+          />
+        </>
       ) : (
         <path
           d={path}
