@@ -23,7 +23,7 @@ import {
   listTeamRoles,
   getJobWorkflowAllocations,
 } from "@/lib/awe-api";
-import { createNote, listIdeaBoards, createIdeaBoard, deleteIdeaBoard, listStickies, listNoteLinks, listShapes } from "@/lib/notes-api";
+import { createNote, listIdeaBoards, createIdeaBoard, updateIdeaBoard, deleteIdeaBoard, listStickies, listNoteLinks, listShapes } from "@/lib/notes-api";
 import IdeaBoardCanvas from "@/components/ideas/IdeaBoard";
 import MarkdownEditor from "@/components/MarkdownEditor";
 import { useRouter } from "@/i18n/navigation";
@@ -423,6 +423,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           teamMembers={teamMembers}
           onBoardCreated={(b) => setIdeaBoards((prev) => [...prev, b])}
           onBoardDeleted={(boardId) => setIdeaBoards((prev) => prev.filter((b) => b.id !== boardId))}
+          onBoardRenamed={(boardId, name) => setIdeaBoards((prev) => prev.map((b) => b.id === boardId ? { ...b, name } : b))}
         />
       )}
 
@@ -1783,6 +1784,7 @@ function IdeasPanel({
   teamMembers,
   onBoardCreated,
   onBoardDeleted,
+  onBoardRenamed,
 }: {
   projectId: string;
   boards: IdeaBoard[];
@@ -1792,6 +1794,7 @@ function IdeasPanel({
   teamMembers: TeamMember[];
   onBoardCreated: (b: IdeaBoard) => void;
   onBoardDeleted: (id: string) => void;
+  onBoardRenamed: (id: string, name: string) => void;
 }) {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
@@ -1846,6 +1849,11 @@ function IdeasPanel({
     await deleteIdeaBoard(token, boardId);
     onBoardDeleted(boardId);
     setConfirmDeleteId(null);
+  }
+
+  async function handleRename(boardId: string, name: string) {
+    const board = await updateIdeaBoard(token, boardId, name);
+    onBoardRenamed(boardId, board.name);
   }
 
   // ── Inline board canvas ────────────────────────────────────────────────────
@@ -1923,6 +1931,7 @@ function IdeasPanel({
                 board={board}
                 onOpen={() => openBoard(board.id)}
                 onDelete={() => setConfirmDeleteId(board.id)}
+                onRename={(name) => handleRename(board.id, name)}
               />
             ))}
           </div>
@@ -1965,37 +1974,108 @@ function BoardCard({
   board,
   onOpen,
   onDelete,
+  onRename,
 }: {
   board: IdeaBoard;
   onOpen: () => void;
   onDelete: () => void;
+  onRename: (name: string) => void;
 }) {
+  const [renaming, setRenaming] = useState(false);
+  const [name, setName] = useState(board.name);
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setName(board.name); }, [board.name]);
+
+  function startRename(e: React.MouseEvent) {
+    e.stopPropagation();
+    setName(board.name);
+    setRenaming(true);
+    requestAnimationFrame(() => { inputRef.current?.focus(); inputRef.current?.select(); });
+  }
+
+  async function commitRename() {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === board.name) {
+      setName(board.name);
+      setRenaming(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      onRename(trimmed);
+    } finally {
+      setSaving(false);
+      setRenaming(false);
+    }
+  }
+
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-4 hover:border-violet-200 hover:shadow-sm transition-all group">
       <div className="flex items-start justify-between gap-2">
-        <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left">
-          <div className="flex items-center gap-2 mb-2">
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-violet-400 shrink-0">
-              <path d="M0 3.75C0 2.784.784 2 1.75 2h12.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 14H1.75A1.75 1.75 0 0 1 0 12.25Zm1.75-.25a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25Z"/>
-            </svg>
-            <span className="text-sm font-medium text-slate-800 group-hover:text-violet-700 transition-colors truncate">
-              {board.name}
-            </span>
+        {renaming ? (
+          <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-2">
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-violet-400 shrink-0">
+                <path d="M0 3.75C0 2.784.784 2 1.75 2h12.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 14H1.75A1.75 1.75 0 0 1 0 12.25Zm1.75-.25a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25Z"/>
+              </svg>
+              <input
+                ref={inputRef}
+                value={name}
+                disabled={saving}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); commitRename(); }
+                  if (e.key === "Escape") { setName(board.name); setRenaming(false); }
+                }}
+                className="flex-1 min-w-0 text-sm font-medium text-slate-800 border border-violet-300 rounded-md px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              />
+            </div>
+            <p className="text-xs text-slate-400">
+              Created {new Date(board.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+            </p>
           </div>
-          <p className="text-xs text-slate-400">
-            Created {new Date(board.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-          </p>
-        </button>
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="p-1 rounded text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-          title="Delete board"
-        >
-          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-            <path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75Zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.559a.75.75 0 1 0-1.492.14l.62 6.498A1.75 1.75 0 0 0 5.365 14.8h5.27a1.75 1.75 0 0 0 1.741-1.603l.62-6.498a.75.75 0 1 0-1.492-.14l-.62 6.498a.25.25 0 0 1-.249.229H5.365a.25.25 0 0 1-.249-.229l-.62-6.498Z"/>
-          </svg>
-        </button>
+        ) : (
+          <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left">
+            <div className="flex items-center gap-2 mb-2">
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-violet-400 shrink-0">
+                <path d="M0 3.75C0 2.784.784 2 1.75 2h12.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 14H1.75A1.75 1.75 0 0 1 0 12.25Zm1.75-.25a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25Z"/>
+              </svg>
+              <span className="text-sm font-medium text-slate-800 group-hover:text-violet-700 transition-colors truncate">
+                {board.name}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400">
+              Created {new Date(board.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+            </p>
+          </button>
+        )}
+        {!renaming && (
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 shrink-0">
+            <button
+              type="button"
+              onClick={startRename}
+              className="p-1 rounded text-slate-300 hover:text-violet-600 transition-colors"
+              title="Rename board"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                <path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25a1.75 1.75 0 0 1 .445-.758l8.61-8.61Zm.176 4.823L9.75 4.81l-6.286 6.287a.253.253 0 0 0-.064.108l-.558 1.953 1.953-.558a.253.253 0 0 0 .108-.064Zm1.238-3.763a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354Z"/>
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              className="p-1 rounded text-slate-300 hover:text-red-500 transition-colors"
+              title="Delete board"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                <path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75Zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.559a.75.75 0 1 0-1.492.14l.62 6.498A1.75 1.75 0 0 0 5.365 14.8h5.27a1.75 1.75 0 0 0 1.741-1.603l.62-6.498a.75.75 0 1 0-1.492-.14l-.62 6.498a.25.25 0 0 1-.249.229H5.365a.25.25 0 0 1-.249-.229l-.62-6.498Z"/>
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
