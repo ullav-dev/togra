@@ -18,6 +18,7 @@ import {
 import type { Job, Workflow, Task, TeamMember, TeamRole, Status } from "@/lib/types";
 import StatusPill from "@/components/StatusPill";
 import RefreshControl from "@/components/RefreshControl";
+import NotesPanel from "@/components/notes/NotesPanel";
 import { taskRef, workflowRef } from "@/lib/reference";
 
 const PRIORITY_RANK: Record<string, number> = {
@@ -35,13 +36,6 @@ const PRIORITY_COLORS: Record<string, string> = {
   low: "bg-slate-100 text-slate-500",
   none: "bg-slate-50 text-slate-400",
 };
-
-// A task is groomable (selectable, editable, quickpick-able) only before work
-// has started. Once it moves past Ready it may be driven externally (e.g. an
-// MCP call) and the board shows it read-only.
-function isGroomable(task: Task): boolean {
-  return task.status === "Not Started" || task.status === "Ready";
-}
 
 type SortKey = "task" | "story" | "priority" | "effort" | "due" | "allocated" | "status";
 type SortDir = "asc" | "desc";
@@ -494,7 +488,6 @@ function TaskRow({
   const t = useTranslations("board");
   const reassignRef = useRef<HTMLDivElement>(null);
   const { task, story, roles } = row;
-  const groomable = isGroomable(task);
   const overdue = task.due_time != null && task.status !== "Complete" && task.status !== "Cancelled" && new Date(task.due_time).getTime() < Date.now();
 
   useEffect(() => {
@@ -512,24 +505,16 @@ function TaskRow({
 
   return (
     <div
-      className={`flex items-center px-3 py-2.5 transition-colors ${
-        groomable ? "hover:bg-teal-50/50 cursor-pointer" : "bg-slate-50/60"
-      }`}
-      onClick={groomable ? onOpenDetail : undefined}
+      className="flex items-center px-3 py-2.5 transition-colors cursor-pointer hover:bg-teal-50/50"
+      onClick={onOpenDetail}
     >
       {/* Task name */}
       <div className="pr-2 min-w-0" style={{ flexGrow: 1, flexShrink: 1, flexBasis: colWidths.task }}>
-        <p className={`text-sm font-medium leading-snug truncate ${groomable ? "text-slate-800" : "text-slate-500"}`}>
+        <p className="text-sm font-medium leading-snug truncate text-slate-800">
           {taskRef(projectCode, task.task_number) && (
             <span className="text-slate-400 font-normal mr-1">{taskRef(projectCode, task.task_number)}</span>
           )}
           {task.name}
-          {!groomable && (
-            <svg viewBox="0 0 16 16" fill="currentColor" className="inline-block w-3 h-3 ml-1.5 text-slate-400 align-text-top">
-              <title>{t("kanbanBoard.readOnly")}</title>
-              <path d="M4 6V4.5a4 4 0 1 1 8 0V6h.25c.966 0 1.75.784 1.75 1.75v5.5A1.75 1.75 0 0 1 12.25 15h-8.5A1.75 1.75 0 0 1 2 13.25v-5.5C2 6.784 2.784 6 3.75 6H4Zm1.5-1.5V6h5V4.5a2.5 2.5 0 0 0-5 0Z" />
-            </svg>
-          )}
         </p>
       </div>
 
@@ -600,7 +585,7 @@ function TaskRow({
 
       {/* Actions — sized to its own buttons, not stretched to a fixed box */}
       <div className="shrink-0 flex items-center justify-end gap-2">
-        {groomable && task.status === "Ready" && task.assigned_to !== currentUserId && (
+        {task.status === "Ready" && task.assigned_to !== currentUserId && (
           <button
             type="button"
             disabled={taking}
@@ -610,25 +595,23 @@ function TaskRow({
             {t("kanbanBoard.quickPick")}
           </button>
         )}
-        {groomable && (
-          <div className="relative" ref={reassignRef}>
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); reassignOpen ? onCloseReassign() : onOpenReassign(); }}
-              className="text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-full transition-colors"
-            >
-              {t("kanbanBoard.reassign")}
-            </button>
-            {reassignOpen && (
-              <ReassignPopover
-                teamMembers={teamMembers}
-                teamRoles={teamRoles}
-                onAssignUser={(uid) => { onAssignToUser(uid); onCloseReassign(); }}
-                onAssignRole={(rid) => { onAssignToRole(rid); onCloseReassign(); }}
-              />
-            )}
-          </div>
-        )}
+        <div className="relative" ref={reassignRef}>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); reassignOpen ? onCloseReassign() : onOpenReassign(); }}
+            className="text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-full transition-colors"
+          >
+            {t("kanbanBoard.reassign")}
+          </button>
+          {reassignOpen && (
+            <ReassignPopover
+              teamMembers={teamMembers}
+              teamRoles={teamRoles}
+              onAssignUser={(uid) => { onAssignToUser(uid); onCloseReassign(); }}
+              onAssignRole={(rid) => { onAssignToRole(rid); onCloseReassign(); }}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
@@ -725,6 +708,7 @@ function TaskDetailModal({
   onClose: () => void;
 }) {
   const t = useTranslations("board");
+  const [activeTab, setActiveTab] = useState<"details" | "notes">("details");
   const [draftName, setDraftName] = useState(task.name);
   const [draftDesc, setDraftDesc] = useState(task.description ?? "");
   const [draftStatus, setDraftStatus] = useState<Status>(task.status);
@@ -820,8 +804,29 @@ function TaskDetailModal({
           </button>
         </div>
 
+        {/* Tabs */}
+        <div className="flex gap-0 px-6 border-b border-slate-100">
+          {(["details", "notes"] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`text-sm px-4 py-2 font-medium border-b-2 transition-colors capitalize ${
+                activeTab === tab ? "border-violet-600 text-violet-700" : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {tab === "details" ? t("kanbanBoard.tabDetails") : t("kanbanBoard.tabNotes")}
+            </button>
+          ))}
+        </div>
+
         {/* Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4 flex flex-col">
+          {activeTab === "notes" ? (
+            <div className="flex-1 min-h-0 flex flex-col">
+              <NotesPanel entityType="task" entityId={task.id} isTeam={true} members={teamMembers.map((m) => m.user)} />
+            </div>
+          ) : (<>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">{t("kanbanBoard.statusLabel")}</label>
@@ -830,8 +835,9 @@ function TaskDetailModal({
                 onChange={(e) => setDraftStatus(e.target.value as Status)}
                 className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 outline-none focus:border-violet-400"
               >
-                <option value="Not Started">Not Started</option>
-                <option value="Ready">Ready</option>
+                {(["Not Started", "Ready", "In Progress", "On Hold", "Complete", "Cancelled"] as Status[]).map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
               </select>
             </div>
             <div>
@@ -908,9 +914,11 @@ function TaskDetailModal({
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white text-slate-700 outline-none focus:border-violet-400 resize-none"
             />
           </div>
+          </>)}
         </div>
 
-        {/* Footer */}
+        {/* Footer — only shown on the Details tab */}
+        {activeTab === "details" && (
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100">
           <button type="button" onClick={onClose} className="text-sm px-4 py-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors">
             {t("kanbanBoard.cancel")}
@@ -924,6 +932,7 @@ function TaskDetailModal({
             {saving ? t("kanbanBoard.saving") : t("kanbanBoard.save")}
           </button>
         </div>
+        )}
       </div>
     </div>
   );
