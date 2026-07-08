@@ -718,6 +718,8 @@ function TaskDetailModal({
   const [draftAssignee, setDraftAssignee] = useState<string | null>(task.assigned_to ?? null);
   const [draftRoleId, setDraftRoleId] = useState<string | null>(roles[0]?.id ?? null);
   const [saving, setSaving] = useState(false);
+  const [modalSize, setModalSize] = useState({ w: 640, h: 580 });
+  const resizeRef = useRef<{ dir: string; x0: number; y0: number; w0: number; h0: number } | null>(null);
   const { token } = useAuth();
 
   useEffect(() => {
@@ -725,6 +727,30 @@ function TaskDetailModal({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
+
+  // Resize via drag handles
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      const r = resizeRef.current;
+      if (!r) return;
+      const dw = e.clientX - r.x0;
+      const dh = e.clientY - r.y0;
+      setModalSize({
+        w: r.dir.includes("e") ? Math.max(480, r.w0 + dw) : r.w0,
+        h: r.dir.includes("s") ? Math.max(420, r.h0 + dh) : r.h0,
+      });
+    }
+    function onUp() { resizeRef.current = null; }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  }, []);
+
+  function startResize(e: React.MouseEvent, dir: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    resizeRef.current = { dir, x0: e.clientX, y0: e.clientY, w0: modalSize.w, h0: modalSize.h };
+  }
 
   const isDirty =
     draftName.trim() !== task.name ||
@@ -779,9 +805,21 @@ function TaskDetailModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl shadow-2xl flex flex-col relative w-full max-w-xl max-h-[90vh]"
+        className="bg-white rounded-2xl shadow-2xl flex flex-col relative select-none"
+        style={{ width: modalSize.w, height: modalSize.h, maxWidth: "calc(100vw - 2rem)", maxHeight: "calc(100vh - 2rem)" }}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Resize handle — right edge */}
+        <div onMouseDown={(e) => startResize(e, "e")} className="absolute top-4 right-0 bottom-4 w-1.5 cursor-ew-resize rounded-r-full hover:bg-violet-200 transition-colors z-10" />
+        {/* Resize handle — bottom edge */}
+        <div onMouseDown={(e) => startResize(e, "s")} className="absolute left-4 right-4 bottom-0 h-1.5 cursor-ns-resize rounded-b-full hover:bg-violet-200 transition-colors z-10" />
+        {/* Resize handle — bottom-right corner */}
+        <div onMouseDown={(e) => startResize(e, "se")} className="absolute right-0 bottom-0 w-4 h-4 cursor-nwse-resize z-20 flex items-end justify-end pr-1 pb-1">
+          <svg viewBox="0 0 8 8" fill="currentColor" className="w-2.5 h-2.5 text-slate-300">
+            <path d="M6 2 L6 6 L2 6" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+            <path d="M4 4 L6 6" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+          </svg>
+        </div>
         {/* Header */}
         <div className="px-6 pt-5 pb-4 border-b border-slate-100 flex items-start gap-3">
           <div className="flex-1 min-w-0">
