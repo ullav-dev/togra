@@ -49,7 +49,10 @@ function NoteEditor({ initial, onSubmit, onCancel, saving, showShareToggle }: Ed
   const t = useTranslations("notes");
   const [title, setTitle] = useState(initial?.title ?? "");
   const [body, setBody] = useState(initial?.body ?? "");
-  const [isShared, setIsShared] = useState(initial?.is_shared ?? false);
+  // New notes default to shared in a team context so replies (which require a
+  // shared note) are usable without an extra toggle step; existing notes keep
+  // whatever sharing state they were saved with.
+  const [isShared, setIsShared] = useState(initial?.is_shared ?? showShareToggle);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
