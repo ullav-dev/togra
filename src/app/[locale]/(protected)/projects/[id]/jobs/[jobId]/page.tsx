@@ -8,6 +8,7 @@ import { getJob, listWorkflows, listTasks, updateTask, getTeam, listTaskOutgoing
 import { getProject } from "@/lib/togra-api";
 import type { Job, Workflow, Task, TaskLink, Project, Status, TeamMember } from "@/lib/types";
 import NotesPanel from "@/components/notes/NotesPanel";
+import PortValuesEditor from "@/components/workflow/PortValuesEditor";
 import ResearchPanel from "@/components/research/ResearchPanel";
 import KanbanBoard from "@/components/KanbanBoard";
 import { useCurrentProject } from "@/contexts/CurrentProjectContext";
@@ -912,7 +913,7 @@ function TaskDetailModal({
   const [saving, setSaving] = useState(false);
   const [deciding, setDeciding] = useState(false);
   const [decisionLinks, setDecisionLinks] = useState<TaskLink[]>([]);
-  const [activeTab, setActiveTab] = useState<"details" | "notes">("details");
+  const [activeTab, setActiveTab] = useState<"details" | "ports" | "notes">("details");
   const [modalSize, setModalSize] = useState({ w: 640, h: 580 });
   const resizeRef = useRef<{ dir: string; x0: number; y0: number; w0: number; h0: number } | null>(null);
 
@@ -1050,14 +1051,14 @@ function TaskDetailModal({
           </div>
           {/* Tabs */}
           <div className="flex gap-0">
-            {(["details", "notes"] as const).map((tab) => (
+            {(["details", "ports", "notes"] as const).map((tab) => (
               <button key={tab} type="button" onClick={() => setActiveTab(tab)}
                 className={`text-sm px-4 py-2 font-medium border-b-2 transition-colors capitalize ${
                   activeTab === tab
                     ? "border-violet-600 text-violet-700"
                     : "border-transparent text-slate-500 hover:text-slate-700"
                 }`}>
-                {tab === "details" ? "Details" : "Notes"}
+                {tab === "details" ? "Details" : tab === "ports" ? "Ports" : "Notes"}
               </button>
             ))}
           </div>
@@ -1074,6 +1075,8 @@ function TaskDetailModal({
                 members={teamMembers.map((m) => m.user)}
               />
             </div>
+          ) : activeTab === "ports" ? (
+            <PortValuesEditor taskId={task.id} token={token} onTaskUpdated={onTaskUpdated} />
           ) : (<>
           {/* Row: Status · Type · Start/End badges */}
           <div className="flex items-center gap-2 flex-wrap">

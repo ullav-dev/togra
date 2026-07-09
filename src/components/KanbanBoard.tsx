@@ -19,6 +19,7 @@ import type { Job, Workflow, Task, TeamMember, TeamRole, Status } from "@/lib/ty
 import StatusPill from "@/components/StatusPill";
 import RefreshControl from "@/components/RefreshControl";
 import NotesPanel from "@/components/notes/NotesPanel";
+import PortValuesEditor from "@/components/workflow/PortValuesEditor";
 import { taskRef, workflowRef } from "@/lib/reference";
 
 const PRIORITY_RANK: Record<string, number> = {
@@ -708,7 +709,7 @@ function TaskDetailModal({
   onClose: () => void;
 }) {
   const t = useTranslations("board");
-  const [activeTab, setActiveTab] = useState<"details" | "notes">("details");
+  const [activeTab, setActiveTab] = useState<"details" | "ports" | "notes">("details");
   const [draftName, setDraftName] = useState(task.name);
   const [draftDesc, setDraftDesc] = useState(task.description ?? "");
   const [draftStatus, setDraftStatus] = useState<Status>(task.status);
@@ -806,7 +807,7 @@ function TaskDetailModal({
 
         {/* Tabs */}
         <div className="flex gap-0 px-6 border-b border-slate-100">
-          {(["details", "notes"] as const).map((tab) => (
+          {(["details", "ports", "notes"] as const).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -815,7 +816,7 @@ function TaskDetailModal({
                 activeTab === tab ? "border-violet-600 text-violet-700" : "border-transparent text-slate-500 hover:text-slate-700"
               }`}
             >
-              {tab === "details" ? t("kanbanBoard.tabDetails") : t("kanbanBoard.tabNotes")}
+              {tab === "details" ? t("kanbanBoard.tabDetails") : tab === "ports" ? t("kanbanBoard.tabPorts") : t("kanbanBoard.tabNotes")}
             </button>
           ))}
         </div>
@@ -826,6 +827,8 @@ function TaskDetailModal({
             <div className="flex-1 min-h-0 flex flex-col">
               <NotesPanel entityType="task" entityId={task.id} isTeam={true} members={teamMembers.map((m) => m.user)} />
             </div>
+          ) : activeTab === "ports" ? (
+            token && <PortValuesEditor taskId={task.id} token={token} onTaskUpdated={onTaskUpdated} />
           ) : (<>
           <div className="grid grid-cols-2 gap-3">
             <div>

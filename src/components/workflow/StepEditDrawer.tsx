@@ -5,6 +5,7 @@ import { updateTask, assignTaskTeamRole, removeTaskTeamRole, listTaskPortSpecs, 
 import { useResize } from "@/hooks/useResize";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import AutomatedStepConfig from "@/components/workflow/AutomatedStepConfig";
+import PortValuesEditor from "@/components/workflow/PortValuesEditor";
 import type { Task, TaskLink, TeamMember, TeamRole, TaskTeamRole, TaskPortSpec, PortDirection, PortValueType } from "@/lib/types";
 
 interface Props {
@@ -321,7 +322,7 @@ export default function StepEditDrawer({
           {/* Ports */}
           <div className={sectionCls}>
             <div className="border-t border-slate-200 pt-4">
-              <label className={labelCls + " mb-2"}>Ports</label>
+              <label className={labelCls + " mb-2"}>Port definitions</label>
               {portsLoading ? (
                 <p className="text-xs text-slate-400">Loading…</p>
               ) : (
@@ -391,6 +392,11 @@ export default function StepEditDrawer({
                   })}
                 </div>
               )}
+            </div>
+            <div className="border-t border-slate-200 pt-4 mt-4">
+              <label className={labelCls + " mb-2"}>Port values</label>
+              {/* Remount when the spec count changes so newly added/removed ports show up without a full drawer reopen. */}
+              <PortValuesEditor key={ports.length} taskId={task.id} token={token} onTaskUpdated={onTaskUpdated} />
             </div>
           </div>
 

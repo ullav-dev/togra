@@ -2,7 +2,7 @@
 // Notes API has moved to notes-api.ts.
 // All browser requests go via /api/* rewrite; server-side uses API_URL directly.
 
-import type { Job, JobWithWorkflows, Task, TaskLink, TaskScript, TaskPortSpec, PortDirection, PortValueType, ExecutionProfile, ScriptType, Workflow, WorkflowWithTasks, TeamSummary, Team, TeamRole, TaskTeamRole, TaskStateHistoryEntry, WorkItem, InstantiateWorkItemResponse, WorkflowAllocation } from "./types";
+import type { Job, JobWithWorkflows, Task, TaskLink, TaskScript, TaskPortSpec, TaskPortValues, PortDirection, PortValueType, ExecutionProfile, ScriptType, Workflow, WorkflowWithTasks, TeamSummary, Team, TeamRole, TaskTeamRole, TaskStateHistoryEntry, WorkItem, InstantiateWorkItemResponse, WorkflowAllocation } from "./types";
 
 const BASE =
   typeof window === "undefined"
@@ -220,6 +220,18 @@ export const createTaskPortSpec = (
 
 export const deleteTaskPortSpec = (token: string, taskId: string, portId: string): Promise<void> =>
   apiRequest(`/tasks/${taskId}/ports/${portId}`, token, { method: "DELETE" });
+
+export const getTaskInputs = (token: string, taskId: string): Promise<TaskPortValues> =>
+  apiRequest(`/tasks/${taskId}/inputs`, token);
+
+export const patchTaskInputValues = (token: string, taskId: string, values: Record<string, unknown>): Promise<Task> =>
+  apiRequest(`/tasks/${taskId}/inputs`, token, { method: "PATCH", body: JSON.stringify({ values }) });
+
+export const getTaskOutputs = (token: string, taskId: string): Promise<TaskPortValues> =>
+  apiRequest(`/tasks/${taskId}/outputs`, token);
+
+export const patchTaskOutputValues = (token: string, taskId: string, values: Record<string, unknown>): Promise<Task> =>
+  apiRequest(`/tasks/${taskId}/outputs`, token, { method: "PATCH", body: JSON.stringify({ values }) });
 
 // ── Task scripts (automated steps) ───────────────────────────────────────────
 
