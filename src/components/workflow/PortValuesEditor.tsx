@@ -49,7 +49,7 @@ function DirectionSection({ taskId, token, direction, onTaskUpdated }: { taskId:
       .then((res) => {
         setSpecs(res.specs);
         setValues(res.values ?? {});
-        setSecretSet(res.secret_set);
+        setSecretSet(res.secret_set ?? []);
         const nextDraft: Record<string, string> = {};
         res.specs.forEach((s) => { nextDraft[s.name] = stringifyValue((res.values ?? {})[s.name], s.value_type); });
         setDraft(nextDraft);
