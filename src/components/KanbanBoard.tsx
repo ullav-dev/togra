@@ -102,6 +102,8 @@ interface Props {
   job: Job;
   projectId: string;
   projectCode: string | null;
+  /** Fallback team when the job itself has no team_id (e.g. Kanban jobs commonly rely on the project's team). */
+  projectTeamId: string | null;
 }
 
 interface Row {
@@ -110,9 +112,10 @@ interface Row {
   roles: TeamRole[];
 }
 
-export default function KanbanBoard({ job, projectId, projectCode }: Props) {
+export default function KanbanBoard({ job, projectId, projectCode, projectTeamId }: Props) {
   const t = useTranslations("board");
   const { token, user } = useAuth();
+  const teamId = job.team_id ?? projectTeamId ?? null;
 
   const [stories, setStories] = useState<Workflow[]>([]);
   const [storyTasks, setStoryTasks] = useState<Record<string, Task[]>>({});
@@ -129,7 +132,7 @@ export default function KanbanBoard({ job, projectId, projectCode }: Props) {
   const promotedRef = useRef(false);
   const { widths: colWidths, startResize } = useColumnResize(DEFAULT_COL_WIDTHS);
 
-  const userRoleNames = getUserTeamRoleNames(token, job.team_id ?? null);
+  const userRoleNames = getUserTeamRoleNames(token, teamId);
 
   const loadData = useCallback(async () => {
     if (!token) return;
@@ -158,7 +161,6 @@ export default function KanbanBoard({ job, projectId, projectCode }: Props) {
   useEffect(() => {
     if (!token) return;
     setLoading(true);
-    const teamId = job.team_id ?? null;
     (async () => {
       let roles: TeamRole[] = [];
       if (teamId) {
@@ -170,7 +172,7 @@ export default function KanbanBoard({ job, projectId, projectCode }: Props) {
       await loadData();
     })().finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, job.id, job.team_id]);
+  }, [token, job.id, teamId]);
 
   // Promote is_start tasks from Not Started → Ready (once per board load)
   useEffect(() => {
