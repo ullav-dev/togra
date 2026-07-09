@@ -238,6 +238,15 @@ export interface TaskPortSpec {
   sort_order: number;
 }
 
+/** Returned by `GET /tasks/{id}/inputs` and `GET /tasks/{id}/outputs`. */
+export interface TaskPortValues {
+  specs: TaskPortSpec[];
+  /** Current `{name: value}` map; null if no values have been set. */
+  values: Record<string, unknown> | null;
+  /** Names of secret input ports that currently have an encrypted value stored. */
+  secret_set: string[];
+}
+
 export interface TaskScript {
   id: string;
   task_id: string;
