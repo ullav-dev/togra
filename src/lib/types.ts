@@ -68,6 +68,7 @@ export interface Project {
   project_manager_id: string | null;
   /** Short unique code (e.g. "P1"), used as the prefix for task/workflow references. */
   project_code: string;
+  archived: boolean;
   created_by: string;
   created_at: string;
   updated_at: string;

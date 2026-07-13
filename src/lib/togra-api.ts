@@ -57,7 +57,7 @@ export const getProject = (token: string, id: string): Promise<ProjectWithJobs> 
 export const updateProject = (
   token: string,
   id: string,
-  patch: { name?: string; description?: string; status?: string; project_manager_id?: string; project_code?: string }
+  patch: { name?: string; description?: string; status?: string; project_manager_id?: string; project_code?: string; archived?: boolean }
 ): Promise<Project> =>
   apiRequest(`/projects/${id}`, token, { method: "PUT", body: JSON.stringify(patch) });
 

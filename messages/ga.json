@@ -124,7 +124,24 @@
       "create": "Cruthaigh",
       "error": "Theip ar chruthú an tionscadail"
     },
-    "filteredSubtitle": "Tionscadail in {team}"
+    "filteredSubtitle": "Tionscadail in {team}",
+    "searchPlaceholder": "Cuardaigh tionscadail…",
+    "viewCards": "Cártaí",
+    "viewGrid": "Greille",
+    "includeArchived": "Cuir cinn chartlainne san áireamh",
+    "archived": "Cartlannaithe",
+    "archive": "Cartlannaigh",
+    "unarchive": "Díchartlannaigh",
+    "noResultsTitle": "Níl aon tionscadal ag teacht leis",
+    "noResultsSubtitle": "Bain triail as téarma cuardaigh eile nó athraigh do scagairí.",
+    "grid": {
+      "name": "Ainm",
+      "code": "Cód",
+      "status": "Stádas",
+      "team": "Foireann",
+      "created": "Cruthaithe",
+      "actions": "Gníomhartha"
+    }
   },
   "project": {
     "loading": "Ag luchtú…",
@@ -132,7 +149,12 @@
     "breadcrumbProjects": "Tionscadail",
     "pmLabel": "BT",
     "notesTitle": "Nótaí",
-    "tabs": { "management": "Bainistíocht", "ideas": "Smaointe", "team": "Foireann", "reports": "Tuarascálacha" },
+    "tabs": {
+      "management": "Bainistíocht",
+      "ideas": "Smaointe",
+      "team": "Foireann",
+      "reports": "Tuarascálacha"
+    },
     "deleteProjectTitle": "\"{name}\" a scriosadh?",
     "deleteProjectMessage": "Scriosfar gach sprid, scéal agus nóta sa tionscadal seo go buan. Ní féidir é seo a chur ar ceal.",
     "deleteProjectLabel": "Tionscadal a scriosadh",
