@@ -124,7 +124,24 @@
       "create": "Erstellen",
       "error": "Projekt konnte nicht erstellt werden"
     },
-    "filteredSubtitle": "Projekte in {team}"
+    "filteredSubtitle": "Projekte in {team}",
+    "searchPlaceholder": "Projekte durchsuchen…",
+    "viewCards": "Karten",
+    "viewGrid": "Raster",
+    "includeArchived": "Archivierte einschließen",
+    "archived": "Archiviert",
+    "archive": "Archivieren",
+    "unarchive": "Wiederherstellen",
+    "noResultsTitle": "Keine passenden Projekte",
+    "noResultsSubtitle": "Versuchen Sie einen anderen Suchbegriff oder passen Sie Ihre Filter an.",
+    "grid": {
+      "name": "Name",
+      "code": "Code",
+      "status": "Status",
+      "team": "Team",
+      "created": "Erstellt",
+      "actions": "Aktionen"
+    }
   },
   "project": {
     "loading": "Wird geladen…",
@@ -132,7 +149,12 @@
     "breadcrumbProjects": "Projekte",
     "pmLabel": "PM",
     "notesTitle": "Notizen",
-    "tabs": { "management": "Verwaltung", "ideas": "Ideen", "team": "Team", "reports": "Berichte" },
+    "tabs": {
+      "management": "Verwaltung",
+      "ideas": "Ideen",
+      "team": "Team",
+      "reports": "Berichte"
+    },
     "deleteProjectTitle": "\"{name}\" löschen?",
     "deleteProjectMessage": "Alle Sprints, Stories und Notizen in diesem Projekt werden dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.",
     "deleteProjectLabel": "Projekt löschen",

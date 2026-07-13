@@ -13,6 +13,8 @@ import StatusPill from "@/components/StatusPill";
 import TograIcon from "@/components/TograIcon";
 import ConfirmDialog from "@/components/ConfirmDialog";
 
+type ViewMode = "cards" | "grid";
+
 export default function ProjectsPage() {
   const { token } = useAuth();
   const { activeTeam } = useTeam();
@@ -21,10 +23,32 @@ export default function ProjectsPage() {
   const [teams, setTeams] = useState<TeamSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("cards");
+  const [search, setSearch] = useState("");
+  const [includeArchived, setIncludeArchived] = useState(false);
 
-  const visibleProjects = activeTeam
+  const teamFiltered = activeTeam
     ? projects.filter((p) => p.team_id === activeTeam.id)
     : projects;
+
+  const query = search.trim().toLowerCase();
+  const searched = query
+    ? teamFiltered.filter((p) =>
+        p.name.toLowerCase().includes(query) ||
+        p.project_code.toLowerCase().includes(query) ||
+        (p.description?.toLowerCase().includes(query) ?? false)
+      )
+    : teamFiltered;
+
+  const visibleProjects =
+    viewMode === "grid" && includeArchived
+      ? searched
+      : searched.filter((p) => !p.archived);
+
+  function teamName(teamId: string | null): string {
+    if (!teamId) return "—";
+    return teams.find((tm) => tm.id === teamId)?.name ?? "—";
+  }
 
   useEffect(() => {
     if (!token) return;
@@ -54,9 +78,15 @@ export default function ProjectsPage() {
     setProjects((prev) => prev.filter((p) => p.id !== id));
   }
 
+  async function onProjectArchiveToggle(id: string, archived: boolean) {
+    if (!token) return;
+    const updated = await updateProject(token, id, { archived });
+    setProjects((prev) => prev.map((p) => p.id === updated.id ? { ...p, archived: updated.archived } : p));
+  }
+
   return (
-    <div className="max-w-5xl mx-auto px-6 py-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <TograIcon className="w-9 h-9" />
           <div>
@@ -76,16 +106,84 @@ export default function ProjectsPage() {
         </button>
       </div>
 
+      <div className="flex items-center gap-3 mb-6">
+        <div className="relative flex-1 max-w-sm">
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+            <path fillRule="evenodd" d="M6.5 12a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11Zm4.55-.32a7 7 0 1 1 1.06-1.06l3.06 3.06a.75.75 0 1 1-1.06 1.06l-3.06-3.06Z" clipRule="evenodd"/>
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("searchPlaceholder")}
+            className="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+          />
+        </div>
+
+        {viewMode === "grid" && (
+          <label className="flex items-center gap-2 text-sm text-slate-600 shrink-0">
+            <input
+              type="checkbox"
+              checked={includeArchived}
+              onChange={(e) => setIncludeArchived(e.target.checked)}
+              className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+            />
+            {t("includeArchived")}
+          </label>
+        )}
+
+        <div className="ml-auto flex items-center gap-1 rounded-lg border border-slate-200 p-0.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => setViewMode("cards")}
+            title={t("viewCards")}
+            className={`p-1.5 rounded-md transition-colors ${viewMode === "cards" ? "bg-violet-100 text-violet-700" : "text-slate-400 hover:text-slate-600"}`}
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+              <rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/>
+              <rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("grid")}
+            title={t("viewGrid")}
+            className={`p-1.5 rounded-md transition-colors ${viewMode === "grid" ? "bg-violet-100 text-violet-700" : "text-slate-400 hover:text-slate-600"}`}
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+              <path d="M1 2a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v2H1V2Zm0 4h14v3H1V6Zm0 5h14v3a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-3Z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
       {loading ? (
         <div className="text-slate-400 text-sm">{t("loading")}</div>
       ) : visibleProjects.length === 0 ? (
-        <EmptyState onCreate={() => setShowCreate(true)} />
-      ) : (
+        teamFiltered.length === 0 ? (
+          <EmptyState onCreate={() => setShowCreate(true)} />
+        ) : (
+          <NoResultsState />
+        )
+      ) : viewMode === "cards" ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {visibleProjects.map((p) => (
-            <ProjectCard key={p.id} project={p} onRename={onProjectRenamed} onDelete={onProjectDeleted} />
+            <ProjectCard
+              key={p.id}
+              project={p}
+              onRename={onProjectRenamed}
+              onDelete={onProjectDeleted}
+              onArchiveToggle={onProjectArchiveToggle}
+            />
           ))}
         </div>
+      ) : (
+        <ProjectsGrid
+          projects={visibleProjects}
+          teamName={teamName}
+          onDelete={onProjectDeleted}
+          onArchiveToggle={onProjectArchiveToggle}
+        />
       )}
 
       {showCreate && (
@@ -105,10 +203,12 @@ function ProjectCard({
   project,
   onRename,
   onDelete,
+  onArchiveToggle,
 }: {
   project: Project;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
+  onArchiveToggle: (id: string, archived: boolean) => void;
 }) {
   const t = useTranslations("projects");
   const [renaming, setRenaming] = useState(false);
@@ -156,6 +256,14 @@ function ProjectCard({
           </button>
           <button
             type="button"
+            onClick={(e) => { e.preventDefault(); onArchiveToggle(project.id, true); }}
+            className="p-1 text-slate-300 hover:text-slate-600 transition-colors opacity-0 group-hover:opacity-100 rounded"
+            title={t("archive")}
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M1.75 2A1.75 1.75 0 0 0 0 3.75v.5C0 5.216 0.784 6 1.75 6h12.5A1.75 1.75 0 0 0 16 4.25v-.5A1.75 1.75 0 0 0 14.25 2H1.75ZM1 7.5h14v5.75A1.75 1.75 0 0 1 13.25 15H2.75A1.75 1.75 0 0 1 1 13.25V7.5Zm5.5 1.75a.75.75 0 0 0 0 1.5h3a.75.75 0 0 0 0-1.5h-3Z"/></svg>
+          </button>
+          <button
+            type="button"
             onClick={handleDelete}
             className="p-1 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 rounded"
             title="Delete"
@@ -198,6 +306,103 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       >
         {t("createProject")}
       </button>
+    </div>
+  );
+}
+
+function NoResultsState() {
+  const t = useTranslations("projects");
+  return (
+    <div className="text-center py-20">
+      <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-slate-50 flex items-center justify-center">
+        <svg viewBox="0 0 16 16" fill="currentColor" className="w-8 h-8 text-slate-300">
+          <path fillRule="evenodd" d="M6.5 12a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11Zm4.55-.32a7 7 0 1 1 1.06-1.06l3.06 3.06a.75.75 0 1 1-1.06 1.06l-3.06-3.06Z" clipRule="evenodd"/>
+        </svg>
+      </div>
+      <h2 className="text-lg font-semibold text-slate-700 mb-2">{t("noResultsTitle")}</h2>
+      <p className="text-sm text-slate-500">{t("noResultsSubtitle")}</p>
+    </div>
+  );
+}
+
+function ProjectsGrid({
+  projects,
+  teamName,
+  onDelete,
+  onArchiveToggle,
+}: {
+  projects: Project[];
+  teamName: (teamId: string | null) => string;
+  onDelete: (id: string) => void;
+  onArchiveToggle: (id: string, archived: boolean) => void;
+}) {
+  const t = useTranslations("projects");
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const confirmingProject = projects.find((p) => p.id === confirmingDeleteId) ?? null;
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
+            <th className="px-4 py-3">{t("grid.name")}</th>
+            <th className="px-4 py-3">{t("grid.code")}</th>
+            <th className="px-4 py-3">{t("grid.status")}</th>
+            <th className="px-4 py-3">{t("grid.team")}</th>
+            <th className="px-4 py-3">{t("grid.created")}</th>
+            <th className="px-4 py-3 text-right">{t("grid.actions")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {projects.map((p) => (
+            <tr key={p.id} className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${p.archived ? "opacity-60" : ""}`}>
+              <td className="px-4 py-3">
+                <Link href={`/projects/${p.id}`} className="font-medium text-slate-800 hover:text-violet-700">
+                  {p.name}
+                </Link>
+                {p.archived && (
+                  <span className="ml-2 inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-500">
+                    {t("archived")}
+                  </span>
+                )}
+              </td>
+              <td className="px-4 py-3 text-slate-500 font-mono text-xs">{p.project_code}</td>
+              <td className="px-4 py-3"><StatusPill status={p.status} /></td>
+              <td className="px-4 py-3 text-slate-500">{teamName(p.team_id)}</td>
+              <td className="px-4 py-3 text-slate-400">{new Date(p.created_at).toLocaleDateString()}</td>
+              <td className="px-4 py-3">
+                <div className="flex items-center justify-end gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onArchiveToggle(p.id, !p.archived)}
+                    className="px-2 py-1 text-xs font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded transition-colors"
+                  >
+                    {p.archived ? t("unarchive") : t("archive")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingDeleteId(p.id)}
+                    className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                    title="Delete"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75Zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.559a.75.75 0 1 0-1.492.14l.62 6.498A1.75 1.75 0 0 0 5.365 14.8h5.27a1.75 1.75 0 0 0 1.741-1.603l.62-6.498a.75.75 0 1 0-1.492-.14l-.62 6.498a.25.25 0 0 1-.249.229H5.365a.25.25 0 0 1-.249-.229l-.62-6.498Z"/></svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {confirmingProject && (
+        <ConfirmDialog
+          title={t("deleteConfirmTitle", { name: confirmingProject.name })}
+          message={t("deleteConfirmMessage")}
+          confirmLabel={t("deleteConfirmLabel")}
+          onConfirm={() => { setConfirmingDeleteId(null); onDelete(confirmingProject.id); }}
+          onCancel={() => setConfirmingDeleteId(null)}
+        />
+      )}
     </div>
   );
 }

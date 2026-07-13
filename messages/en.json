@@ -124,7 +124,24 @@
       "create": "Create",
       "error": "Failed to create project"
     },
-    "filteredSubtitle": "Projects in {team}"
+    "filteredSubtitle": "Projects in {team}",
+    "searchPlaceholder": "Search projects…",
+    "viewCards": "Cards",
+    "viewGrid": "Grid",
+    "includeArchived": "Include archived",
+    "archived": "Archived",
+    "archive": "Archive",
+    "unarchive": "Unarchive",
+    "noResultsTitle": "No matching projects",
+    "noResultsSubtitle": "Try a different search term or adjust your filters.",
+    "grid": {
+      "name": "Name",
+      "code": "Code",
+      "status": "Status",
+      "team": "Team",
+      "created": "Created",
+      "actions": "Actions"
+    }
   },
   "project": {
     "loading": "Loading…",
@@ -132,7 +149,12 @@
     "breadcrumbProjects": "Projects",
     "pmLabel": "PM",
     "notesTitle": "Notes",
-    "tabs": { "management": "Management", "ideas": "Ideas", "team": "Team", "reports": "Reports" },
+    "tabs": {
+      "management": "Management",
+      "ideas": "Ideas",
+      "team": "Team",
+      "reports": "Reports"
+    },
     "deleteProjectTitle": "Delete \"{name}\"?",
     "deleteProjectMessage": "All sprints, stories, and notes in this project will be permanently deleted. This cannot be undone.",
     "deleteProjectLabel": "Delete project",
