@@ -345,7 +345,11 @@ function WorkflowCanvasInner({
     setLastTaskType(taskType);
     // Place near centre of viewport
     const centre = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-    const newTask = await createTask(token, { name, workflow_id: workflow.id, task_type: taskType, is_end: isEnd || undefined });
+    // The first step added to an empty workflow has nothing to connect from,
+    // so it's the obvious start step — otherwise a fresh workflow could never
+    // reach one via the canvas (no incoming connector exists to infer it from).
+    const isStart = tasks.length === 0;
+    const newTask = await createTask(token, { name, workflow_id: workflow.id, task_type: taskType, is_start: isStart || undefined, is_end: isEnd || undefined });
     // Save position
     await updateTask(token, newTask.id, { canvas_x: centre.x, canvas_y: centre.y });
     const positioned = { ...newTask, canvas_x: centre.x, canvas_y: centre.y };
@@ -470,6 +474,25 @@ function WorkflowCanvasInner({
   function handleTaskUpdatedFromDrawer(updated: Task) {
     setTasks((prev) => prev.map((t) => t.id === updated.id ? updated : t));
     onTaskUpdated(updated);
+  }
+
+  // ── Make a step the start step ──────────────────────────────────────────────
+  // A workflow may have only one start step, so reassigning it first clears the
+  // flag on whichever task currently holds it (if any) before setting the new one.
+
+  async function handleMakeStart(taskId: string) {
+    setSaving(true);
+    try {
+      const currentStart = tasks.find((t) => t.is_start && t.id !== taskId);
+      if (currentStart) {
+        const updatedOld = await updateTask(token, currentStart.id, { is_start: false });
+        handleTaskUpdatedFromDrawer(updatedOld);
+      }
+      const updatedNew = await updateTask(token, taskId, { is_start: true });
+      handleTaskUpdatedFromDrawer(updatedNew);
+    } finally {
+      setSaving(false);
+    }
   }
 
   // ── Mode toggle (exit edit mode clears selection) ───────────────────────────
@@ -703,6 +726,7 @@ function WorkflowCanvasInner({
           token={token}
           onTaskUpdated={handleTaskUpdatedFromDrawer}
           onTaskDeleted={handleTaskDeleted}
+          onMakeStart={handleMakeStart}
           onLinkRemoved={handleLinkRemoved}
           onBranchLabelChanged={handleBranchLabelChanged}
           onClose={() => setSelectedTaskId(null)}
