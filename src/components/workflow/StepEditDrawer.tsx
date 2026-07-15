@@ -18,6 +18,7 @@ interface Props {
   token: string;
   onTaskUpdated: (task: Task) => void;
   onTaskDeleted: (taskId: string) => void;
+  onMakeStart: (taskId: string) => void | Promise<void>;
   onLinkRemoved: (fromId: string, toId: string) => void;
   onBranchLabelChanged: (fromId: string, toId: string, label: string | null) => void;
   onClose: () => void;
@@ -41,7 +42,7 @@ function MemberAvatar({ member }: { member: TeamMember }) {
 export default function StepEditDrawer({
   task, allTasks, outgoingLinks,
   teamMembers, teamRoles, taskTeamRoles,
-  token, onTaskUpdated, onTaskDeleted, onLinkRemoved, onBranchLabelChanged, onClose, onRolesUpdated,
+  token, onTaskUpdated, onTaskDeleted, onMakeStart, onLinkRemoved, onBranchLabelChanged, onClose, onRolesUpdated,
 }: Props) {
   const [draftName, setDraftName] = useState(task.name);
   const [draftDesc, setDraftDesc] = useState(task.description ?? "");
@@ -51,6 +52,7 @@ export default function StepEditDrawer({
   const resize = useResize({ initial: 288, min: 220, max: 560, axis: "x", reverse: true });
 
   const [saving, setSaving] = useState(false);
+  const [makingStart, setMakingStart] = useState(false);
   const [rolesBusy, setRolesBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -160,6 +162,13 @@ export default function StepEditDrawer({
     } finally { setPortsBusy(false); }
   }
 
+  async function handleMakeStart() {
+    setMakingStart(true);
+    try {
+      await onMakeStart(task.id);
+    } finally { setMakingStart(false); }
+  }
+
   async function handleSaveBranchLabel(toId: string) {
     const trimmed = labelDraft.trim() || null;
     onBranchLabelChanged(task.id, toId, trimmed);
@@ -236,10 +245,19 @@ export default function StepEditDrawer({
             <span className="inline-flex items-center gap-1 text-xs font-medium bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
               {task.task_type === "decision" ? "Decision ◇" : task.task_type === "automated" ? "Automated ⚡" : "Standard"}
             </span>
-            {task.is_start && (
+            {task.is_start ? (
               <span className="inline-flex items-center gap-1 text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full">
                 ▶ Start
               </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleMakeStart()}
+                disabled={makingStart}
+                className="inline-flex items-center gap-1 text-xs font-medium bg-white border border-slate-300 text-slate-600 px-2.5 py-1 rounded-full hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 transition-colors"
+              >
+                {makingStart ? "Setting…" : "▶ Make start step"}
+              </button>
             )}
             {task.is_end && (
               <span className="inline-flex items-center gap-1 text-xs font-medium bg-slate-100 text-slate-600 border border-slate-300 px-2.5 py-1 rounded-full">
