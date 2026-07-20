@@ -151,6 +151,9 @@ export const cloneWorkflowFromTemplate = (
 export const listTasks = (token: string, workflowId: string): Promise<Task[]> =>
   apiRequest(`/tasks?workflow_id=${workflowId}`, token);
 
+export const getTask = (token: string, id: string): Promise<Task> =>
+  apiRequest(`/tasks/${id}`, token);
+
 export const createTask = (
   token: string,
   payload: { name: string; workflow_id: string; task_type?: string; description?: string; is_start?: boolean; is_end?: boolean }
