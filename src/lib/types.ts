@@ -65,6 +65,10 @@ export interface Project {
   description: string | null;
   status: Status;
   team_id: string | null;
+  /** Denormalized from team_id, same reasoning (no local FK to the team's
+   *  organization) — see awe-server's 065_organization_scoping.sql. Most
+   *  teams have no organization yet. */
+  organization_id?: string | null;
   project_manager_id: string | null;
   /** Short unique code (e.g. "P1"), used as the prefix for task/workflow references. */
   project_code: string;
@@ -85,6 +89,8 @@ export interface Job {
   status: Status;
   schedule_status: ScheduleStatus;
   team_id: string | null;
+  /** Denormalized from team_id — see Project.organization_id. */
+  organization_id?: string | null;
   project_id: string | null;
   /** `"sprint"`, `"kanban"`, `"backlog"`, or null for legacy jobs. */
   job_type: "sprint" | "kanban" | "backlog" | null;
@@ -127,6 +133,8 @@ export interface Workflow {
   schedule_status: ScheduleStatus;
   job_id: string | null;
   team_id: string | null;
+  /** Denormalized from team_id — see Project.organization_id. */
+  organization_id?: string | null;
   is_shared: boolean;
   /** Display order within the parent job. */
   sort_order: number | null;
@@ -200,6 +208,8 @@ export interface WorkItem {
   is_locked: boolean;
   assigned_to: string | null;
   team_id: string | null;
+  /** Denormalized from team_id — see Project.organization_id. */
+  organization_id?: string | null;
   is_shared: boolean;
   created_by: string | null;
   created_at: string;
