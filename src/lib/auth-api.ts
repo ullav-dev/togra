@@ -114,6 +114,20 @@ export function getTograTeamIds(token: string | null): string[] {
     .map(([id]) => id);
 }
 
+/** Tack access: `tack` product, gating the tack-notes-backed NotesPanel. */
+export function hasTackAccess(token: string | null): boolean {
+  const teams = getTeamClaims(token);
+  return Object.values(teams).some((t) => (t.products ?? []).includes("tack"));
+}
+
+/** Returns IDs of teams that grant Tack access. */
+export function getTackTeamIds(token: string | null): string[] {
+  const teams = getTeamClaims(token);
+  return Object.entries(teams)
+    .filter(([, t]) => (t.products ?? []).includes("tack"))
+    .map(([id]) => id);
+}
+
 /** Returns true if the user has the `obair` product on any team. */
 export function hasObairAccess(token: string | null): boolean {
   return Object.values(getTeamClaims(token)).some(

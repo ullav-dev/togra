@@ -23,7 +23,12 @@ import {
   listTeamRoles,
   getJobWorkflowAllocations,
 } from "@/lib/awe-api";
-import { createNote, listIdeaBoards, createIdeaBoard, updateIdeaBoard, deleteIdeaBoard, listStickies, listNoteLinks, listShapes } from "@/lib/notes-api";
+import { listIdeaBoards, createIdeaBoard, updateIdeaBoard, deleteIdeaBoard, listStickies, listNoteLinks, listShapes } from "@/lib/notes-api";
+import { createTackNotesApi } from "@ullav-dev/tack-notes";
+
+// Matches NotesPanel.tsx's OWNING_SERVICE -- the Phase 2 backfill's
+// content_attachments scope for every togra note.
+const OWNING_SERVICE = "awe";
 import IdeaBoardCanvas from "@/components/ideas/IdeaBoard";
 import MarkdownEditor from "@/components/MarkdownEditor";
 import { useRouter } from "@/i18n/navigation";
@@ -348,6 +353,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             token={token!}
             projectId={id}
             projectCode={project?.project_code ?? null}
+            teamId={project?.team_id ?? null}
             onStoryCreated={onStoryCreated}
             onStoryMoved={onStoryMoved}
             onStoryDeleted={onStoryDeleted}
@@ -407,7 +413,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             <h2 className="text-sm font-semibold text-slate-700">{t("notesTitle")}</h2>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
-            <NotesPanel entityType="project" entityId={id} isTeam={true} members={teamMembers.map((m) => m.user)} />
+            <NotesPanel entityType="project" entityId={id} teamId={project?.team_id ?? null} members={teamMembers.map((m) => m.user)} />
           </div>
         </div>
       </div>}
@@ -418,6 +424,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           projectId={id}
           boards={ideaBoards}
           token={token!}
+          teamId={project?.team_id ?? null}
           backlogJobId={backlogJob?.id ?? null}
           templates={templates}
           teamMembers={teamMembers}
@@ -512,6 +519,7 @@ function BacklogPanel({
   token,
   projectId,
   projectCode,
+  teamId,
   onStoryCreated,
   onStoryMoved,
   onStoryDeleted,
@@ -530,6 +538,7 @@ function BacklogPanel({
   token: string;
   projectId: string;
   projectCode: string | null;
+  teamId: string | null;
   onStoryCreated: (s: Workflow) => void;
   onStoryMoved: (storyId: string, targetJobId: string | null) => Promise<boolean>;
   onStoryDeleted: (storyId: string) => void;
@@ -691,6 +700,7 @@ function BacklogPanel({
           jobId={backlogJob.id}
           templates={templates}
           token={token}
+          teamId={teamId}
           onCreated={(s) => { onStoryCreated(s); setShowCreate(false); }}
           onClose={() => setShowCreate(false)}
         />
@@ -1470,12 +1480,14 @@ function CreateStoryModal({
   jobId,
   templates,
   token,
+  teamId,
   onCreated,
   onClose,
 }: {
   jobId: string;
   templates: Workflow[];
   token: string;
+  teamId: string | null;
   onCreated: (s: Workflow) => void;
   onClose: () => void;
 }) {
@@ -1521,13 +1533,17 @@ function CreateStoryModal({
       }
 
       if (noteBody.trim()) {
-        await createNote(token, {
-          entity_type: "workflow",
-          entity_id: story.id,
-          title: name.trim(),
-          body: noteBody.trim(),
-          is_shared: isShared,
-        });
+        if (teamId) {
+          await createTackNotesApi("/api/tack", token).createNote({
+            team_id: teamId,
+            visibility: isShared ? "team" : "private",
+            title: name.trim(),
+            body_markdown: noteBody.trim(),
+            attach: { owning_service: OWNING_SERVICE, entity_type: "workflow", entity_id: story.id },
+          });
+        } else {
+          console.error(`CreateStoryModal: no team_id resolvable for job ${jobId} -- skipping note`);
+        }
       }
 
       onCreated(story);
@@ -1779,6 +1795,7 @@ function IdeasPanel({
   projectId,
   boards,
   token,
+  teamId,
   backlogJobId,
   templates,
   teamMembers,
@@ -1789,6 +1806,7 @@ function IdeasPanel({
   projectId: string;
   boards: IdeaBoard[];
   token: string;
+  teamId: string | null;
   backlogJobId: string | null;
   templates: Workflow[];
   teamMembers: TeamMember[];
@@ -1881,6 +1899,7 @@ function IdeasPanel({
             boardId={selectedBoardId}
             token={token}
             projectId={projectId}
+            teamId={teamId}
             backlogJobId={backlogJobId}
             templates={templates}
             initialStickies={boardStickies}

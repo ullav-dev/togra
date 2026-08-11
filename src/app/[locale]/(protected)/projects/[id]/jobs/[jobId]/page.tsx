@@ -426,6 +426,7 @@ export default function SprintBoardPage({
               token={token ?? ""}
               entityType={selectedTaskCtx ? "task" : "job"}
               entityId={selectedTaskCtx ? selectedTaskCtx.task.id : jobId}
+              teamId={job?.team_id ?? project?.team_id ?? null}
               storyId={selectedTaskCtx?.workflowId}
               storyTitle={selectedTaskCtx?.storyName}
               taskId={selectedTaskCtx?.task.id}
@@ -442,6 +443,7 @@ export default function SprintBoardPage({
           workflowId={selectedTaskCtx.workflowId}
           storyName={selectedTaskCtx.storyName}
           teamMembers={teamMembers}
+          teamId={job?.team_id ?? project?.team_id ?? null}
           token={token!}
           onTaskUpdated={onTaskUpdated}
           onClose={() => setSelectedTaskCtx(null)}
@@ -895,12 +897,13 @@ function TaskCard({
 // ── Task Detail Modal ─────────────────────────────────────────────────────────
 
 function TaskDetailModal({
-  task, workflowId, storyName, teamMembers, token, onTaskUpdated, onClose,
+  task, workflowId, storyName, teamMembers, teamId, token, onTaskUpdated, onClose,
 }: {
   task: Task;
   workflowId: string;
   storyName: string;
   teamMembers: TeamMember[];
+  teamId: string | null;
   token: string;
   onTaskUpdated: (t: Task) => void;
   onClose: () => void;
@@ -1071,7 +1074,7 @@ function TaskDetailModal({
               <NotesPanel
                 entityType="task"
                 entityId={task.id}
-                isTeam={true}
+                teamId={teamId}
                 members={teamMembers.map((m) => m.user)}
               />
             </div>

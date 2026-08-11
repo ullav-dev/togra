@@ -363,7 +363,7 @@ export default function StoryDetailPage({
               className="shrink-0 overflow-hidden bg-white border-l border-slate-200"
               style={{ width: notesResize.size }}
             >
-              <NotesPanel entityType="workflow" entityId={storyId} isTeam={true} twoColumn autoSelectFirst members={teamMembers.map((m) => m.user)} />
+              <NotesPanel entityType="workflow" entityId={storyId} teamId={story?.team_id ?? project?.team_id ?? null} twoColumn autoSelectFirst members={teamMembers.map((m) => m.user)} />
             </div>
           </div>
 
@@ -398,6 +398,7 @@ export default function StoryDetailPage({
               token={token ?? ""}
               entityType="workflow"
               entityId={storyId}
+              teamId={story?.team_id ?? project?.team_id ?? null}
               storyId={storyId}
               storyTitle={story.name}
               storyDescription={story.description ?? undefined}

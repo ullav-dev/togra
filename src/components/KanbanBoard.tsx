@@ -439,6 +439,7 @@ export default function KanbanBoard({ job, projectId, projectCode, projectTeamId
           roles={openRow.roles}
           teamMembers={teamMembers}
           teamRoles={teamRoles}
+          teamId={teamId}
           onTaskUpdated={onTaskUpdated}
           onRolesUpdated={(roleIds) => setTaskRoleIds((prev) => ({ ...prev, [openRow.task.id]: roleIds }))}
           onClose={() => setOpenTaskId(null)}
@@ -717,6 +718,7 @@ function TaskDetailModal({
   roles,
   teamMembers,
   teamRoles,
+  teamId,
   onTaskUpdated,
   onRolesUpdated,
   onClose,
@@ -727,6 +729,7 @@ function TaskDetailModal({
   roles: TeamRole[];
   teamMembers: TeamMember[];
   teamRoles: TeamRole[];
+  teamId: string | null;
   onTaskUpdated: (t: Task) => void;
   onRolesUpdated: (roleIds: string[]) => void;
   onClose: () => void;
@@ -886,7 +889,7 @@ function TaskDetailModal({
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4 flex flex-col">
           {activeTab === "notes" ? (
             <div className="flex-1 min-h-0 flex flex-col">
-              <NotesPanel entityType="task" entityId={task.id} isTeam={true} members={teamMembers.map((m) => m.user)} />
+              <NotesPanel entityType="task" entityId={task.id} teamId={teamId} members={teamMembers.map((m) => m.user)} />
             </div>
           ) : activeTab === "ports" ? (
             token && <PortValuesEditor taskId={task.id} token={token} onTaskUpdated={onTaskUpdated} />

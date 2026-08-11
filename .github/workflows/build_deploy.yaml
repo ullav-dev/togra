@@ -16,6 +16,8 @@ jobs:
           node-version: '22'
       - name: Install dependencies
         run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PAT_CLASSIC }}
       - name: Run tests
         run: npm test -- --passWithNoTests
 
@@ -48,3 +50,5 @@ jobs:
           tags: |
             ghcr.io/ullav-dev/togra:${{ steps.commit.outputs.short }}
             ghcr.io/ullav-dev/togra:latest
+          secrets: |
+            npm_token=${{ secrets.PAT_CLASSIC }}

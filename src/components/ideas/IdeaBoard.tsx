@@ -31,8 +31,13 @@ import {
   cloneWorkflowFromTemplate,
   createTask,
 } from "@/lib/awe-api";
-import { createNote } from "@/lib/notes-api";
+import { createTackNotesApi } from "@ullav-dev/tack-notes";
 import StickyCard from "./StickyCard";
+
+// Matches NotesPanel.tsx's OWNING_SERVICE -- the Phase 2 backfill's
+// content_attachments scope for every togra note. A note this board writes
+// onto a workflow must land in the same place NotesPanel reads from.
+const OWNING_SERVICE = "awe";
 import ShapePropsPanel from "./ShapePropsPanel";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import MarkdownEditor from "@/components/MarkdownEditor";
@@ -266,6 +271,10 @@ interface Props {
   boardId: string;
   token: string;
   projectId: string;
+  /** The project's own team -- required for every plain note this board
+   *  writes onto a workflow (promoting a sticky to a story, or refreshing
+   *  a linked story's note). `null` disables both (see each call site). */
+  teamId: string | null;
   backlogJobId: string | null;
   templates: Workflow[];
   initialStickies: StickyNote[];
@@ -288,7 +297,7 @@ function checkDamAccess(token: string): boolean {
 
 const SHAPE_TYPES: ShapeType[] = ["rect", "circle", "diamond", "database", "cloud", "actor", "image"];
 
-export default function IdeaBoard({ boardId, token, projectId, backlogJobId, templates, initialStickies, initialLinks, initialShapes, teamMembers }: Props) {
+export default function IdeaBoard({ boardId, token, projectId, teamId, backlogJobId, templates, initialStickies, initialLinks, initialShapes, teamMembers }: Props) {
   const [stickies, setStickies] = useState<StickyNote[]>(initialStickies);
   const [links, setLinks] = useState<NoteLink[]>(initialLinks);
 
@@ -811,16 +820,17 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
   async function handleUpdateStory(stickyId: string) {
     const sticky = stickiesRef.current.find((s) => s.id === stickyId);
     if (!sticky?.workflow_id) return;
+    if (!teamId) { reportSaveError(new Error("No team_id resolved for this board -- can't post a story update note.")); return; }
     const timestamp = new Date().toLocaleString(undefined, {
       dateStyle: "medium", timeStyle: "short",
     });
     try {
-      await createNote(token, {
-        entity_type: "workflow",
-        entity_id: sticky.workflow_id,
+      await createTackNotesApi("/api/tack", token).createNote({
+        team_id: teamId,
+        visibility: "team",
         title: `${sticky.title} — ${timestamp}`,
-        body: sticky.body ?? undefined,
-        is_shared: true,
+        body_markdown: sticky.body ?? "",
+        attach: { owning_service: OWNING_SERVICE, entity_type: "workflow", entity_id: sticky.workflow_id },
       });
     } catch (err) {
       // Leave the pending-update pill showing — the story note was NOT created,
@@ -1293,6 +1303,7 @@ export default function IdeaBoard({ boardId, token, projectId, backlogJobId, tem
             jobId={backlogJobId}
             templates={templates}
             token={token}
+            teamId={teamId}
             onCreated={(workflowId) => handleStoryCreated(createStoryStickyId, workflowId)}
             onClose={() => setCreateStoryStickyId(null)}
           />
@@ -1330,6 +1341,7 @@ function CreateStoryFromIdeaModal({
   jobId,
   templates,
   token,
+  teamId,
   onCreated,
   onClose,
 }: {
@@ -1337,6 +1349,7 @@ function CreateStoryFromIdeaModal({
   jobId: string;
   templates: Workflow[];
   token: string;
+  teamId: string | null;
   onCreated: (workflowId: string) => void;
   onClose: () => void;
 }) {
@@ -1401,13 +1414,17 @@ function CreateStoryFromIdeaModal({
       }
 
       if (noteBody.trim()) {
-        await createNote(token, {
-          entity_type: "workflow",
-          entity_id: story.id,
-          title: name.trim(),
-          body: noteBody.trim(),
-          is_shared: true,
-        });
+        if (teamId) {
+          await createTackNotesApi("/api/tack", token).createNote({
+            team_id: teamId,
+            visibility: "team",
+            title: name.trim(),
+            body_markdown: noteBody.trim(),
+            attach: { owning_service: OWNING_SERVICE, entity_type: "workflow", entity_id: story.id },
+          });
+        } else {
+          console.error(`CreateStoryFromIdeaModal: no team_id resolved for job ${jobId} -- skipping note`);
+        }
       }
 
       onCreated(story.id);
