@@ -28,6 +28,7 @@ export default function IdeaBoardPage({
   const [backlogJob, setBacklogJob] = useState<Job | null>(null);
   const [templates, setTemplates] = useState<Workflow[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [teamId, setTeamId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -48,6 +49,7 @@ export default function IdeaBoardPage({
         localStorage.setItem(`togra_last_idea_board_${projectId}`, boardId);
         const bl = proj.jobs.find((j: Job) => j.job_type === "backlog") ?? null;
         setBacklogJob(bl);
+        setTeamId(proj.team_id ?? null);
         if (proj.team_id) {
           const tmpl = await listWorkflows(token, { team_id: proj.team_id }).catch(() => []);
           setTemplates(tmpl.filter((w: Workflow) => w.is_template));
@@ -107,6 +109,7 @@ export default function IdeaBoardPage({
             boardId={boardId}
             token={token!}
             projectId={projectId}
+            teamId={teamId}
             backlogJobId={backlogJob?.id ?? null}
             templates={templates}
             initialStickies={stickies}
@@ -121,6 +124,7 @@ export default function IdeaBoardPage({
               token={token ?? ""}
               entityType="job"
               entityId={boardId}
+              teamId={teamId}
               onClose={() => setResearchOpen(false)}
             />
           </div>

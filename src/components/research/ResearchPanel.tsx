@@ -1,10 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import AiChat from "./AiChat";
 import MarkdownEditor from "@/components/MarkdownEditor";
-import { createNote } from "@/lib/notes-api";
+import { createTackNotesApi } from "@ullav-dev/tack-notes";
 import type { NoteEntityType } from "@/lib/types";
+
+// Matches NotesPanel.tsx's OWNING_SERVICE -- the Phase 2 backfill's
+// content_attachments scope for every togra note. A "save as note" here
+// must land in the same place NotesPanel reads from, or the saved research
+// note is invisible from the entity's own Notes tab.
+const OWNING_SERVICE = "awe";
 
 // ── Tab definition — add future explorers here ────────────────────────────────
 
@@ -20,24 +26,36 @@ interface SaveNoteFormProps {
   token: string;
   entityType: NoteEntityType;
   entityId: string;
+  /** The entity's own team -- required for tack-server's create_note.
+   *  `null` disables saving (see the disabled-state note below). */
+  teamId: string | null;
   initialBody: string;
   onDone: () => void;
   onCancel: () => void;
 }
 
-function SaveNoteForm({ token, entityType, entityId, initialBody, onDone, onCancel }: SaveNoteFormProps) {
+function SaveNoteForm({ token, entityType, entityId, teamId, initialBody, onDone, onCancel }: SaveNoteFormProps) {
   const [title, setTitle] = useState(() => `AI Research — ${new Date().toLocaleDateString()}`);
   const [body, setBody] = useState(initialBody);
   const [isShared, setIsShared] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const api = useMemo(() => createTackNotesApi("/api/tack", token), [token]);
+
   async function handleSave() {
     if (!title.trim()) return;
+    if (!teamId) { setError("This entity has no team -- can't save a note."); return; }
     setSaving(true);
     setError(null);
     try {
-      await createNote(token, { entity_type: entityType, entity_id: entityId, title: title.trim(), body, is_shared: isShared });
+      await api.createNote({
+        team_id: teamId,
+        visibility: isShared ? "team" : "private",
+        title: title.trim(),
+        body_markdown: body,
+        attach: { owning_service: OWNING_SERVICE, entity_type: entityType, entity_id: entityId },
+      });
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save note");
@@ -88,7 +106,7 @@ function SaveNoteForm({ token, entityType, entityId, initialBody, onDone, onCanc
 
         <button
           onClick={handleSave}
-          disabled={saving || !title.trim()}
+          disabled={saving || !title.trim() || !teamId}
           className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-medium px-4 py-1.5 rounded-lg transition-colors"
         >
           {saving ? "Saving…" : "Save note"}
@@ -104,6 +122,10 @@ export interface ResearchPanelProps {
   token: string;
   entityType: NoteEntityType;
   entityId: string;
+  /** The entity's own team -- required to save AI research as a note (see
+   *  SaveNoteForm). `null` if not yet resolved or the entity has no team;
+   *  "Save as note" is disabled in that case rather than failing silently. */
+  teamId: string | null;
   storyId?: string;
   storyTitle?: string;
   taskId?: string;
@@ -117,6 +139,7 @@ export default function ResearchPanel({
   token,
   entityType,
   entityId,
+  teamId,
   storyId,
   storyTitle,
   taskId,
@@ -194,6 +217,7 @@ export default function ResearchPanel({
                 token={token}
                 entityType={entityType}
                 entityId={entityId}
+                teamId={teamId}
                 initialBody={pendingNoteBody}
                 onDone={() => setPendingNoteBody(null)}
                 onCancel={() => setPendingNoteBody(null)}
