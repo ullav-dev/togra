@@ -1851,10 +1851,10 @@ function IdeasPanel({
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    if (!newName.trim()) return;
+    if (!newName.trim() || !teamId) return;
     setCreating(true);
     try {
-      const board = await createIdeaBoard(token, projectId, newName.trim());
+      const board = await createIdeaBoard(token, projectId, teamId, newName.trim());
       onBoardCreated(board);
       setNewName("");
       setShowCreate(false);
@@ -1968,10 +1968,13 @@ function IdeasPanel({
                 className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
               />
               <button type="button" onClick={() => setShowCreate(false)} className="px-3 py-2 text-sm text-slate-500 hover:text-slate-700 rounded-lg transition-colors">Cancel</button>
-              <button type="submit" disabled={creating || !newName.trim()} className="px-3 py-2 text-sm bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg transition-colors">
+              <button type="submit" disabled={creating || !newName.trim() || !teamId} className="px-3 py-2 text-sm bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg transition-colors">
                 {creating ? "Creating…" : "Create"}
               </button>
             </form>
+            {!teamId && (
+              <p className="mt-2 text-xs text-amber-600">This project has no team assigned, so an Ideas Board can&apos;t be created here yet.</p>
+            )}
           </div>
         )}
       </div>
