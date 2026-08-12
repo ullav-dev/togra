@@ -3,10 +3,10 @@
 // Thin togra-specific wrapper around @ullav-dev/tack-notes's TackNotesPanel
 // -- the entity-attached notes widget every AWE-based app's own NotesPanel
 // actually needs. This *replaces* togra's former awe-server-backed
-// NotesPanel (git history has the old implementation, plus notes-api.ts's
-// now-unused listNotes/createNote/etc.) as part of the AWE-apps ->
-// tack-notes migration; tack's own NoteThread/NoteTree UI is the reference,
-// not a per-app rebuild.
+// NotesPanel (git history has the old implementation; notes-api.ts's old
+// listNotes/createNote/etc. were deleted once nothing called them any
+// more) as part of the AWE-apps -> tack-notes migration; tack's own
+// NoteThread/NoteTree UI is the reference, not a per-app rebuild.
 //
 // folderScope="team": togra's folders were never entity-scoped -- awe-
 // server's note_folders had no team/entity concept at all (WHERE created_by

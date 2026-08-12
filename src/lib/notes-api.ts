@@ -1,10 +1,11 @@
-// Notes API — Notes, NoteFolder, IdeaBoard, StickyNote, NoteLink.
+// Idea Boards API — IdeaBoard, StickyNote, NoteLink, BoardShape. Plain
+// Notes/NoteFolder functions (once here too, awe-server-backed) were
+// removed once nothing called them any more -- every frontend's plain
+// Notes UI now goes through @ullav-dev/tack-notes directly, not this file.
 // Intentionally separate from awe-api.ts so this module can be extracted
 // to a dedicated Notes service in future without touching AWE code.
 
 import type {
-  Note,
-  NoteFolder,
   IdeaBoard,
   StickyNote,
   StickyOrigin,
@@ -12,34 +13,10 @@ import type {
 } from "./types";
 import type { BoardShape, CreateBoardShape, UpdateBoardShape } from "@ullav-dev/diagram-shapes";
 
-const BASE =
-  typeof window === "undefined"
-    ? (process.env.API_URL ?? "http://localhost:8085")
-    : "/api";
-
-async function apiRequest<T>(path: string, token: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText);
-    throw new Error(text || res.statusText);
-  }
-  if (res.status === 204) return undefined as unknown as T;
-  return res.json();
-}
-
 // Idea Boards live on tack-server (Phase 5 of the AWE-apps Notes migration)
-// -- unlike the plain Notes/NoteFolder functions above (still awe-server,
-// via BASE/apiRequest, pending their own eventual cleanup), so they need
-// their own base URL and go through togra's `/api/tack/*` proxy rule
-// client-side (the same one the @ullav-dev/tack-notes package's NotesPanel
-// already relies on) rather than `/api/*`, which would route to awe-server.
+// -- go through togra's `/api/tack/*` proxy rule client-side (the same one
+// the @ullav-dev/tack-notes package's NotesPanel already relies on) rather
+// than `/api/*`, which would route to awe-server.
 const TACK_BASE =
   typeof window === "undefined"
     ? (process.env.TACK_URL ?? "http://localhost:8087")
@@ -89,50 +66,6 @@ async function tackFetchAllPages<Page, Item>(
   }
   return all;
 }
-
-// ── Notes ─────────────────────────────────────────────────────────────────────
-
-export const listNotes = (token: string, entityType: string, entityId: string): Promise<Note[]> =>
-  apiRequest(`/notes?entity_type=${entityType}&entity_id=${entityId}`, token);
-
-export const createNote = (
-  token: string,
-  payload: { entity_type: string; entity_id: string; title: string; body?: string; is_shared?: boolean }
-): Promise<Note> =>
-  apiRequest("/notes", token, { method: "POST", body: JSON.stringify(payload) });
-
-export const updateNote = (
-  token: string,
-  id: string,
-  patch: { title?: string; body?: string; is_shared?: boolean }
-): Promise<Note> =>
-  apiRequest(`/notes/${id}`, token, { method: "PUT", body: JSON.stringify(patch) });
-
-export const deleteNote = (token: string, id: string): Promise<void> =>
-  apiRequest(`/notes/${id}`, token, { method: "DELETE" });
-
-export const listNoteReplies = (token: string, noteId: string): Promise<Note[]> =>
-  apiRequest(`/notes/${noteId}/replies`, token);
-
-export const createNoteReply = (token: string, noteId: string, body: string): Promise<Note> =>
-  apiRequest(`/notes/${noteId}/replies`, token, { method: "POST", body: JSON.stringify({ body }) });
-
-export const moveNote = (token: string, noteId: string, folderId: string | null): Promise<Note> =>
-  apiRequest(`/notes/${noteId}/folder`, token, { method: "PUT", body: JSON.stringify({ folder_id: folderId }) });
-
-// ── Note Folders (general) ─────────────────────────────────────────────────────
-
-export const listNoteFolders = (token: string): Promise<NoteFolder[]> =>
-  apiRequest("/note-folders", token);
-
-export const createNoteFolder = (token: string, name: string): Promise<NoteFolder> =>
-  apiRequest("/note-folders", token, { method: "POST", body: JSON.stringify({ name }) });
-
-export const updateNoteFolder = (token: string, id: string, name: string): Promise<NoteFolder> =>
-  apiRequest(`/note-folders/${id}`, token, { method: "PUT", body: JSON.stringify({ name }) });
-
-export const deleteNoteFolder = (token: string, id: string): Promise<void> =>
-  apiRequest(`/note-folders/${id}`, token, { method: "DELETE" });
 
 // ── Ideas Boards (tack-server, Phase 5) ─────────────────────────────────────────
 //
