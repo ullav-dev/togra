@@ -5,7 +5,7 @@ import Dagre from "@dagrejs/dagre";
 import type { StickyNote, NoteLink, StickyColor, Port, Workflow, TeamMember } from "@/lib/types";
 import type { BoardShape, ShapeType, ShapePort } from "@ullav-dev/diagram-shapes";
 import { ShapeNode, ShapeIcon, SHAPE_LABELS, DEFAULT_SHAPE_SIZES, shapePortPos, bestShapePortTo } from "@ullav-dev/diagram-shapes";
-import type { PickedAsset } from "@ullav/dam-picker";
+import type { PickedAsset } from "@ullav-dev/dam-picker";
 import DamPickerModal from "./DamPickerModal";
 import {
   createSticky,

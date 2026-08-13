@@ -3,10 +3,10 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
-import type { PickedAsset } from "@ullav/dam-picker";
+import type { PickedAsset } from "@ullav-dev/dam-picker";
 
 const DamPicker = dynamic(
-  () => import("@ullav/dam-picker").then((m) => m.DamPicker),
+  () => import("@ullav-dev/dam-picker").then((m) => m.DamPicker),
   { ssr: false }
 );
 

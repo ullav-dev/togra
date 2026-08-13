@@ -5,7 +5,7 @@ import type { StickyNote, StickyColor, Port } from "@/lib/types";
 import MarkdownEditor from "@/components/MarkdownEditor";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { PickedAsset } from "@ullav/dam-picker";
+import type { PickedAsset } from "@ullav-dev/dam-picker";
 import DamPickerModal from "./DamPickerModal";
 
 // ── Auth-gated DAM image ───────────────────────────────────────────────────────
