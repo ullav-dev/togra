@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@source "../../node_modules/@ullav-dev/dam-picker/src";
+@source "../../node_modules/@ullav-dev/tack-notes/src";
 @plugin "@tailwindcss/typography";
 
 html,
