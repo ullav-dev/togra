@@ -86,6 +86,7 @@ const task = (id: string, workflowId: string, status: Task["status"] = "Not Star
   id,
   name: `Task ${id}`,
   is_template: false,
+  created_by: null,
   status,
   schedule_status: "N/A",
   workflow_id: workflowId,
@@ -100,11 +101,9 @@ const task = (id: string, workflowId: string, status: Task["status"] = "Not Star
   is_end: false,
   decision_outcome: null,
   decision_input_port: null,
-  input_values: null,
-  output_values: null,
-  is_locked: false,
-  rework_task_id: null,
-  loop_block_id: null,
+  priority: "none",
+  due_time: null,
+  task_number: null,
   description: null,
   created_at: "2026-06-01T00:00:00Z",
   updated_at: "2026-06-01T00:00:00Z",
@@ -123,6 +122,8 @@ const member = (id: string, name: string): TeamMember => ({
   status: "active",
   role: "member",
   team_roles: [],
+  invited_at: "2026-06-01T00:00:00Z",
+  joined_at: "2026-06-01T00:00:00Z",
 });
 
 // ── computeSprintProgress ─────────────────────────────────────────────────────
